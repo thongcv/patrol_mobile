@@ -1,5 +1,6 @@
-name: SPS
-description: "A new Flutter project."
+# Package id phải lowercase (Dart). Import: package:sps/...
+name: sps
+description: "SPS Patrol — mobile app."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -34,10 +35,13 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  geolocator: ^13.0.2
-  google_fonts: ^6.2.1
+  geolocator: ^14.0.2
+  google_fonts: ^8.1.0
   http: ^1.2.2
+  url_launcher: ^6.3.1
   shared_preferences: ^2.3.3
+  firebase_core: ^4.8.0
+  firebase_messaging: ^16.2.1
 
 dev_dependencies:
   flutter_test:

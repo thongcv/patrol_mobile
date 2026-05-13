@@ -45,6 +45,8 @@ class LoginBackground extends StatelessWidget {
 }
 
 /// Card glass (backdrop blur) — giống `.glass-card` trên web.
+/// [ClipRRect] chỉ bọc lớp blur; nội dung (vd. logo `top: -41px`) được phép tràn ra ngoài
+/// như FE `overflow: visible`.
 class GlassCard extends StatelessWidget {
   const GlassCard({
     super.key,
@@ -55,30 +57,45 @@ class GlassCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
 
+  static const _radius = 32.0;
+
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(32),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-        child: Container(
-          width: double.infinity,
-          constraints: const BoxConstraints(maxWidth: 380),
-          padding: padding,
-          decoration: BoxDecoration(
-            color: const Color(0x59141C28),
-            borderRadius: BorderRadius.circular(32),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 35,
-                offset: const Offset(0, 20),
-              ),
-            ],
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(maxWidth: 380),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(_radius),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 35,
+            offset: const Offset(0, 20),
           ),
-          child: child,
-        ),
+        ],
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(_radius),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                child: const DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Color(0x59141C28),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: padding,
+            child: child,
+          ),
+        ],
       ),
     );
   }

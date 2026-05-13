@@ -1,4 +1,4 @@
-package com.example.patrol_mobile
+package com.sps.patrol
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -100,6 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       );
+      FocusManager.instance.primaryFocus?.unfocus();
       setState(() => _forgotView = false);
       return;
     }
@@ -131,66 +132,127 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               Center(
                 child: SingleChildScrollView(
+                  clipBehavior: Clip.none,
                   padding: const EdgeInsets.fromLTRB(16, 56, 16, 24),
                   child: Stack(
                     clipBehavior: Clip.none,
                     alignment: Alignment.center,
                     children: [
+                      // FE: .login-logo-wrap top -41px, 112×112, img scale(1.2);
+                      // .login-header { margin-top: 65px }
                       GlassCard(
-                        padding: const EdgeInsets.fromLTRB(24, 52, 24, 24),
+                        padding: const EdgeInsets.fromLTRB(24, 15, 24, 24),
                         child: Stack(
                           clipBehavior: Clip.none,
                           children: [
                             Positioned(
-                              top: -90,
+                              top: -60,
                               left: 0,
                               right: 0,
                               child: Center(
-                                child: Image.asset(
-                                  'assets/images/logo-transparent.png',
-                                  width: 106,
-                                  height: 106,
-                                  fit: BoxFit.contain,
-                                  filterQuality: FilterQuality.high,
+                                child: Transform.scale(
+                                  scale: 1.2,
+                                  child: Image.asset(
+                                    'assets/images/logo-transparent.png',
+                                    width: 112,
+                                    height: 112,
+                                    fit: BoxFit.contain,
+                                    filterQuality: FilterQuality.high,
+                                  ),
                                 ),
                               ),
                             ),
                             Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                const SizedBox(height: 65),
                                 _Header(
                                   s: s,
                                   forgot: _forgotView,
                                   theme: theme,
                                 ),
                                 const SizedBox(height: 20),
-                                AnimatedCrossFade(
-                                  firstCurve: Curves.easeOutCubic,
-                                  secondCurve: Curves.easeOutCubic,
-                                  sizeCurve: Curves.easeOutCubic,
-                                  crossFadeState: _forgotView
-                                      ? CrossFadeState.showSecond
-                                      : CrossFadeState.showFirst,
-                                  duration: const Duration(milliseconds: 320),
-                                  firstChild: _LoginForm(
-                                    s: s,
-                                    theme: theme,
-                                    userCtrl: _userCtrl,
-                                    passCtrl: _passCtrl,
-                                    onSubmit: _submitLogin,
-                                    busy: _busyLogin,
-                                    onForgot: () =>
-                                        setState(() => _forgotView = true),
-                                  ),
-                                  secondChild: _ForgotForm(
-                                    s: s,
-                                    theme: theme,
-                                    emailCtrl: _emailCtrl,
-                                    phoneCtrl: _phoneCtrl,
-                                    onSubmit: _submitForgot,
-                                    busy: _busyForgot,
-                                    onBack: () =>
-                                        setState(() => _forgotView = false),
+                                AnimatedSize(
+                                  duration: const Duration(milliseconds: 420),
+                                  curve: Curves.easeInOutCubic,
+                                  alignment: Alignment.topCenter,
+                                  child: AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 380),
+                                    switchInCurve: Curves.easeOutCubic,
+                                    switchOutCurve: Curves.easeInCubic,
+                                    layoutBuilder:
+                                        (currentChild, previousChildren) {
+                                      return Stack(
+                                        alignment: Alignment.topCenter,
+                                        clipBehavior: Clip.none,
+                                        children: <Widget>[
+                                          ...previousChildren,
+                                          ?currentChild,
+                                        ],
+                                      );
+                                    },
+                                    transitionBuilder:
+                                        (child, animation) {
+                                      final curved = CurvedAnimation(
+                                        parent: animation,
+                                        curve: Curves.easeOutCubic,
+                                        reverseCurve: Curves.easeInCubic,
+                                      );
+                                      final offset = Tween<Offset>(
+                                        begin: const Offset(0, 0.055),
+                                        end: Offset.zero,
+                                      ).animate(curved);
+                                      return FadeTransition(
+                                        opacity: curved,
+                                        child: SlideTransition(
+                                          position: offset,
+                                          child: child,
+                                        ),
+                                      );
+                                    },
+                                    child: _forgotView
+                                        ? KeyedSubtree(
+                                            key: const ValueKey<String>(
+                                              'auth_forgot',
+                                            ),
+                                            child: _ForgotForm(
+                                              s: s,
+                                              theme: theme,
+                                              emailCtrl: _emailCtrl,
+                                              phoneCtrl: _phoneCtrl,
+                                              onSubmit: _submitForgot,
+                                              busy: _busyForgot,
+                                              onBack: () {
+                                                FocusManager
+                                                    .instance.primaryFocus
+                                                    ?.unfocus();
+                                                setState(
+                                                  () => _forgotView = false,
+                                                );
+                                              },
+                                            ),
+                                          )
+                                        : KeyedSubtree(
+                                            key: const ValueKey<String>(
+                                              'auth_login',
+                                            ),
+                                            child: _LoginForm(
+                                              s: s,
+                                              theme: theme,
+                                              userCtrl: _userCtrl,
+                                              passCtrl: _passCtrl,
+                                              onSubmit: _submitLogin,
+                                              busy: _busyLogin,
+                                              onForgot: () {
+                                                FocusManager
+                                                    .instance.primaryFocus
+                                                    ?.unfocus();
+                                                setState(
+                                                  () => _forgotView = true,
+                                                );
+                                              },
+                                            ),
+                                          ),
                                   ),
                                 ),
                                 const SizedBox(height: 22),
@@ -292,33 +354,72 @@ class _Header extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        Text(
-          forgot ? s.forgotTitle : s.title,
-          textAlign: TextAlign.center,
-          style: theme.titleLarge?.copyWith(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.05,
-            fontSize: 18,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          width: 40,
-          height: 2,
-          decoration: BoxDecoration(
-            color: const Color(0x803B82F6),
-            borderRadius: BorderRadius.circular(4),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          forgot ? s.forgotSub : s.loginSub,
-          textAlign: TextAlign.center,
-          style: theme.bodySmall?.copyWith(
-            color: Colors.white.withValues(alpha: 0.45),
-            fontWeight: FontWeight.w500,
-            height: 1.35,
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 340),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          layoutBuilder: (currentChild, previousChildren) {
+            return Stack(
+              alignment: Alignment.topCenter,
+              clipBehavior: Clip.none,
+              children: <Widget>[
+                ...previousChildren,
+                ?currentChild,
+              ],
+            );
+          },
+          transitionBuilder: (child, animation) {
+            final curved = CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+              reverseCurve: Curves.easeInCubic,
+            );
+            final offset = Tween<Offset>(
+              begin: const Offset(0, 0.04),
+              end: Offset.zero,
+            ).animate(curved);
+            return FadeTransition(
+              opacity: curved,
+              child: SlideTransition(
+                position: offset,
+                child: child,
+              ),
+            );
+          },
+          child: Column(
+            key: ValueKey<bool>(forgot),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                forgot ? s.forgotTitle : s.title,
+                textAlign: TextAlign.center,
+                style: theme.titleLarge?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.05,
+                  fontSize: 18,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                width: 40,
+                height: 2,
+                decoration: BoxDecoration(
+                  color: const Color(0x803B82F6),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                forgot ? s.forgotSub : s.loginSub,
+                textAlign: TextAlign.center,
+                style: theme.bodySmall?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.45),
+                  fontWeight: FontWeight.w500,
+                  height: 1.35,
+                ),
+              ),
+            ],
           ),
         ),
       ],

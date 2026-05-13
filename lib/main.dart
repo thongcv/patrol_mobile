@@ -1,10 +1,33 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'firebase_options.dart';
 import 'screens/location_gate_screen.dart';
+import 'services/auth_service.dart';
 
-void main() {
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+}
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    FirebaseMessaging.instance.onTokenRefresh.listen(
+      AuthService.instance.cacheDevicePushToken,
+    );
+    await FirebaseMessaging.instance.requestPermission();
+  } catch (e, st) {
+    debugPrint('Firebase init: $e\n$st');
+  }
   runApp(const PatrolMobileApp());
 }
 

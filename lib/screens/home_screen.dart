@@ -1,12 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/auth_strings.dart';
+import '../models/account_me.dart';
+import '../navigation/patrol_menu_router.dart';
+import '../services/account_service.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
 
-/// Màn chữ sau đăng nhập — có thể thay bằng shell app thật sau.
-class HomeScreen extends StatelessWidget {
+abstract final class _PatrolUi {
+  static const Color headerBlue = Color(0xFF152B45);
+  static const Color accentBlue = Color(0xFF2563EB);
+  static const Color callGreen = Color(0xFF22C55E);
+}
+
+/// Dashboard sau đăng nhập — layout theo design: header xanh đậm, khối trắng, bottom nav.
+class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
     required this.locale,
@@ -17,81 +27,1178 @@ class HomeScreen extends StatelessWidget {
   final ValueChanged<Locale> onLocaleChanged;
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  AccountMeDto? _me;
+  AccountMeFailure? _failure;
+  bool _loading = true;
+  int _navIndex = 0;
+  bool _signOutBusy = false;
+  MenuDto? _homeEmbeddedMenu;
+
+  AuthStrings get s => AuthStrings(widget.locale);
+
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _failure = null;
+      });
+    }
+
+    final r = await AccountService.instance.fetchMe();
+    if (!mounted) return;
+
+    if (r.failure == AccountMeFailure.unauthorized) {
+      await AuthService.instance.clearToken();
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => LoginScreen(
+            locale: widget.locale,
+            onLocaleChanged: widget.onLocaleChanged,
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (r.ok) {
+      setState(() {
+        _loading = false;
+        _me = r.data;
+        _failure = null;
+      });
+      return;
+    }
+
+    final fail = r.failure!;
+    if (silent) {
+      setState(() => _loading = false);
+      if (!mounted) return;
+      final msg = _snackForFailure(fail);
+      if (msg.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _loading = false;
+      _failure = fail;
+      _me = null;
+    });
+  }
+
+  String _snackForFailure(AccountMeFailure f) {
+    return switch (f) {
+      AccountMeFailure.configMissing => s.toastApiNotConfigured,
+      AccountMeFailure.network => s.toastNetworkErrorShort,
+      AccountMeFailure.badResponse => s.toastUnreadableData,
+      AccountMeFailure.unauthorized => '',
+    };
+  }
+
+  Future<void> _signOut() async {
+    if (_signOutBusy) return;
+    setState(() => _signOutBusy = true);
+    try {
+      final r = await AuthService.instance.logout();
+      if (!mounted) return;
+      if (!r.ok) {
+        final msg = switch (r.failure!) {
+          LogoutFailure.configMissing => s.toastApiNotConfigured,
+          LogoutFailure.network => s.toastNetworkErrorShort,
+          LogoutFailure.unauthorized => s.signOutSessionInvalid,
+          LogoutFailure.server => s.signOutFailed,
+        };
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+        return;
+      }
+      await AuthService.instance.clearToken();
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => LoginScreen(
+            locale: widget.locale,
+            onLocaleChanged: widget.onLocaleChanged,
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _signOutBusy = false);
+    }
+  }
+
+  Future<void> _dialPhone(String? raw) async {
+    final digits = raw?.replaceAll(RegExp(r'\D'), '');
+    if (digits == null || digits.isEmpty) return;
+    final uri = Uri(scheme: 'tel', path: digits);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(s.toastDialerUnavailable),
+        ),
+      );
+    }
+  }
+
+  String _initials(UserInfoDto u) {
+    final n = u.name?.trim();
+    if (n == null || n.isEmpty) return '?';
+    final parts = n.split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
+    if (parts.length >= 2) {
+      return '${parts.first[0]}${parts[1][0]}'.toUpperCase();
+    }
+    return n.length >= 2 ? n.substring(0, 2).toUpperCase() : n[0].toUpperCase();
+  }
+
+  String _roleBadgeLabel(UserInfoDto u) {
+    final code = u.roleCode?.trim();
+    if (code != null && code.isNotEmpty) {
+      return code.replaceAll('_', ' ').toUpperCase();
+    }
+    return u.roleName?.trim() ?? '';
+  }
+
+  String _formatPhoneDisplay(String? raw) {
+    if (raw == null) return '';
+    final d = raw.replaceAll(RegExp(r'\D'), '');
+    if (d.length <= 4) return raw.trim();
+    final buf = StringBuffer();
+    for (var i = 0; i < d.length; i++) {
+      if (i > 0 && i % 4 == 0) buf.write(' ');
+      buf.write(d[i]);
+    }
+    return buf.toString();
+  }
+
+  /// Số gọi khẩn cấp: ưu tiên quản lý, không có thì dùng số nhân viên.
+  String? _emergencyPhoneRaw(AccountMeDto me) {
+    final m = me.managerInfo?.phone?.trim();
+    if (m != null && m.isNotEmpty) return m;
+    final u = me.userInfo.phone?.trim();
+    if (u != null && u.isNotEmpty) return u;
+    return null;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final s = AuthStrings(locale);
     final theme = GoogleFonts.interTextTheme(Theme.of(context).textTheme);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
-        foregroundColor: Colors.white,
-        title: Text(
-          locale.languageCode == 'vi' ? 'SPS Patrol' : 'SPS Patrol',
-          style: theme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+    if (_loading) {
+      return Scaffold(
+        backgroundColor: _PatrolUi.headerBlue,
+        body: _LoadingBody(theme: theme, strings: s),
+      );
+    }
+
+    if (_failure != null) {
+      return Scaffold(
+        backgroundColor: _PatrolUi.headerBlue,
+        body: _ErrorBody(
+          theme: theme,
+          strings: s,
+          failure: _failure!,
+          onRetry: _load,
+          portalLabel: s.portalLabel,
         ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await AuthService.instance.clearToken();
-              if (!context.mounted) return;
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute<void>(
-                  builder: (_) => LoginScreen(
-                    locale: locale,
-                    onLocaleChanged: onLocaleChanged,
+      );
+    }
+
+    final me = _me;
+    if (me == null) {
+      return const Scaffold(body: SizedBox.shrink());
+    }
+
+    return Scaffold(
+      backgroundColor: _PatrolUi.headerBlue,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _PatrolHeaderBar(
+              theme: theme,
+              strings: s,
+              user: me.userInfo,
+              initials: _initials(me.userInfo),
+              roleLabel: _roleBadgeLabel(me.userInfo),
+              onNotificationTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(s.toastNotificationsComingSoon),
+                  ),
+                );
+              },
+            ),
+            Expanded(
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x33000000),
+                      blurRadius: 24,
+                      offset: Offset(0, -4),
+                    ),
+                  ],
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: _navIndex == 0
+                    ? (_homeEmbeddedMenu != null
+                        ? _HomeEmbeddedPatrolShell(
+                            theme: theme,
+                            menu: _homeEmbeddedMenu!,
+                            locale: widget.locale,
+                            onLocaleChanged: widget.onLocaleChanged,
+                            onClose: () =>
+                                setState(() => _homeEmbeddedMenu = null),
+                          )
+                        : RefreshIndicator(
+                            color: _PatrolUi.accentBlue,
+                            onRefresh: () => _load(silent: true),
+                            child: _HomeTabContent(
+                              theme: theme,
+                              strings: s,
+                              me: me,
+                              emergencyPhone: _emergencyPhoneRaw(me),
+                              emergencySubtitle: () {
+                                final mp = me.managerInfo?.phone?.trim();
+                                if (mp != null && mp.isNotEmpty) {
+                                  final n = me.managerInfo?.name?.trim();
+                                  if (n != null && n.isNotEmpty) return n;
+                                  return s.roleManager;
+                                }
+                                final up = me.userInfo.phone?.trim();
+                                if (up != null && up.isNotEmpty) {
+                                  final un = me.userInfo.name?.trim();
+                                  if (un != null && un.isNotEmpty) return un;
+                                  return s.roleStaff;
+                                }
+                                return null;
+                              }(),
+                              portalLabel: s.portalLabel,
+                              formatPhone: _formatPhoneDisplay,
+                              onMenuTap: (menu) => setState(
+                                () => _homeEmbeddedMenu = menu,
+                              ),
+                              onEmergencyCall: () =>
+                                  _dialPhone(_emergencyPhoneRaw(me)),
+                            ),
+                          ))
+                    : _navIndex == 1
+                        ? _HistoryPlaceholder(theme: theme, strings: s)
+                        : _ProfileTab(
+                            theme: theme,
+                            strings: s,
+                            me: me,
+                            signOutBusy: _signOutBusy,
+                            onSignOut: _signOut,
+                          ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: NavigationBarTheme(
+        data: NavigationBarThemeData(
+          height: 68,
+          labelTextStyle: WidgetStateProperty.resolveWith(
+            (s) => theme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                ),
+          ),
+          indicatorColor: _PatrolUi.accentBlue.withValues(alpha: 0.15),
+        ),
+        child: NavigationBar(
+          selectedIndex: _navIndex,
+          onDestinationSelected: (i) {
+            setState(() {
+              _navIndex = i;
+              if (i != 0) _homeEmbeddedMenu = null;
+            });
+          },
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          destinations: [
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined, color: Colors.grey.shade500),
+              selectedIcon: const Icon(Icons.home_rounded, color: _PatrolUi.accentBlue),
+              label: s.navHome,
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.history_rounded, color: Colors.grey.shade500),
+              selectedIcon: const Icon(Icons.history_rounded, color: _PatrolUi.accentBlue),
+              label: s.navHistory,
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline_rounded,
+                  color: Colors.grey.shade500),
+              selectedIcon:
+                  const Icon(Icons.person_rounded, color: _PatrolUi.accentBlue),
+              label: s.navProfile,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Menu tuần tra mở trong tab Trang chủ (không push route).
+class _HomeEmbeddedPatrolShell extends StatelessWidget {
+  const _HomeEmbeddedPatrolShell({
+    required this.theme,
+    required this.menu,
+    required this.locale,
+    required this.onLocaleChanged,
+    required this.onClose,
+  });
+
+  final TextTheme theme;
+  final MenuDto menu;
+  final Locale locale;
+  final ValueChanged<Locale> onLocaleChanged;
+  final VoidCallback onClose;
+
+  String get _barTitle {
+    final n = menu.name?.trim();
+    if (n != null && n.isNotEmpty) return n;
+    final l = menu.link?.trim();
+    if (l != null && l.isNotEmpty) return l;
+    return 'Menu';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: Colors.white,
+          elevation: 0.5,
+          shadowColor: Colors.black12,
+          child: SizedBox(
+            height: 48,
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: onClose,
+                  visualDensity: VisualDensity.compact,
+                  style: IconButton.styleFrom(
+                    foregroundColor: const Color(0xFF0F172A),
                   ),
                 ),
-              );
-            },
-            child: Text(
-              locale.languageCode == 'vi' ? 'Đăng xuất' : 'Sign out',
-              style: const TextStyle(color: Color(0xFF93C5FD)),
+                Expanded(
+                  child: Text(
+                    _barTitle,
+                    style: theme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF0F172A),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+        ),
+        Expanded(
+          child: PatrolMenuRouter.embeddedPatrolBody(
+            link: menu.link,
+            menuTitle: menu.name ?? '',
+            locale: locale,
+            onLocaleChanged: onLocaleChanged,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PatrolHeaderBar extends StatelessWidget {
+  const _PatrolHeaderBar({
+    required this.theme,
+    required this.strings,
+    required this.user,
+    required this.initials,
+    required this.roleLabel,
+    required this.onNotificationTap,
+  });
+
+  final TextTheme theme;
+  final AuthStrings strings;
+  final UserInfoDto user;
+  final String initials;
+  final String roleLabel;
+  final VoidCallback onNotificationTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = user.name?.trim().isNotEmpty == true
+        ? user.name!.trim()
+        : strings.userFallbackDisplayName;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 12, 20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
             children: [
-              Icon(
-                Icons.verified_user_rounded,
-                size: 64,
-                color: Colors.white.withValues(alpha: 0.85),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                locale.languageCode == 'vi'
-                    ? 'Đã đăng nhập'
-                    : 'Signed in',
-                style: theme.headlineSmall?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: _PatrolUi.accentBlue,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.25),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  initials,
+                  style: theme.titleLarge?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                locale.languageCode == 'vi'
-                    ? 'Tiếp theo: nối các màn tuần tra vào đây.'
-                    : 'Next: plug patrol features into this shell.',
-                textAlign: TextAlign.center,
-                style: theme.bodyMedium?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.55),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                s.portalLabel,
-                style: theme.labelSmall?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.35),
-                  letterSpacing: 0.12,
+              Positioned(
+                right: -2,
+                bottom: -2,
+                child: Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: _PatrolUi.callGreen,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: _PatrolUi.headerBlue, width: 2),
+                  ),
                 ),
               ),
             ],
           ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  strings.homeSystemBanner,
+                  style: theme.labelSmall?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.65),
+                    letterSpacing: 0.8,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  name,
+                  style: theme.titleMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    height: 1.2,
+                  ),
+                ),
+                if (roleLabel.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.22),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.18),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.shield_outlined,
+                          size: 16,
+                          color: Colors.white.withValues(alpha: 0.9),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            roleLabel,
+                            style: theme.labelMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Material(
+            color: Colors.white.withValues(alpha: 0.12),
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: onNotificationTap,
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Icon(
+                  Icons.notifications_none_rounded,
+                  color: Colors.white.withValues(alpha: 0.95),
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeTabContent extends StatelessWidget {
+  const _HomeTabContent({
+    required this.theme,
+    required this.strings,
+    required this.me,
+    required this.emergencyPhone,
+    required this.emergencySubtitle,
+    required this.portalLabel,
+    required this.formatPhone,
+    required this.onMenuTap,
+    required this.onEmergencyCall,
+  });
+
+  final TextTheme theme;
+  final AuthStrings strings;
+  final AccountMeDto me;
+  final String? emergencyPhone;
+  final String? emergencySubtitle;
+  final String portalLabel;
+  final String Function(String?) formatPhone;
+  final void Function(MenuDto) onMenuTap;
+  final VoidCallback onEmergencyCall;
+
+  @override
+  Widget build(BuildContext context) {
+    final menus = me.menus;
+    final phoneDisplay = formatPhone(emergencyPhone);
+
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+          sliver: SliverToBoxAdapter(
+            child: menus.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      strings.homeEmptyMenus,
+                      textAlign: TextAlign.center,
+                      style: theme.bodyMedium?.copyWith(
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  )
+                : LayoutBuilder(
+                    builder: (context, c) {
+                      final gap = 14.0;
+                      final w = (c.maxWidth - gap) / 2;
+                      return Wrap(
+                        spacing: gap,
+                        runSpacing: gap,
+                        children: [
+                          for (final menu in menus)
+                            SizedBox(
+                              width: w,
+                              child: _WhiteMenuCard(
+                                menu: menu,
+                                theme: theme,
+                                onTap: () => onMenuTap(menu),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+            child: _EmergencyBanner(
+              theme: theme,
+              strings: strings,
+              subtitle: emergencySubtitle,
+              phoneDisplay:
+                  phoneDisplay.isNotEmpty ? phoneDisplay : '—',
+              onCall: phoneDisplay.isNotEmpty ? onEmergencyCall : null,
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 28, top: 8),
+            child: Center(
+              child: Text(
+                portalLabel,
+                style: theme.labelSmall?.copyWith(
+                  color: Colors.grey.shade400,
+                  letterSpacing: 0.12,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WhiteMenuCard extends StatelessWidget {
+  const _WhiteMenuCard({
+    required this.menu,
+    required this.theme,
+    required this.onTap,
+  });
+
+  final MenuDto menu;
+  final TextTheme theme;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = patrolMenuCardStyleForLink(menu.link);
+    final icon = patrolMenuIcon(menu.icon);
+    final title = menu.name?.trim().isNotEmpty == true
+        ? menu.name!.trim()
+        : '—';
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.07),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: style.circleBg,
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(icon, color: style.iconColor, size: 28),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.titleSmall?.copyWith(
+                    color: const Color(0xFF0F172A),
+                    fontWeight: FontWeight.w700,
+                    height: 1.25,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmergencyBanner extends StatelessWidget {
+  const _EmergencyBanner({
+    required this.theme,
+    required this.strings,
+    this.subtitle,
+    required this.phoneDisplay,
+    required this.onCall,
+  });
+
+  final TextTheme theme;
+  final AuthStrings strings;
+  final String? subtitle;
+  final String phoneDisplay;
+  final VoidCallback? onCall;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      elevation: 0,
+      child: Ink(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.support_agent_rounded,
+                  color: Colors.white,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      strings.homeEmergencySupport,
+                      style: theme.labelSmall?.copyWith(
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                    if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle!.trim(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.bodySmall?.copyWith(
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    Text(
+                      phoneDisplay,
+                      style: theme.titleLarge?.copyWith(
+                        color: const Color(0xFF0F172A),
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Material(
+                color: onCall != null ? _PatrolUi.callGreen : Colors.grey.shade300,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: onCall,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Icon(
+                      Icons.phone_rounded,
+                      color: onCall != null ? Colors.white : Colors.grey.shade600,
+                      size: 24,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HistoryPlaceholder extends StatelessWidget {
+  const _HistoryPlaceholder({required this.theme, required this.strings});
+
+  final TextTheme theme;
+  final AuthStrings strings;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.history_rounded, size: 56, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              strings.historyTitle,
+              style: theme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              strings.historyInDevelopment,
+              textAlign: TextAlign.center,
+              style: theme.bodyMedium?.copyWith(color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileTab extends StatelessWidget {
+  const _ProfileTab({
+    required this.theme,
+    required this.strings,
+    required this.me,
+    required this.signOutBusy,
+    required this.onSignOut,
+  });
+
+  final TextTheme theme;
+  final AuthStrings strings;
+  final AccountMeDto me;
+  final bool signOutBusy;
+  final Future<void> Function() onSignOut;
+
+  @override
+  Widget build(BuildContext context) {
+    final u = me.userInfo;
+    final m = me.managerInfo;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+      children: [
+        Text(
+          strings.profileAccountHeading,
+          style: theme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: const Color(0xFF0F172A),
+          ),
+        ),
+        const SizedBox(height: 16),
+        _ProfileInfoTile(
+          icon: Icons.badge_outlined,
+          label: strings.profileFieldAccountId,
+          value: u.accountId ?? '—',
+        ),
+        _ProfileInfoTile(
+          icon: Icons.email_outlined,
+          label: strings.labelEmail,
+          value: u.email ?? '—',
+        ),
+        _ProfileInfoTile(
+          icon: Icons.phone_outlined,
+          label: strings.profileFieldPhone,
+          value: u.phone ?? '—',
+        ),
+        if (u.address?.trim().isNotEmpty == true)
+          _ProfileInfoTile(
+            icon: Icons.location_on_outlined,
+            label: strings.profileFieldAddress,
+            value: u.address!.trim(),
+          ),
+        if (u.branchName?.trim().isNotEmpty == true)
+          _ProfileInfoTile(
+            icon: Icons.storefront_outlined,
+            label: strings.profileFieldBranch,
+            value: u.branchName!.trim(),
+          ),
+        if (u.merchantName?.trim().isNotEmpty == true)
+          _ProfileInfoTile(
+            icon: Icons.business_outlined,
+            label: strings.profileFieldMerchant,
+            value: u.merchantName!.trim(),
+          ),
+        if (m != null &&
+            (m.name?.trim().isNotEmpty == true ||
+                m.phone?.trim().isNotEmpty == true)) ...[
+          const SizedBox(height: 24),
+          Text(
+            strings.profileManagerHeading,
+            style: theme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (m.name?.trim().isNotEmpty == true)
+            _ProfileInfoTile(
+              icon: Icons.supervisor_account_outlined,
+              label: strings.profileFieldFullName,
+              value: m.name!.trim(),
+            ),
+          if (m.phone?.trim().isNotEmpty == true)
+            _ProfileInfoTile(
+              icon: Icons.phone_in_talk_outlined,
+              label: strings.profileFieldManagerPhone,
+              value: m.phone!.trim(),
+            ),
+          if (m.email?.trim().isNotEmpty == true)
+            _ProfileInfoTile(
+              icon: Icons.alternate_email_rounded,
+              label: strings.labelEmail,
+              value: m.email!.trim(),
+            ),
+        ],
+        const SizedBox(height: 32),
+        FilledButton.icon(
+          onPressed: signOutBusy
+              ? null
+              : () async {
+                  await onSignOut();
+                },
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF1E293B),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          icon: signOutBusy
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.logout_rounded),
+          label: Text(strings.signOut),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProfileInfoTile extends StatelessWidget {
+  const _ProfileInfoTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 22, color: Colors.grey.shade600),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: theme.labelSmall?.copyWith(
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    value,
+                    style: theme.bodyMedium?.copyWith(
+                      color: const Color(0xFF0F172A),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadingBody extends StatelessWidget {
+  const _LoadingBody({required this.theme, required this.strings});
+
+  final TextTheme theme;
+  final AuthStrings strings;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 40,
+            height: 40,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: Colors.white.withValues(alpha: 0.9),
+              backgroundColor: Colors.white.withValues(alpha: 0.12),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            strings.homeLoadingWorkspace,
+            style: theme.bodyMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.65),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErrorBody extends StatelessWidget {
+  const _ErrorBody({
+    required this.theme,
+    required this.strings,
+    required this.failure,
+    required this.onRetry,
+    required this.portalLabel,
+  });
+
+  final TextTheme theme;
+  final AuthStrings strings;
+  final AccountMeFailure failure;
+  final VoidCallback onRetry;
+  final String portalLabel;
+
+  String _message() {
+    return switch (failure) {
+      AccountMeFailure.configMissing => strings.homeLoadErrorConfig,
+      AccountMeFailure.network => strings.homeLoadErrorNetwork,
+      AccountMeFailure.badResponse => strings.homeLoadErrorBadResponse,
+      AccountMeFailure.unauthorized => '',
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.wifi_off_rounded,
+              size: 52,
+              color: Colors.white.withValues(alpha: 0.35),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _message(),
+              textAlign: TextAlign.center,
+              style: theme.bodyLarge?.copyWith(
+                color: Colors.white.withValues(alpha: 0.88),
+              ),
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: onRetry,
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: _PatrolUi.headerBlue,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.refresh_rounded, size: 20),
+              label: Text(strings.retry),
+            ),
+            const SizedBox(height: 40),
+            Text(
+              portalLabel,
+              style: theme.labelSmall?.copyWith(
+                color: Colors.white.withValues(alpha: 0.35),
+              ),
+            ),
+          ],
         ),
       ),
     );
