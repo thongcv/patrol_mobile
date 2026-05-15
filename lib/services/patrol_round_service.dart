@@ -5,19 +5,20 @@ import '../http/api_failure.dart';
 import '../http/api_request_headers.dart';
 import '../http/api_response.dart';
 import '../http/api_result.dart';
-import '../models/account_me.dart';
+import '../models/active_patrol_round.dart';
 
-class AccountService {
-  AccountService._();
-  static final AccountService instance = AccountService._();
+class PatrolRoundService {
+  PatrolRoundService._();
+  static final PatrolRoundService instance = PatrolRoundService._();
 
-  Future<ApiResult<AccountMeDto>> fetchMe() async {
+  /// GET `/api/patrol-rounds/me/active` — ca + vòng + danh sách điểm.
+  Future<ApiResult<ActivePatrolRoundDto?>> fetchMyActivePatrolRound() async {
     final base = AppConfig.effectiveBaseUrl;
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
     }
 
-    final uri = Uri.parse('$base/api/accounts/me');
+    final uri = Uri.parse('$base/api/patrol-rounds/me/active');
     try {
       final res = await http
           .get(
@@ -29,20 +30,21 @@ class AccountService {
       if (res.statusCode == 401 || res.statusCode == 403) {
         return ApiResult.failure(ApiFailure.unauthorized(res.body));
       }
+      if (res.statusCode == 404) {
+        return ApiResult.success(null);
+      }
       if (res.statusCode != 200) {
         return ApiResult.failure(
           apiFailureFromHttpResponse(statusCode: res.statusCode, body: res.body),
         );
       }
 
-      final map = jsonObject(res.body);
-      if (map == null) {
-        return ApiResult.failure(ApiFailure.badResponse(res.body));
-      }
-
       try {
-        final me = AccountMeDto.fromJson(map);
-        return ApiResult.success(me);
+        final map = jsonObject(res.body);
+        if (map == null) {
+          return ApiResult.success(null);
+        }
+        return ApiResult.success(ActivePatrolRoundDto.fromJson(map));
       } catch (_) {
         return ApiResult.failure(ApiFailure.badResponse(res.body));
       }

@@ -15,6 +15,7 @@ class ApiRequestHeaders {
     final headers = <String, String>{
       'Accept-Language': _acceptLanguage,
       'x-client-os': _clientOs,
+      'x-off-set': getClientOffset(),
       if (jsonBody) 'Content-Type': 'application/json',
     };
     final p = await SharedPreferences.getInstance();
@@ -25,6 +26,16 @@ class ApiRequestHeaders {
       headers['Authorization'] = 'Bearer $t';
     }
     return headers;
+  }
+
+  /// Offset máy client, ví dụ `+07:00` — khớp `ZoneOffset.of()` phía Java.
+  static String getClientOffset() {
+    final totalMinutes = DateTime.now().timeZoneOffset.inMinutes;
+    final sign = totalMinutes >= 0 ? '+' : '-';
+    final abs = totalMinutes.abs();
+    final h = (abs ~/ 60).toString().padLeft(2, '0');
+    final m = (abs % 60).toString().padLeft(2, '0');
+    return '$sign$h:$m';
   }
 
   static String get _acceptLanguage {

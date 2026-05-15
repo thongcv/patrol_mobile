@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../http/api_failure.dart';
 import '../l10n/auth_strings.dart';
 import '../models/account_me.dart';
 import '../navigation/patrol_menu_router.dart';
@@ -32,7 +33,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   AccountMeDto? _me;
-  AccountMeFailure? _failure;
+  ApiFailure? _failure;
   bool _loading = true;
   int _navIndex = 0;
   bool _signOutBusy = false;
@@ -58,7 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final r = await AccountService.instance.fetchMe();
     if (!mounted) return;
 
-    if (r.failure == AccountMeFailure.unauthorized) {
+    if (r.failure?.kind == ApiFailureKind.unauthorized) {
       await AuthService.instance.clearToken();
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
@@ -101,13 +102,14 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  String _snackForFailure(AccountMeFailure f) {
-    return switch (f) {
-      AccountMeFailure.configMissing => s.toastApiNotConfigured,
-      AccountMeFailure.network => s.toastNetworkErrorShort,
-      AccountMeFailure.badResponse => s.toastUnreadableData,
-      AccountMeFailure.unauthorized => '',
-    };
+  String _snackForFailure(ApiFailure f) {
+    return f.userMessage(
+      configMissing: s.toastApiNotConfigured,
+      network: s.toastNetworkErrorShort,
+      unauthorized: '',
+      badResponse: s.toastUnreadableData,
+      server: s.toastUnreadableData,
+    );
   }
 
   Future<void> _signOut() async {
@@ -117,12 +119,13 @@ class _HomeScreenState extends State<HomeScreen> {
       final r = await AuthService.instance.logout();
       if (!mounted) return;
       if (!r.ok) {
-        final msg = switch (r.failure!) {
-          LogoutFailure.configMissing => s.toastApiNotConfigured,
-          LogoutFailure.network => s.toastNetworkErrorShort,
-          LogoutFailure.unauthorized => s.signOutSessionInvalid,
-          LogoutFailure.server => s.signOutFailed,
-        };
+        final msg = r.failure!.userMessage(
+          configMissing: s.toastApiNotConfigured,
+          network: s.toastNetworkErrorShort,
+          unauthorized: s.signOutSessionInvalid,
+          badResponse: s.signOutFailed,
+          server: s.signOutFailed,
+        );
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg)),
         );
@@ -1140,17 +1143,18 @@ class _ErrorBody extends StatelessWidget {
 
   final TextTheme theme;
   final AuthStrings strings;
-  final AccountMeFailure failure;
+  final ApiFailure failure;
   final VoidCallback onRetry;
   final String portalLabel;
 
   String _message() {
-    return switch (failure) {
-      AccountMeFailure.configMissing => strings.homeLoadErrorConfig,
-      AccountMeFailure.network => strings.homeLoadErrorNetwork,
-      AccountMeFailure.badResponse => strings.homeLoadErrorBadResponse,
-      AccountMeFailure.unauthorized => '',
-    };
+    return failure.userMessage(
+      configMissing: strings.homeLoadErrorConfig,
+      network: strings.homeLoadErrorNetwork,
+      unauthorized: '',
+      badResponse: strings.homeLoadErrorBadResponse,
+      server: strings.homeLoadErrorBadResponse,
+    );
   }
 
   @override

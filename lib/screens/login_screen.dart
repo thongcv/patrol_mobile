@@ -65,12 +65,13 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    final msg = switch (r.failure!) {
-      LoginFailure.configMissing => s.apiBaseMissing,
-      LoginFailure.network => s.networkError,
-      LoginFailure.unauthorized => s.loginFailed,
-      LoginFailure.badResponse => s.loginFailed,
-    };
+    final msg = r.failure!.userMessage(
+      configMissing: s.apiBaseMissing,
+      network: s.networkError,
+      unauthorized: s.loginFailed,
+      badResponse: s.loginFailed,
+      server: s.loginFailed,
+    );
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg)),
     );
@@ -105,11 +106,13 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    final msg = switch (r.failure!) {
-      ForgotFailure.configMissing => s.apiBaseMissing,
-      ForgotFailure.network => s.networkError,
-      ForgotFailure.server => s.loginFailed,
-    };
+    final msg = r.failure!.userMessage(
+      configMissing: s.apiBaseMissing,
+      network: s.networkError,
+      unauthorized: s.loginFailed,
+      badResponse: s.loginFailed,
+      server: s.loginFailed,
+    );
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg)),
     );

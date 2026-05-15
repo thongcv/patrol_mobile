@@ -3,52 +3,14 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
+import '../http/api_failure.dart';
 import '../http/api_request_headers.dart';
 import '../http/api_response.dart';
+import '../http/api_result.dart';
 import '../models/check_point.dart';
 
-enum CheckPointsMeSiteFailure {
-  configMissing,
-  unauthorized,
-  network,
-  badResponse,
-}
-
-class CheckPointsMeSiteResult {
-  CheckPointsMeSiteResult._({this.data, this.failure});
-
-  final MySiteCheckPointsDto? data;
-  final CheckPointsMeSiteFailure? failure;
-
-  bool get ok => data != null;
-
+extension MySiteCheckPointsApiResult on ApiResult<MySiteCheckPointsDto> {
   List<CheckPointDto>? get points => data?.checkPoints;
-
-  factory CheckPointsMeSiteResult.success(MySiteCheckPointsDto data) =>
-      CheckPointsMeSiteResult._(data: data);
-
-  factory CheckPointsMeSiteResult.failure(CheckPointsMeSiteFailure f) =>
-      CheckPointsMeSiteResult._(failure: f);
-}
-
-enum CheckPointUpdateFailure {
-  configMissing,
-  unauthorized,
-  network,
-  badResponse,
-}
-
-class CheckPointUpdateResult {
-  CheckPointUpdateResult._({this.failure});
-
-  final CheckPointUpdateFailure? failure;
-
-  bool get ok => failure == null;
-
-  factory CheckPointUpdateResult.success() => CheckPointUpdateResult._();
-
-  factory CheckPointUpdateResult.failure(CheckPointUpdateFailure f) =>
-      CheckPointUpdateResult._(failure: f);
 }
 
 class CheckPointService {
@@ -56,10 +18,10 @@ class CheckPointService {
   static final CheckPointService instance = CheckPointService._();
 
   /// GET `/api/check-points/me/site` — site + `checkPoints` (hoặc legacy: `data` là mảng).
-  Future<CheckPointsMeSiteResult> fetchMySiteCheckPoints() async {
+  Future<ApiResult<MySiteCheckPointsDto>> fetchMySiteCheckPoints() async {
     final base = AppConfig.effectiveBaseUrl;
     if (base.isEmpty) {
-      return CheckPointsMeSiteResult.failure(CheckPointsMeSiteFailure.configMissing);
+      return ApiResult.failure(ApiFailure.configMissing);
     }
 
     final uri = Uri.parse('$base/api/check-points/me/site');
@@ -72,50 +34,37 @@ class CheckPointService {
           .timeout(const Duration(seconds: 30));
 
       if (res.statusCode == 401 || res.statusCode == 403) {
-        return CheckPointsMeSiteResult.failure(CheckPointsMeSiteFailure.unauthorized);
+        return ApiResult.failure(ApiFailure.unauthorized(res.body));
       }
       if (res.statusCode != 200) {
-        return CheckPointsMeSiteResult.failure(CheckPointsMeSiteFailure.badResponse);
+        return ApiResult.failure(
+          apiFailureFromHttpResponse(statusCode: res.statusCode, body: res.body),
+        );
       }
 
       try {
-        final map = parseApiResponseData(res.body);
+        final map = jsonObject(res.body);
         if (map != null && map['checkPoints'] is List) {
           final dto = MySiteCheckPointsDto.fromJson(map);
-          return CheckPointsMeSiteResult.success(dto);
+          return ApiResult.success(dto);
         }
 
-        final legacyList = parseApiResponseDataList(res.body);
-        if (legacyList != null) {
-          if (legacyList.isEmpty) {
-            return CheckPointsMeSiteResult.success(
-              MySiteCheckPointsDto(siteId: 0, checkPoints: []),
-            );
-          }
-          final points = legacyList.map(CheckPointDto.fromJson).toList()
-            ..sort((a, b) => a.sequenceOrder.compareTo(b.sequenceOrder));
-          return CheckPointsMeSiteResult.success(
-            MySiteCheckPointsDto(
-              siteId: points.first.siteId,
-              checkPoints: points,
-            ),
-          );
-        }
-
-        return CheckPointsMeSiteResult.failure(CheckPointsMeSiteFailure.badResponse);
+        return ApiResult.failure(ApiFailure.badResponse(res.body));
       } catch (_) {
-        return CheckPointsMeSiteResult.failure(CheckPointsMeSiteFailure.badResponse);
+        return ApiResult.failure(ApiFailure.badResponse(res.body));
       }
     } catch (_) {
-      return CheckPointsMeSiteResult.failure(CheckPointsMeSiteFailure.network);
+      return ApiResult.failure(ApiFailure.network());
     }
   }
 
   /// PUT `/api/check-points` — body đầy đủ theo DTO check-point.
-  Future<CheckPointUpdateResult> updateCheckPoint(CheckPointDto body) async {
+  ///
+  /// Trả về `CheckPointDto` khi body 200 parse được (vd. có `qrImage` mới); `null` khi 204 hoặc không có payload.
+  Future<ApiResult<CheckPointDto?>> updateCheckPoint(CheckPointDto body) async {
     final base = AppConfig.effectiveBaseUrl;
     if (base.isEmpty) {
-      return CheckPointUpdateResult.failure(CheckPointUpdateFailure.configMissing);
+      return ApiResult.failure(ApiFailure.configMissing);
     }
 
     final uri = Uri.parse('$base/api/check-points');
@@ -129,14 +78,31 @@ class CheckPointService {
           .timeout(const Duration(seconds: 30));
 
       if (res.statusCode == 401 || res.statusCode == 403) {
-        return CheckPointUpdateResult.failure(CheckPointUpdateFailure.unauthorized);
+        return ApiResult.failure(ApiFailure.unauthorized(res.body));
       }
       if (res.statusCode != 200 && res.statusCode != 204) {
-        return CheckPointUpdateResult.failure(CheckPointUpdateFailure.badResponse);
+        return ApiResult.failure(
+          apiFailureFromHttpResponse(statusCode: res.statusCode, body: res.body),
+        );
       }
-      return CheckPointUpdateResult.success();
+      if (res.statusCode == 204 || res.body.trim().isEmpty) {
+        return ApiResult.success(null);
+      }
+      final map = jsonObject(res.body);
+      if (map == null) {
+        return ApiResult.success(null);
+      }
+      try {
+        final dto = CheckPointDto.fromJson(map);
+        if (dto.id != body.id) {
+          return ApiResult.success(null);
+        }
+        return ApiResult.success(dto);
+      } catch (_) {
+        return ApiResult.success(null);
+      }
     } catch (_) {
-      return CheckPointUpdateResult.failure(CheckPointUpdateFailure.network);
+      return ApiResult.failure(ApiFailure.network());
     }
   }
 }

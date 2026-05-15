@@ -10,6 +10,8 @@ class CheckPointDto {
     this.qrImage,
     this.latitude,
     this.longitude,
+    this.gpsAltitude,
+    this.baroAltitude,
     this.radius,
     this.description,
     this.createdBy,
@@ -28,6 +30,8 @@ class CheckPointDto {
   final String? qrImage;
   final double? latitude;
   final double? longitude;
+  final double? gpsAltitude;
+  final double? baroAltitude;
   final double? radius;
   final String? description;
   final String? createdBy;
@@ -49,6 +53,8 @@ class CheckPointDto {
     String? qrImage,
     double? latitude,
     double? longitude,
+    double? gpsAltitude,
+    double? baroAltitude,
     double? radius,
     String? description,
     String? createdBy,
@@ -67,6 +73,8 @@ class CheckPointDto {
       qrImage: qrImage ?? this.qrImage,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
+      gpsAltitude: gpsAltitude ?? this.gpsAltitude,
+      baroAltitude: baroAltitude ?? this.baroAltitude,
       radius: radius ?? this.radius,
       description: description ?? this.description,
       createdBy: createdBy ?? this.createdBy,
@@ -88,6 +96,8 @@ class CheckPointDto {
       'qrImage': qrImage,
       'latitude': latitude,
       'longitude': longitude,
+      'gpsAltitude': gpsAltitude,
+      'baroAltitude': baroAltitude,
       'radius': radius,
       'description': description,
       'createdBy': createdBy,
@@ -109,6 +119,9 @@ class CheckPointDto {
       qrImage: json['qrImage'] as String?,
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
+      gpsAltitude: (json['gpsAltitude'] as num?)?.toDouble() ??
+          (json['altitude'] as num?)?.toDouble(),
+      baroAltitude: (json['baroAltitude'] as num?)?.toDouble(),
       radius: (json['radius'] as num?)?.toDouble(),
       description: json['description'] as String?,
       createdBy: json['createdBy'] as String?,

@@ -48,106 +48,126 @@ class PatrolFeatureScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = GoogleFonts.interTextTheme(Theme.of(context).textTheme);
+    final canPop = Navigator.canPop(context);
+
+    /// Header nằm ngoài vùng scroll: tránh clip khi `SliverAppBar` thu còn toolbar
+    /// và tránh title/icon bị cuộn mất.
+    final header = DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            heroColor.withValues(alpha: 0.35),
+            PatrolShellColors.surface,
+          ],
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 8, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_hasBarTitle)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (canPop)
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      color: Colors.white,
+                      tooltip: MaterialLocalizations.of(context)
+                          .backButtonTooltip,
+                      onPressed: () => Navigator.maybePop(context),
+                    )
+                  else
+                    const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title!.trim(),
+                      style: theme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            if (_hasBarTitle) const SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: heroColor.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.12),
+                    ),
+                  ),
+                  child: Icon(
+                    heroIcon,
+                    size: 22,
+                    color: heroColor,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: subtitleSlot ??
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            subtitle ??
+                                (_vi ? 'SPS Patrol' : 'SPS Patrol'),
+                            style: theme.labelMedium?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.55),
+                              letterSpacing: 0.3,
+                              height: 1.15,
+                            ),
+                          ),
+                        ],
+                      ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
 
     final scroll = CustomScrollView(
       primary: !useOuterScaffold,
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
-          SliverAppBar(
-            expandedHeight: 70,
-            pinned: true,
-            backgroundColor: PatrolShellColors.surface,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            flexibleSpace: FlexibleSpaceBar(
-              titlePadding: _hasBarTitle
-                  ? const EdgeInsets.only(left: 48, bottom: 12)
-                  : null,
-              title: _hasBarTitle
-                  ? Text(
-                      title!.trim(),
-                      style: theme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.2,
-                      ),
-                    )
-                  : null,
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      heroColor.withValues(alpha: 0.35),
-                      PatrolShellColors.surface,
-                    ],
-                  ),
-                ),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: heroColor.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.12),
-                            ),
-                          ),
-                          child: Icon(
-                            heroIcon,
-                            size: 22,
-                            color: heroColor,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: subtitleSlot ??
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    subtitle ??
-                                        (_vi
-                                            ? 'SPS Patrol'
-                                            : 'SPS Patrol'),
-                                    style: theme.labelMedium?.copyWith(
-                                      color: Colors.white.withValues(alpha: 0.55),
-                                      letterSpacing: 0.3,
-                                      height: 1.15,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-            sliver: SliverToBoxAdapter(child: child),
-          ),
-        ],
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+          sliver: SliverToBoxAdapter(child: child),
+        ),
+      ],
+    );
+
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        header,
+        Expanded(child: scroll),
+      ],
     );
 
     if (useOuterScaffold) {
       return Scaffold(
         backgroundColor: PatrolShellColors.background,
-        body: scroll,
+        body: body,
       );
     }
     return Material(
       color: PatrolShellColors.background,
-      child: scroll,
+      child: body,
     );
   }
 }

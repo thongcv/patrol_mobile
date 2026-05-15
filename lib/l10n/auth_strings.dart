@@ -143,6 +143,68 @@ class AuthStrings {
   String get patrolRoundPlaceholderBody => _vi
       ? 'Danh sách ca tuần tra, checklist và báo cáo sẽ được tích hợp vào màn hình này.'
       : 'Shift list, checklist and reporting will be integrated here.';
+  String get patrolRoundReload =>
+      _vi ? 'Tải lại' : 'Reload';
+  String get patrolRoundLoading =>
+      _vi ? 'Đang tải ca tuần tra…' : 'Loading active patrol…';
+  String get patrolRoundLoadFailed =>
+      _vi ? 'Không tải được ca tuần tra.' : 'Could not load patrol round.';
+  String get patrolRoundUnauthorized =>
+      _vi ? 'Phiên hết hạn hoặc không có quyền.' : 'Session expired or forbidden.';
+  String get patrolRoundEmpty => _vi
+      ? 'Hiện không có ca tuần tra đang hoạt động.'
+      : 'No active patrol round right now.';
+  String get patrolRoundScheduleHeading =>
+      _vi ? 'Lịch ca' : 'Schedule';
+  String get patrolRoundRoundHeading =>
+      _vi ? 'Vòng tuần tra' : 'Patrol round';
+  String get patrolRoundRouteHeading =>
+      _vi ? 'Tuyến điểm' : 'Route';
+  String get patrolRoundShiftWindow => _vi ? 'Khung giờ' : 'Time window';
+  String get patrolRoundEffective => _vi ? 'Hiệu lực' : 'Effective';
+  String get patrolRoundFrequency => _vi ? 'Tần suất' : 'Frequency';
+  String get patrolRoundDuration => _vi ? 'Thời lượng vòng' : 'Round duration';
+  String get patrolRoundMinutes => _vi ? '{n} phút' : '{n} min';
+  String get patrolRoundExpectedStart =>
+      _vi ? 'Bắt đầu dự kiến' : 'Expected start';
+  String get patrolRoundExpectedEnd =>
+      _vi ? 'Kết thúc dự kiến' : 'Expected end';
+  String get patrolRoundOverdue => _vi ? 'Quá giờ' : 'Overdue';
+  String get patrolRoundAssigned =>
+      _vi ? 'Phân công' : 'Assigned to';
+  String get patrolRoundSiteId => _vi ? 'Site' : 'Site';
+  String get patrolRoundCountSummary => _vi
+      ? '{n} điểm trên tuyến'
+      : '{n} points on route';
+  String get patrolRoundWithGpsSummary => _vi
+      ? '{n} điểm có tọa độ'
+      : '{n} with coordinates';
+  String get patrolRoundWithQrSummary => _vi
+      ? '{n} điểm có QR'
+      : '{n} with QR';
+  String get patrolRoundStatusPending =>
+      _vi ? 'Chờ thực hiện' : 'Pending';
+  String get patrolRoundStatusInProgress =>
+      _vi ? 'Đang tuần tra' : 'In progress';
+  String get patrolRoundStatusCompleted =>
+      _vi ? 'Hoàn thành' : 'Completed';
+  String get patrolRoundStatusCancelled =>
+      _vi ? 'Đã hủy' : 'Cancelled';
+  String get patrolRoundStatusOther => _vi ? 'Trạng thái' : 'Status';
+  String get patrolRoundScheduleActive =>
+      _vi ? 'Đang áp dụng' : 'Active';
+  String get patrolRoundScheduleInactive =>
+      _vi ? 'Tạm dừng' : 'Inactive';
+  String get patrolRoundChipGps =>
+      _vi ? 'GPS' : 'GPS';
+  String get patrolRoundChipNoGps =>
+      _vi ? 'Chưa GPS' : 'No GPS';
+  String get patrolRoundChipQr => 'QR';
+  String get patrolRoundChipNfc => 'NFC';
+  String patrolRoundSubtitleActive(String scheduleName, String statusLabel) =>
+      _vi
+          ? '$scheduleName · $statusLabel'
+          : '$scheduleName · $statusLabel';
 
   String get patrolPointTitle =>
       _vi ? 'Lấy vị trí point' : 'Point location';
@@ -171,7 +233,8 @@ class AuthStrings {
   String get patrolPointGpsLoading =>
       _vi ? 'Đang lấy vị trí…' : 'Getting location…';
   String get patrolPointGpsTapRefresh =>
-      _vi ? 'Chạm biểu tượng để lấy GPS' : 'Tap the icon to get GPS';
+      _vi ? 'Chưa có tọa độ — nhấn biểu tượng để thử lại'
+      : 'No coordinates yet — tap the icon to retry';
   String get patrolPointGpsServiceOff =>
       _vi ? 'GPS đang tắt.' : 'Location services are off.';
   String get patrolPointGpsDenied =>
@@ -182,20 +245,34 @@ class AuthStrings {
       ? 'Tổng {n} điểm'
       : '{n} points total';
   String get patrolPointMissingCoordsSummary => _vi
-      ? '{n} chưa có tọa độ trên hệ thống'
-      : '{n} without coordinates on server';
+      ? '{n} điểm chưa có tọa độ trên hệ thống'
+      : '{n} points without coordinates on server';
   String get patrolPointServerNoCoords =>
       _vi ? 'Chưa gán tọa độ' : 'No coordinates';
-  String patrolPointServerCoords(double lat, double lng) => _vi
-      ? '${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}'
-      : '${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}';
+  String patrolPointServerCoords(
+    double lat,
+    double lng, {
+    double? altitude,
+  }) {
+    final coords =
+        '${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}';
+    if (altitude != null && altitude.isFinite) {
+      final alt = altitude.toStringAsFixed(1);
+      return _vi
+          ? 'Vị trí hiện tại: $coords · độ cao $alt m'
+          : 'Current position: $coords · altitude $alt m';
+    }
+    return _vi
+        ? 'Vị trí hiện tại: $coords'
+        : 'Current position: $coords';
+  }
   String get patrolPointInactive =>
       _vi ? 'Ngưng dùng' : 'Inactive';
   String get patrolPointUpdateCoordsTooltip =>
       _vi ? 'Gửi tọa độ GPS hiện tại lên điểm này' : 'Send current GPS to this point';
   String get patrolPointUpdateNeedGps =>
-      _vi ? 'Hãy lấy vị trí GPS trước (biểu tượng định vị trên đầu trang).'
-      : 'Get a GPS fix first (location icon in the header).';
+      _vi ? 'Chưa lấy được vị trí GPS — bật dịch vụ vị trí và cấp quyền cho ứng dụng.'
+      : 'Could not get a GPS fix — enable location services and grant permission.';
   String get patrolPointUpdateSuccess =>
       _vi ? 'Đã cập nhật tọa độ.' : 'Coordinates updated.';
   String get patrolPointUpdateFailed =>

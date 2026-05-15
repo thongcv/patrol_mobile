@@ -8,8 +8,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/access_token_payload.dart';
 import '../config/app_config.dart';
 import '../config/storage_keys.dart';
+import '../http/api_failure.dart';
 import '../http/api_request_headers.dart';
 import '../http/api_response.dart';
+import '../http/api_result.dart';
 
 class AuthService {
   AuthService._();
@@ -47,13 +49,13 @@ class AuthService {
 
   /// POST `/api/accounts/login` — body `{ username, password, deviceToken? }` như [Credential] API.
   /// `deviceToken` là FCM ([FirebaseMessaging.getToken]); cache qua [cacheDevicePushToken].
-  Future<LoginResult> login({
+  Future<ApiResult<LoginSuccess>> login({
     required String username,
     required String password,
   }) async {
     final base = AppConfig.effectiveBaseUrl;
     if (base.isEmpty) {
-      return LoginResult.failure(LoginFailure.configMissing);
+      return ApiResult.failure(ApiFailure.configMissing);
     }
 
     final fcmToken = await _fcmTokenForLogin();
@@ -74,33 +76,37 @@ class AuthService {
           .timeout(const Duration(seconds: 30));
 
       if (res.statusCode == 200) {
-        final data = parseApiResponseData(res.body);
+        final data = jsonObject(res.body);
         if (data == null) {
-          return LoginResult.failure(LoginFailure.badResponse);
+          return ApiResult.failure(ApiFailure.badResponse(res.body));
         }
         final accessToken = _accessTokenObjectFromData(data);
         if (accessToken != null) {
           final p = await SharedPreferences.getInstance();
           await p.setString(StorageKeys.accessToken, jsonEncode(accessToken));
-          return LoginResult.success("OK", accessToken: accessToken);
+          return ApiResult.success(
+            LoginSuccess(token: 'OK', accessToken: accessToken),
+          );
         } else {
-          return LoginResult.failure(LoginFailure.badResponse);
+          return ApiResult.failure(ApiFailure.badResponse(res.body));
         }
       }
-      return LoginResult.failure(LoginFailure.unauthorized);
+      return ApiResult.failure(
+        apiFailureFromHttpResponse(statusCode: res.statusCode, body: res.body),
+      );
     } catch (_) {
-      return LoginResult.failure(LoginFailure.network);
+      return ApiResult.failure(ApiFailure.network());
     }
   }
 
   /// POST `/api/accounts/forget-password`
-  Future<ForgotResult> forgotPassword({
+  Future<ApiResult<ApiUnit>> forgotPassword({
     required String email,
     required String usernameOrPhone,
   }) async {
     final base = AppConfig.effectiveBaseUrl;
     if (base.isEmpty) {
-      return ForgotResult.failure(ForgotFailure.configMissing);
+      return ApiResult.failure(ApiFailure.configMissing);
     }
     final uri = Uri.parse('$base/api/accounts/forget-password');
     try {
@@ -115,19 +121,21 @@ class AuthService {
           )
           .timeout(const Duration(seconds: 30));
       if (res.statusCode == 200) {
-        return ForgotResult.success();
+        return ApiResult.success(ApiUnit.instance);
       }
-      return ForgotResult.failure(ForgotFailure.server);
+      return ApiResult.failure(
+        apiFailureFromHttpResponse(statusCode: res.statusCode, body: res.body),
+      );
     } catch (_) {
-      return ForgotResult.failure(ForgotFailure.network);
+      return ApiResult.failure(ApiFailure.network());
     }
   }
 
-  /// POST `/api/accounts/logout` — Bearer từ store; [LogoutResult.ok] khi HTTP 200 hoặc 204.
-  Future<LogoutResult> logout() async {
+  /// GET `/api/accounts/logout` — Bearer từ store; thành công khi HTTP 200 hoặc 204.
+  Future<ApiResult<ApiUnit>> logout() async {
     final base = AppConfig.effectiveBaseUrl;
     if (base.isEmpty) {
-      return LogoutResult.failure(LogoutFailure.configMissing);
+      return ApiResult.failure(ApiFailure.configMissing);
     }
 
     final uri = Uri.parse('$base/api/accounts/logout');
@@ -135,19 +143,18 @@ class AuthService {
       final res = await http
           .get(
             uri,
-            headers: await ApiRequestHeaders.build()
+            headers: await ApiRequestHeaders.build(),
           )
           .timeout(const Duration(seconds: 30));
 
       if (res.statusCode == 200 || res.statusCode == 204) {
-        return LogoutResult.success();
+        return ApiResult.success(ApiUnit.instance);
       }
-      if (res.statusCode == 401 || res.statusCode == 403) {
-        return LogoutResult.failure(LogoutFailure.unauthorized);
-      }
-      return LogoutResult.failure(LogoutFailure.server);
+      return ApiResult.failure(
+        apiFailureFromHttpResponse(statusCode: res.statusCode, body: res.body),
+      );
     } catch (_) {
-      return LogoutResult.failure(LogoutFailure.network);
+      return ApiResult.failure(ApiFailure.network());
     }
   }
 
@@ -181,52 +188,10 @@ class AuthService {
   }
 }
 
-enum LoginFailure { configMissing, unauthorized, network, badResponse }
+/// Payload đăng nhập thành công (`data.accessToken` dạng object).
+class LoginSuccess {
+  const LoginSuccess({required this.token, this.accessToken});
 
-class LoginResult {
-  LoginResult._({this.token, this.accessToken, this.failure});
-
-  final String? token;
-
-  /// Payload đầy đủ từ API tại `data.accessToken` (khi là object).
+  final String token;
   final Map<String, dynamic>? accessToken;
-
-  final LoginFailure? failure;
-
-  bool get ok => token != null;
-
-  factory LoginResult.success(
-    String token, {
-    Map<String, dynamic>? accessToken,
-  }) => LoginResult._(token: token, accessToken: accessToken);
-
-  factory LoginResult.failure(LoginFailure f) => LoginResult._(failure: f);
-}
-
-enum ForgotFailure { configMissing, network, server }
-
-class ForgotResult {
-  ForgotResult._({this.failure});
-
-  final ForgotFailure? failure;
-
-  bool get ok => failure == null;
-
-  factory ForgotResult.success() => ForgotResult._();
-
-  factory ForgotResult.failure(ForgotFailure f) => ForgotResult._(failure: f);
-}
-
-enum LogoutFailure { configMissing, network, unauthorized, server }
-
-class LogoutResult {
-  LogoutResult._({this.failure});
-
-  final LogoutFailure? failure;
-
-  bool get ok => failure == null;
-
-  factory LogoutResult.success() => LogoutResult._();
-
-  factory LogoutResult.failure(LogoutFailure f) => LogoutResult._(failure: f);
 }
