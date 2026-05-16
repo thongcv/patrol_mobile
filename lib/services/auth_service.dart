@@ -1,17 +1,19 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/access_token_payload.dart';
 import '../config/app_config.dart';
 import '../config/storage_keys.dart';
 import '../http/api_failure.dart';
-import '../http/api_request_headers.dart';
 import '../http/api_response.dart';
 import '../http/api_result.dart';
+import '../http/patrol_api_endpoints.dart';
+import '../http/patrol_dio.dart';
+import '../navigation/patrol_session.dart';
 
 class AuthService {
   AuthService._();
@@ -32,11 +34,9 @@ class AuthService {
   }
 
   Future<void> clearToken() async {
-    final p = await SharedPreferences.getInstance();
-    await p.remove(StorageKeys.accessToken);
+    await AccessTokenPayload.clearStored();
   }
 
-  /// Lưu FCM / push token để gửi kèm [login]; gọi khi có token (ví dụ sau khi cấu hình Firebase).
   Future<void> cacheDevicePushToken(String? token) async {
     final p = await SharedPreferences.getInstance();
     final t = token?.trim();
@@ -47,8 +47,6 @@ class AuthService {
     }
   }
 
-  /// POST `/api/accounts/login` — body `{ username, password, deviceToken? }` như [Credential] API.
-  /// `deviceToken` là FCM ([FirebaseMessaging.getToken]); cache qua [cacheDevicePushToken].
   Future<ApiResult<LoginSuccess>> login({
     required String username,
     required String password,
@@ -58,48 +56,49 @@ class AuthService {
       return ApiResult.failure(ApiFailure.configMissing);
     }
 
+    PatrolDio.syncBaseUrls();
     final fcmToken = await _fcmTokenForLogin();
+    final loginUri = AppConfig.resolveApiUri(PatrolApiEndpoints.accountsLoginPath);
 
-    final uri = Uri.parse('$base/api/accounts/login');
     try {
       final body = <String, dynamic>{
         'username': username.trim(),
         'password': password.trim(),
         if (fcmToken != null && fcmToken.isNotEmpty) 'deviceToken': fcmToken,
       };
-      final res = await http
-          .post(
-            uri,
-            headers: await ApiRequestHeaders.build(),
-            body: jsonEncode(body),
-          )
-          .timeout(const Duration(seconds: 30));
+      final res = await PatrolDio.instance.postUri<dynamic>(
+        loginUri,
+        data: body,
+      );
 
-      if (res.statusCode == 200) {
-        final data = jsonObject(res.body);
+      final status = res.statusCode ?? 0;
+
+      if (status == 200) {
+        final data = responseEnvelopeData(res.data);
         if (data == null) {
-          return ApiResult.failure(ApiFailure.badResponse(res.body));
+          return ApiResult.failure(ApiFailure.badResponse(res));
         }
-        final accessToken = _accessTokenObjectFromData(data);
+        final accessToken = AccessTokenPayload.persistableBlobFromApiEnvelope(data);
         if (accessToken != null) {
           final p = await SharedPreferences.getInstance();
           await p.setString(StorageKeys.accessToken, jsonEncode(accessToken));
+          PatrolSession.notifyAuthStored();
           return ApiResult.success(
             LoginSuccess(token: 'OK', accessToken: accessToken),
           );
-        } else {
-          return ApiResult.failure(ApiFailure.badResponse(res.body));
         }
+        return ApiResult.failure(ApiFailure.badResponse(res));
       }
       return ApiResult.failure(
-        apiFailureFromHttpResponse(statusCode: res.statusCode, body: res.body),
+        apiFailureFromHttpResponse(statusCode: status, body: res),
       );
+    } on DioException catch (e) {
+      return ApiResult.failure(apiFailureFromDioException(e));
     } catch (_) {
       return ApiResult.failure(ApiFailure.network());
     }
   }
 
-  /// POST `/api/accounts/forget-password`
   Future<ApiResult<ApiUnit>> forgotPassword({
     required String email,
     required String usernameOrPhone,
@@ -108,57 +107,54 @@ class AuthService {
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
     }
-    final uri = Uri.parse('$base/api/accounts/forget-password');
+    PatrolDio.syncBaseUrls();
     try {
-      final res = await http
-          .post(
-            uri,
-            headers: await ApiRequestHeaders.build(),
-            body: jsonEncode({
-              'email': email.trim(),
-              'username': usernameOrPhone.trim(),
-            }),
-          )
-          .timeout(const Duration(seconds: 30));
-      if (res.statusCode == 200) {
+      final res = await PatrolDio.instance.post<dynamic>(
+        '/api/accounts/forget-password',
+        data: <String, dynamic>{
+          'email': email.trim(),
+          'username': usernameOrPhone.trim(),
+        },
+      );
+
+      final status = res.statusCode ?? 0;
+      if (status == 200) {
         return ApiResult.success(ApiUnit.instance);
       }
       return ApiResult.failure(
-        apiFailureFromHttpResponse(statusCode: res.statusCode, body: res.body),
+        apiFailureFromHttpResponse(statusCode: status, body: res),
       );
+    } on DioException catch (e) {
+      return ApiResult.failure(apiFailureFromDioException(e));
     } catch (_) {
       return ApiResult.failure(ApiFailure.network());
     }
   }
 
-  /// GET `/api/accounts/logout` — Bearer từ store; thành công khi HTTP 200 hoặc 204.
   Future<ApiResult<ApiUnit>> logout() async {
     final base = AppConfig.effectiveBaseUrl;
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
     }
 
-    final uri = Uri.parse('$base/api/accounts/logout');
+    PatrolDio.syncBaseUrls();
     try {
-      final res = await http
-          .get(
-            uri,
-            headers: await ApiRequestHeaders.build(),
-          )
-          .timeout(const Duration(seconds: 30));
-
-      if (res.statusCode == 200 || res.statusCode == 204) {
+      final res = await PatrolDio.instance.get<dynamic>('/api/accounts/logout');
+      final status = res.statusCode ?? 0;
+      
+      if (status == 200 || status == 204) {
         return ApiResult.success(ApiUnit.instance);
       }
       return ApiResult.failure(
-        apiFailureFromHttpResponse(statusCode: res.statusCode, body: res.body),
+        apiFailureFromHttpResponse(statusCode: status, body: res),
       );
+    } on DioException catch (e) {
+      return ApiResult.failure(apiFailureFromDioException(e));
     } catch (_) {
       return ApiResult.failure(ApiFailure.network());
     }
   }
 
-  /// Token đăng ký FCM; lưu prefs khi lấy được để dùng lại nếu [getToken] tạm lỗi.
   Future<String?> _fcmTokenForLogin() async {
     if (Firebase.apps.isEmpty) {
       final p = await SharedPreferences.getInstance();
@@ -172,23 +168,13 @@ class AuthService {
         return s;
       }
     } catch (_) {
-      // Thiếu cấu hình Firebase / quyền — fallback token đã cache (onTokenRefresh).
+      //
     }
     final p = await SharedPreferences.getInstance();
     return p.getString(StorageKeys.devicePushToken)?.trim();
   }
-
-  /// Object JSON tại `accessToken` khi server trả map (`{ accessToken, refreshToken?, … }`).
-  static Map<String, dynamic>? _accessTokenObjectFromData(
-    Map<String, dynamic> data,
-  ) {
-    final at = data['accessToken'];
-    if (at is Map<String, dynamic>) return at;
-    return null;
-  }
 }
 
-/// Payload đăng nhập thành công (`data.accessToken` dạng object).
 class LoginSuccess {
   const LoginSuccess({required this.token, this.accessToken});
 

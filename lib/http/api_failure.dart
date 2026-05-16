@@ -1,4 +1,6 @@
-import 'dart:convert';
+import 'package:dio/dio.dart';
+
+import 'api_response.dart';
 
 /// Phân loại lỗi chung cho mọi gọi API trong app.
 enum ApiFailureKind {
@@ -9,7 +11,7 @@ enum ApiFailureKind {
   server,
 }
 
-/// Lỗi API thống nhất: [kind] + thông điệp từ BE (`data.errors[].message`) nếu có.
+/// Lỗi API thống nhất: [kind] + thông điệp từ BE (`data.errors[].message`) khi có.
 class ApiFailure {
   const ApiFailure(this.kind, {this.serverMessage});
 
@@ -18,23 +20,24 @@ class ApiFailure {
   /// Ghép các `message` trong `data.errors` (BE trả về).
   final String? serverMessage;
 
-  static const ApiFailure configMissing = ApiFailure(ApiFailureKind.configMissing);
+  static const ApiFailure configMissing =
+      ApiFailure(ApiFailureKind.configMissing);
 
   static ApiFailure network({String? serverMessage}) =>
       ApiFailure(ApiFailureKind.network, serverMessage: serverMessage);
 
-  static ApiFailure unauthorized(String body) => ApiFailure(
+  static ApiFailure unauthorized(dynamic body) => ApiFailure(
         ApiFailureKind.unauthorized,
         serverMessage: parseBackendErrorMessages(body),
       );
 
-  static ApiFailure badResponse(String body) => ApiFailure(
+  static ApiFailure badResponse(dynamic body) => ApiFailure(
         ApiFailureKind.badResponse,
         serverMessage: parseBackendErrorMessages(body),
       );
 
   /// Lỗi HTTP không thành công (không gồm 401/403 — dùng [unauthorized]).
-  static ApiFailure fromHttpError(String body) => ApiFailure(
+  static ApiFailure fromHttpError(dynamic body) => ApiFailure(
         ApiFailureKind.server,
         serverMessage: parseBackendErrorMessages(body),
       );
@@ -59,21 +62,19 @@ class ApiFailure {
   }
 }
 
-/// Bóc `data.errors[].message` từ body JSON (ResponseDto lỗi).
-String? parseBackendErrorMessages(String body) {
-  if (body.isEmpty) return null;
+/// Bóc `data.errors[].message` — [body] là chuỗi JSON hoặc map đã parse.
+String? parseBackendErrorMessages(dynamic body) {
   try {
-    final json = jsonDecode(body) as Map<String, dynamic>;
-    final data = json['data'];
-    if (data is! Map<String, dynamic>) return null;
+    final data = responseEnvelopeData(body);
+    if (data == null) return null;
     final errors = data['errors'];
     if (errors is! List<dynamic>) return null;
     final out = <String>[];
     for (final e in errors) {
-      if (e is Map<String, dynamic>) {
-        final m = e['message']?.toString().trim();
-        if (m != null && m.isNotEmpty) out.add(m);
-      }
+      final em = jsonMapCoerce(e);
+      if (em == null) continue;
+      final m = em['message']?.toString().trim();
+      if (m != null && m.isNotEmpty) out.add(m);
     }
     if (out.isEmpty) return null;
     return out.join('\n');
@@ -83,9 +84,29 @@ String? parseBackendErrorMessages(String body) {
 }
 
 /// Phân loại lỗi từ HTTP status + body (đã bóc message BE khi có).
+ApiFailure apiFailureFromDioException(DioException e) {
+  final response = e.response;
+  switch (e.type) {
+    case DioExceptionType.connectionTimeout:
+    case DioExceptionType.sendTimeout:
+    case DioExceptionType.receiveTimeout:
+    case DioExceptionType.connectionError:
+      return ApiFailure.network(serverMessage: e.message);
+    default:
+      break;
+  }
+
+  final res = response;
+  if (res == null) {
+    return ApiFailure.network(serverMessage: e.message);
+  }
+  final code = res.statusCode ?? 0;
+  return apiFailureFromHttpResponse(statusCode: code, body: res.data);
+}
+
 ApiFailure apiFailureFromHttpResponse({
   required int statusCode,
-  required String body,
+  required dynamic body,
 }) {
   if (statusCode == 401 || statusCode == 403) {
     return ApiFailure.unauthorized(body);

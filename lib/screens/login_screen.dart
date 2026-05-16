@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../l10n/auth_strings.dart';
+import '../l10n/app_localizations.dart';
 import '../services/auth_service.dart';
 import '../widgets/language_toggle_bar.dart';
 import '../widgets/login_background.dart';
@@ -30,8 +30,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _busyLogin = false;
   bool _busyForgot = false;
   bool _forgotView = false;
-
-  AuthStrings get s => AuthStrings(widget.locale);
 
   @override
   void dispose() {
@@ -65,12 +63,13 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    final l10n = AppLocalizations.of(context)!;
     final msg = r.failure!.userMessage(
-      configMissing: s.apiBaseMissing,
-      network: s.networkError,
-      unauthorized: s.loginFailed,
-      badResponse: s.loginFailed,
-      server: s.loginFailed,
+      configMissing: l10n.apiBaseMissing,
+      network: l10n.networkError,
+      unauthorized: l10n.loginFailed,
+      badResponse: l10n.loginFailed,
+      server: l10n.loginFailed,
     );
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg)),
@@ -92,13 +91,10 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _busyForgot = false);
 
     if (r.ok) {
+      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            widget.locale.languageCode == 'vi'
-                ? 'Đã gửi yêu cầu. Kiểm tra email.'
-                : 'Request sent. Check your email.',
-          ),
+          content: Text(l10n.forgotRequestSent),
         ),
       );
       FocusManager.instance.primaryFocus?.unfocus();
@@ -106,12 +102,13 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    final l10n = AppLocalizations.of(context)!;
     final msg = r.failure!.userMessage(
-      configMissing: s.apiBaseMissing,
-      network: s.networkError,
-      unauthorized: s.loginFailed,
-      badResponse: s.loginFailed,
-      server: s.loginFailed,
+      configMissing: l10n.apiBaseMissing,
+      network: l10n.networkError,
+      unauthorized: l10n.loginFailed,
+      badResponse: l10n.loginFailed,
+      server: l10n.loginFailed,
     );
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg)),
@@ -123,6 +120,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = GoogleFonts.interTextTheme(Theme.of(context).textTheme);
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       body: LoginBackground(
@@ -170,7 +168,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               children: [
                                 const SizedBox(height: 65),
                                 _Header(
-                                  s: s,
+                                  l10n: l10n,
                                   forgot: _forgotView,
                                   theme: theme,
                                 ),
@@ -219,7 +217,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                               'auth_forgot',
                                             ),
                                             child: _ForgotForm(
-                                              s: s,
+                                              l10n: l10n,
                                               theme: theme,
                                               emailCtrl: _emailCtrl,
                                               phoneCtrl: _phoneCtrl,
@@ -240,7 +238,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                               'auth_login',
                                             ),
                                             child: _LoginForm(
-                                              s: s,
+                                              l10n: l10n,
                                               theme: theme,
                                               userCtrl: _userCtrl,
                                               passCtrl: _passCtrl,
@@ -259,7 +257,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 22),
-                                _PortalLine(s: s, theme: theme),
+                                _PortalLine(l10n: l10n, theme: theme),
                               ],
                             ),
                           ],
@@ -296,7 +294,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 right: 0,
                 bottom: 12,
                 child: Text(
-                  s.copyright,
+                  l10n.copyright,
                   textAlign: TextAlign.center,
                   style: theme.labelSmall?.copyWith(
                     color: Colors.white.withValues(alpha: 0.35),
@@ -313,12 +311,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
 class _Header extends StatelessWidget {
   const _Header({
-    required this.s,
+    required this.l10n,
     required this.forgot,
     required this.theme,
   });
 
-  final AuthStrings s;
+  final AppLocalizations l10n;
   final bool forgot;
   final TextTheme theme;
 
@@ -345,7 +343,7 @@ class _Header extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                s.badgeText,
+                l10n.badgeText,
                 style: theme.labelSmall?.copyWith(
                   color: Colors.white.withValues(alpha: 0.7),
                   fontWeight: FontWeight.w700,
@@ -394,7 +392,7 @@ class _Header extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                forgot ? s.forgotTitle : s.title,
+                forgot ? l10n.forgotTitle : l10n.title,
                 textAlign: TextAlign.center,
                 style: theme.titleLarge?.copyWith(
                   color: Colors.white,
@@ -414,7 +412,7 @@ class _Header extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                forgot ? s.forgotSub : s.loginSub,
+                forgot ? l10n.forgotSub : l10n.loginSub,
                 textAlign: TextAlign.center,
                 style: theme.bodySmall?.copyWith(
                   color: Colors.white.withValues(alpha: 0.45),
@@ -432,7 +430,7 @@ class _Header extends StatelessWidget {
 
 class _LoginForm extends StatelessWidget {
   const _LoginForm({
-    required this.s,
+    required this.l10n,
     required this.theme,
     required this.userCtrl,
     required this.passCtrl,
@@ -441,7 +439,7 @@ class _LoginForm extends StatelessWidget {
     required this.onForgot,
   });
 
-  final AuthStrings s;
+  final AppLocalizations l10n;
   final TextTheme theme;
   final TextEditingController userCtrl;
   final TextEditingController passCtrl;
@@ -457,7 +455,7 @@ class _LoginForm extends StatelessWidget {
         _GlassField(
           controller: userCtrl,
           obscure: false,
-          hint: s.placeholderUsername,
+          hint: l10n.placeholderUsername,
           icon: Icons.person_outline_rounded,
           theme: theme,
           enabled: !busy,
@@ -466,7 +464,7 @@ class _LoginForm extends StatelessWidget {
         _GlassField(
           controller: passCtrl,
           obscure: true,
-          hint: s.placeholderPassword,
+          hint: l10n.placeholderPassword,
           icon: Icons.lock_outline_rounded,
           theme: theme,
           enabled: !busy,
@@ -479,7 +477,7 @@ class _LoginForm extends StatelessWidget {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                s.sslText,
+                l10n.sslText,
                 style: theme.labelSmall?.copyWith(
                   color: Colors.white.withValues(alpha: 0.4),
                   letterSpacing: 0.06,
@@ -495,7 +493,7 @@ class _LoginForm extends StatelessWidget {
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               child: Text(
-                s.forgotPassword,
+                l10n.forgotPassword,
                 style: theme.labelSmall?.copyWith(
                   color: const Color(0x99BFDBFE),
                   fontWeight: FontWeight.w700,
@@ -508,7 +506,7 @@ class _LoginForm extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         _GradientButton(
-          label: busy ? s.submitLoading : s.submit,
+          label: busy ? l10n.submitLoading : l10n.submit,
           onPressed: busy ? null : onSubmit,
         ),
       ],
@@ -518,7 +516,7 @@ class _LoginForm extends StatelessWidget {
 
 class _ForgotForm extends StatelessWidget {
   const _ForgotForm({
-    required this.s,
+    required this.l10n,
     required this.theme,
     required this.emailCtrl,
     required this.phoneCtrl,
@@ -527,7 +525,7 @@ class _ForgotForm extends StatelessWidget {
     required this.onBack,
   });
 
-  final AuthStrings s;
+  final AppLocalizations l10n;
   final TextTheme theme;
   final TextEditingController emailCtrl;
   final TextEditingController phoneCtrl;
@@ -543,7 +541,7 @@ class _ForgotForm extends StatelessWidget {
         _GlassField(
           controller: emailCtrl,
           obscure: false,
-          hint: s.placeholderResetEmail,
+          hint: l10n.placeholderResetEmail,
           icon: Icons.email_outlined,
           theme: theme,
           enabled: !busy,
@@ -553,7 +551,7 @@ class _ForgotForm extends StatelessWidget {
         _GlassField(
           controller: phoneCtrl,
           obscure: false,
-          hint: s.placeholderResetPhone,
+          hint: l10n.placeholderResetPhone,
           icon: Icons.phone_android_rounded,
           theme: theme,
           enabled: !busy,
@@ -563,7 +561,7 @@ class _ForgotForm extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                s.forgotHint,
+                l10n.forgotHint,
                 style: theme.labelSmall?.copyWith(
                   color: Colors.white.withValues(alpha: 0.4),
                   fontSize: 9.5,
@@ -578,7 +576,7 @@ class _ForgotForm extends StatelessWidget {
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               child: Text(
-                s.backToLogin,
+                l10n.backToLogin,
                 style: theme.labelSmall?.copyWith(
                   color: const Color(0x99BFDBFE),
                   fontWeight: FontWeight.w700,
@@ -590,7 +588,7 @@ class _ForgotForm extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         _GradientButton(
-          label: busy ? s.forgotSubmitLoading : s.forgotSubmit,
+          label: busy ? l10n.forgotSubmitLoading : l10n.forgotSubmit,
           onPressed: busy ? null : onSubmit,
         ),
       ],
@@ -721,9 +719,9 @@ class _GradientButton extends StatelessWidget {
 }
 
 class _PortalLine extends StatelessWidget {
-  const _PortalLine({required this.s, required this.theme});
+  const _PortalLine({required this.l10n, required this.theme});
 
-  final AuthStrings s;
+  final AppLocalizations l10n;
   final TextTheme theme;
 
   @override
@@ -747,7 +745,7 @@ class _PortalLine extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10),
           color: const Color(0x59141C28),
           child: Text(
-            s.portalLabel,
+            l10n.portalLabel,
             style: theme.labelSmall?.copyWith(
               color: Colors.white.withValues(alpha: 0.38),
               letterSpacing: 0.14,

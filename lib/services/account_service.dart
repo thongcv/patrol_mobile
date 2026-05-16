@@ -1,10 +1,10 @@
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 
 import '../config/app_config.dart';
 import '../http/api_failure.dart';
-import '../http/api_request_headers.dart';
 import '../http/api_response.dart';
 import '../http/api_result.dart';
+import '../http/patrol_dio.dart';
 import '../models/account_me.dart';
 
 class AccountService {
@@ -16,36 +16,33 @@ class AccountService {
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
     }
+    PatrolDio.syncBaseUrls();
 
-    final uri = Uri.parse('$base/api/accounts/me');
     try {
-      final res = await http
-          .get(
-            uri,
-            headers: await ApiRequestHeaders.build(jsonBody: false),
-          )
-          .timeout(const Duration(seconds: 30));
-
-      if (res.statusCode == 401 || res.statusCode == 403) {
-        return ApiResult.failure(ApiFailure.unauthorized(res.body));
+      final res = await PatrolDio.instance.get<dynamic>('/api/accounts/me');
+      final status = res.statusCode ?? 0;
+      if (status == 401 || status == 403) {
+        return ApiResult.failure(ApiFailure.unauthorized(res));
       }
-      if (res.statusCode != 200) {
+      if (status != 200) {
         return ApiResult.failure(
-          apiFailureFromHttpResponse(statusCode: res.statusCode, body: res.body),
+          apiFailureFromHttpResponse(statusCode: status, body: res),
         );
       }
 
-      final map = jsonObject(res.body);
+      final map = responseEnvelopeData(res.data);
       if (map == null) {
-        return ApiResult.failure(ApiFailure.badResponse(res.body));
+        return ApiResult.failure(ApiFailure.badResponse(res));
       }
 
       try {
         final me = AccountMeDto.fromJson(map);
         return ApiResult.success(me);
       } catch (_) {
-        return ApiResult.failure(ApiFailure.badResponse(res.body));
+        return ApiResult.failure(ApiFailure.badResponse(res));
       }
+    } on DioException catch (e) {
+      return ApiResult.failure(apiFailureFromDioException(e));
     } catch (_) {
       return ApiResult.failure(ApiFailure.network());
     }

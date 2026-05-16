@@ -1,3 +1,5 @@
+import '../http/api_response.dart';
+
 class AccountMeDto {
   AccountMeDto({
     this.managerInfo,
@@ -10,17 +12,16 @@ class AccountMeDto {
   final List<MenuDto> menus;
 
   factory AccountMeDto.fromJson(Map<String, dynamic> json) {
-    final mi = json['managerInfo'];
-    final ui = json['userInfo'];
-    final rawMenus = json['menus'] as List<dynamic>? ?? [];
+    final mi = jsonMapCoerce(json['managerInfo']);
+    final ui = jsonMapCoerce(json['userInfo']);
+    final rawMenus = json['menus'];
+    final menuList = rawMenus is List ? rawMenus : const <dynamic>[];
+
     return AccountMeDto(
-      managerInfo: mi is Map<String, dynamic>
-          ? ManagerInfoDto.fromJson(mi)
-          : null,
-      userInfo: ui is Map<String, dynamic>
-          ? UserInfoDto.fromJson(ui)
-          : UserInfoDto.empty(),
-      menus: rawMenus
+      managerInfo: mi != null ? ManagerInfoDto.fromJson(mi) : null,
+      userInfo: ui != null ? UserInfoDto.fromJson(ui) : UserInfoDto.empty(),
+      menus: menuList
+          .map(jsonMapCoerce)
           .whereType<Map<String, dynamic>>()
           .map(MenuDto.fromJson)
           .toList(),
@@ -45,11 +46,11 @@ class ManagerInfoDto {
 
   factory ManagerInfoDto.fromJson(Map<String, dynamic> json) {
     return ManagerInfoDto(
-      accountId: json['accountId'] as String?,
-      name: json['name'] as String?,
-      email: json['email'] as String?,
-      phone: json['phone'] as String?,
-      avatar: json['avatar'] as String?,
+      accountId: jsonStr(json['accountId']),
+      name: jsonStr(json['name']),
+      email: jsonStr(json['email']),
+      phone: jsonStr(json['phone']),
+      avatar: jsonStr(json['avatar']),
     );
   }
 }
@@ -89,19 +90,19 @@ class UserInfoDto {
 
   factory UserInfoDto.fromJson(Map<String, dynamic> json) {
     return UserInfoDto(
-      id: (json['id'] as num?)?.toInt() ?? 0,
-      email: json['email'] as String?,
-      name: json['name'] as String?,
-      phone: json['phone'] as String?,
-      address: json['address'] as String?,
-      imageUrl: json['imageUrl'] as String?,
-      accountId: json['accountId'] as String?,
-      roleId: (json['roleId'] as num?)?.toInt(),
-      roleName: json['roleName'] as String?,
-      roleCode: json['roleCode'] as String?,
-      status: json['status'] as bool?,
-      branchName: json['branchName'] as String?,
-      merchantName: json['merchantName'] as String?,
+      id: jsonInt(json['id']) ?? 0,
+      email: jsonStr(json['email']),
+      name: jsonStr(json['name']),
+      phone: jsonStr(json['phone']),
+      address: jsonStr(json['address']),
+      imageUrl: jsonStr(json['imageUrl']),
+      accountId: jsonStr(json['accountId']),
+      roleId: jsonInt(json['roleId']),
+      roleName: jsonStr(json['roleName']),
+      roleCode: jsonStr(json['roleCode']),
+      status: jsonBool(json['status']),
+      branchName: jsonStr(json['branchName']),
+      merchantName: jsonStr(json['merchantName']),
     );
   }
 }
@@ -130,17 +131,20 @@ class MenuDto {
   final List<MenuDto> children;
 
   factory MenuDto.fromJson(Map<String, dynamic> json) {
-    final nested = json['menus'] as List<dynamic>? ?? [];
+    final nested = json['menus'];
+    final childList = nested is List ? nested : const <dynamic>[];
+
     return MenuDto(
-      id: (json['id'] as num?)?.toInt() ?? 0,
-      parentId: (json['parentId'] as num?)?.toInt(),
-      icon: json['icon'] as String?,
-      name: json['name'] as String?,
-      link: json['link'] as String?,
-      ordered: (json['ordered'] as num?)?.toInt(),
-      servYn: json['servYn'] as bool?,
-      roleId: (json['roleId'] as num?)?.toInt(),
-      children: nested
+      id: jsonInt(json['id']) ?? 0,
+      parentId: jsonInt(json['parentId']),
+      icon: jsonStr(json['icon']),
+      name: jsonStr(json['name']),
+      link: jsonStr(json['link']),
+      ordered: jsonInt(json['ordered']),
+      servYn: jsonBool(json['servYn']),
+      roleId: jsonInt(json['roleId']),
+      children: childList
+          .map(jsonMapCoerce)
           .whereType<Map<String, dynamic>>()
           .map(MenuDto.fromJson)
           .toList(),

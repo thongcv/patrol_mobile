@@ -1,0 +1,212 @@
+{
+  "@@locale": "en",
+  "langViShort": "VI",
+  "langEnShort": "EN",
+  "badgeText": "ACTIVE PROTECTION",
+  "title": "SYSTEMS ACCESS",
+  "forgotTitle": "RESET PASSWORD",
+  "loginSub": "Multi-layer security sign-in",
+  "forgotSub": "Enter your email to receive a temporary password",
+  "placeholderUsername": "Username",
+  "placeholderPassword": "Password",
+  "placeholderResetEmail": "Registered email",
+  "placeholderResetPhone": "Username or phone",
+  "sslText": "SSL Encrypted",
+  "forgotHint": "A temporary password will be sent to your email",
+  "backToLogin": "BACK TO SIGN IN",
+  "portalLabel": "SECURE PORTAL",
+  "copyright": "SPS SECURITY © 2024",
+  "forgotPassword": "FORGOT PASSWORD?",
+  "forgotSubmit": "SEND REQUEST",
+  "forgotSubmitLoading": "SENDING...",
+  "submit": "SIGN IN",
+  "submitLoading": "VERIFYING...",
+  "locationChecking": "Checking location...",
+  "locationTitle": "GPS & location required",
+  "locationBody": "Patrol requires location services on and location permission before sign-in.",
+  "locationServiceOff": "Location services (GPS) are turned off.",
+  "locationPermissionDenied": "Location permission was not granted.",
+  "locationPermissionForever": "Location permission permanently denied. Open app settings to enable.",
+  "openLocationSettings": "Open location settings",
+  "openAppSettings": "Open app settings",
+  "retry": "Try again",
+  "grantPermission": "Grant permission",
+  "toastApiNotConfigured": "API URL not configured.",
+  "toastNetworkErrorShort": "Network error.",
+  "toastUnreadableData": "Could not read data.",
+  "toastDialerUnavailable": "Cannot open dialer.",
+  "toastNotificationsComingSoon": "Notifications — coming soon",
+  "homeLoadErrorConfig": "API base URL is not configured.",
+  "homeLoadErrorNetwork": "Could not reach the server.",
+  "homeLoadErrorBadResponse": "Invalid server response.",
+  "homeLoadingWorkspace": "Loading your workspace…",
+  "roleManager": "Manager",
+  "roleStaff": "Staff",
+  "navHome": "HOME",
+  "navHistory": "HISTORY",
+  "navProfile": "PROFILE",
+  "userFallbackDisplayName": "User",
+  "homeSystemBanner": "PATROL SYSTEM",
+  "homeEmptyMenus": "No operations assigned.",
+  "homeEmergencySupport": "EMERGENCY SUPPORT",
+  "historyTitle": "Patrol history",
+  "historyInDevelopment": "This feature is under development.",
+  "labelEmail": "Email",
+  "profileAccountHeading": "Account",
+  "profileFieldAccountId": "Account ID",
+  "profileFieldPhone": "Phone",
+  "profileFieldAddress": "Address",
+  "profileFieldBranch": "Branch",
+  "profileFieldMerchant": "Merchant",
+  "profileManagerHeading": "Manager",
+  "profileFieldFullName": "Name",
+  "profileFieldManagerPhone": "Manager phone",
+  "signOut": "Sign out",
+  "signOutFailed": "Sign out failed.",
+  "signOutSessionInvalid": "Session invalid or expired.",
+  "patrolRoundTitle": "Patrol round",
+  "patrolRoundSubtitle": "Shift & route",
+  "patrolRoundSectionTitle": "Patrol workflow",
+  "patrolRoundPlaceholderBody": "Shift list, checklist and reporting will be integrated here.",
+  "patrolRoundReload": "Reload",
+  "patrolRoundLoading": "Loading active patrol…",
+  "patrolRoundLoadFailed": "Could not load patrol round.",
+  "patrolRoundUnauthorized": "Session expired or forbidden.",
+  "patrolRoundEmpty": "No active patrol round right now.",
+  "patrolRoundScheduleHeading": "Schedule",
+  "patrolRoundRoundHeading": "Patrol round",
+  "patrolRoundRouteHeading": "Route",
+  "patrolRoundShiftWindow": "Time window",
+  "patrolRoundEffective": "Effective",
+  "patrolRoundFrequency": "Frequency",
+  "patrolRoundDuration": "Round duration",
+  "patrolRoundMinutes": "{count} min",
+  "@patrolRoundMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "patrolRoundExpectedStart": "Expected start",
+  "patrolRoundExpectedEnd": "Expected end",
+  "patrolRoundOverdue": "Overdue",
+  "patrolRoundAssigned": "Assigned to",
+  "patrolRoundSiteId": "Site",
+  "patrolRoundScheduleTotalCheckPoints": "Checkpoints on schedule",
+  "patrolRoundCountSummary": "{count} points on route",
+  "@patrolRoundCountSummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "patrolRoundWithGpsSummary": "{count} with coordinates",
+  "@patrolRoundWithGpsSummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "patrolRoundWithQrSummary": "{count} with QR",
+  "@patrolRoundWithQrSummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "patrolRoundStatusPending": "Pending",
+  "patrolRoundStatusInProgress": "In progress",
+  "patrolRoundStatusCompleted": "Completed",
+  "patrolRoundStatusCancelled": "Cancelled",
+  "patrolRoundStatusOther": "Status",
+  "patrolRoundScheduleActive": "Active",
+  "patrolRoundScheduleInactive": "Inactive",
+  "patrolRoundChipGps": "GPS",
+  "patrolRoundChipNoGps": "No GPS",
+  "patrolRoundChipQr": "QR",
+  "patrolRoundChipNfc": "NFC",
+  "patrolRoundSubtitleActive": "{scheduleName} · {statusLabel}",
+  "@patrolRoundSubtitleActive": {
+    "placeholders": {
+      "scheduleName": {
+        "type": "String"
+      },
+      "statusLabel": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointTitle": "Point location",
+  "patrolPointSubtitle": "Field positioning",
+  "patrolPointSectionTitle": "Patrol content",
+  "patrolPointPlaceholderBody": "This screen will show the map and patrol points. API and GPS flows will plug in here.",
+  "patrolPointPointsHeading": "Site check points",
+  "patrolPointReload": "Reload list",
+  "patrolPointListLoading": "Loading list…",
+  "patrolPointEmpty": "No check points for this site.",
+  "patrolPointLoadFailed": "Could not load check points.",
+  "patrolPointUnauthorized": "Session expired or forbidden.",
+  "patrolPointDeviceLocationHeading": "Device position (GPS)",
+  "patrolPointGpsLoading": "Getting location…",
+  "patrolPointGpsTapRefresh": "No coordinates yet — tap the icon to retry",
+  "patrolPointGpsServiceOff": "Location services are off.",
+  "patrolPointGpsDenied": "Location permission denied.",
+  "patrolPointGpsError": "Could not read position.",
+  "patrolPointCountSummary": "{count} points total",
+  "@patrolPointCountSummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "patrolPointMissingCoordsSummary": "{count} points without coordinates on server",
+  "@patrolPointMissingCoordsSummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "patrolPointServerNoCoords": "No coordinates",
+  "patrolPointServerCoords": "Current position: {lat}, {lng}",
+  "@patrolPointServerCoords": {
+    "placeholders": {
+      "lat": {
+        "type": "String"
+      },
+      "lng": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointServerCoordsWithAlt": "Current position: {lat}, {lng} · altitude {alt} m",
+  "@patrolPointServerCoordsWithAlt": {
+    "placeholders": {
+      "lat": {
+        "type": "String"
+      },
+      "lng": {
+        "type": "String"
+      },
+      "alt": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointInactive": "Inactive",
+  "patrolPointUpdateCoordsTooltip": "Send current GPS to this point",
+  "patrolPointUpdateNeedGps": "Could not get a GPS fix — enable location services and grant permission.",
+  "patrolPointUpdateSuccess": "Coordinates updated.",
+  "patrolPointUpdateFailed": "Could not update coordinates.",
+  "patrolPointSiteAddressLabel": "Address",
+  "featureComingSoon": "Feature coming soon",
+  "apiBaseMissing": "API not configured: set API_BASE_URL or AppConfig.devFallbackBaseUrl",
+  "loginFailed": "Sign-in failed. Check credentials or server.",
+  "networkError": "Network error. Check API URL and connectivity.",
+  "forgotRequestSent": "Request sent. Check your email."
+}

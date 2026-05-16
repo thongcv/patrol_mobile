@@ -7,7 +7,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../http/api_failure.dart';
-import '../../l10n/auth_strings.dart';
+import '../../l10n/app_localizations.dart';
+import '../../l10n/patrol_coord_label.dart';
 import '../../models/check_point.dart';
 import '../../services/check_point_service.dart';
 import '../../utils/barometric_altitude.dart';
@@ -64,8 +65,6 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
 
   /// Điểm đã gửi tọa độ thành công (phiên) — cho phép hiện QR khi `qrImage` có dữ liệu hợp lệ.
   final Set<int> _pointIdsRevealQrAfterGpsOk = {};
-
-  AuthStrings get s => AuthStrings(widget.locale);
 
   double? _altitudeForDisplay(Position position) {
     return resolveAltitudeMeters(
@@ -130,7 +129,8 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
         _pointsFailure = r.failure;
         _pointIdsWithQrPayloadFromLastFetch = {};
       });
-      final msg = _messageForPointsFailure(r.failure!);
+      final l10n = AppLocalizations.of(context)!;
+      final msg = _messageForPointsFailure(r.failure!, l10n);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg)),
       );
@@ -150,23 +150,23 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
     });
   }
 
-  String _messageForPointsFailure(ApiFailure f) {
+  String _messageForPointsFailure(ApiFailure f, AppLocalizations l10n) {
     return f.userMessage(
-      configMissing: s.toastApiNotConfigured,
-      network: s.toastNetworkErrorShort,
-      unauthorized: s.patrolPointUnauthorized,
-      badResponse: s.patrolPointLoadFailed,
-      server: s.patrolPointLoadFailed,
+      configMissing: l10n.toastApiNotConfigured,
+      network: l10n.toastNetworkErrorShort,
+      unauthorized: l10n.patrolPointUnauthorized,
+      badResponse: l10n.patrolPointLoadFailed,
+      server: l10n.patrolPointLoadFailed,
     );
   }
 
-  String _messageForUpdateFailure(ApiFailure f) {
+  String _messageForUpdateFailure(ApiFailure f, AppLocalizations l10n) {
     return f.userMessage(
-      configMissing: s.toastApiNotConfigured,
-      network: s.toastNetworkErrorShort,
-      unauthorized: s.patrolPointUnauthorized,
-      badResponse: s.patrolPointUpdateFailed,
-      server: s.patrolPointUpdateFailed,
+      configMissing: l10n.toastApiNotConfigured,
+      network: l10n.toastNetworkErrorShort,
+      unauthorized: l10n.patrolPointUnauthorized,
+      badResponse: l10n.patrolPointUpdateFailed,
+      server: l10n.patrolPointUpdateFailed,
     );
   }
 
@@ -307,26 +307,27 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
     );
   }
 
-  String _gpsStatusText() {
-    if (_gpsBusy) return s.patrolPointGpsLoading;
+  String _gpsStatusText(AppLocalizations l10n) {
+    if (_gpsBusy) return l10n.patrolPointGpsLoading;
     switch (_gpsMessageKey) {
       case 'service':
-        return s.patrolPointGpsServiceOff;
+        return l10n.patrolPointGpsServiceOff;
       case 'denied':
-        return s.patrolPointGpsDenied;
+        return l10n.patrolPointGpsDenied;
       case 'error':
-        return s.patrolPointGpsError;
+        return l10n.patrolPointGpsError;
       default:
         break;
     }
     if (_position != null) {
-      return s.patrolPointServerCoords(
+      return patrolServerCoordLabel(
+        l10n,
         _position!.latitude,
         _position!.longitude,
         altitude: _altitudeForDisplay(_position!),
       );
     }
-    return s.patrolPointGpsTapRefresh;
+    return l10n.patrolPointGpsTapRefresh;
   }
 
   Future<void> _applyGpsToPoint(CheckPointDto point) async {
@@ -338,11 +339,12 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
 
     if (gps.position == null) {
       setState(() => _updatingIds.remove(point.id));
+      final l10n = AppLocalizations.of(context)!;
       final msg = switch (gps.messageKey) {
-        'service' => s.patrolPointGpsServiceOff,
-        'denied' => s.patrolPointGpsDenied,
-        'error' => s.patrolPointGpsError,
-        _ => s.patrolPointUpdateNeedGps,
+        'service' => l10n.patrolPointGpsServiceOff,
+        'denied' => l10n.patrolPointGpsDenied,
+        'error' => l10n.patrolPointGpsError,
+        _ => l10n.patrolPointUpdateNeedGps,
       };
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg)),
@@ -409,13 +411,15 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
         await _loadPoints();
       }
       if (!mounted) return;
+      final l10nOk = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.patrolPointUpdateSuccess)),
+        SnackBar(content: Text(l10nOk.patrolPointUpdateSuccess)),
       );
     } else {
       setState(() => _updatingIds.remove(point.id));
+      final l10nFail = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_messageForUpdateFailure(r.failure!))),
+        SnackBar(content: Text(_messageForUpdateFailure(r.failure!, l10nFail))),
       );
     }
   }
@@ -423,6 +427,7 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = GoogleFonts.interTextTheme(Theme.of(context).textTheme);
+    final l10n = AppLocalizations.of(context)!;
     final points = _site?.checkPoints;
     final subtitleStyle = theme.labelMedium?.copyWith(
       color: Colors.white.withValues(alpha: 0.55),
@@ -433,7 +438,7 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
     return PatrolFeatureScaffold(
       useOuterScaffold: !widget.embedded,
       locale: widget.locale,
-      title: widget.embedded ? null : s.patrolPointTitle,
+      title: widget.embedded ? null : l10n.patrolPointTitle,
       heroIcon: Icons.my_location_rounded,
       heroColor: PatrolShellColors.accent,
       subtitleSlot: Row(
@@ -441,7 +446,7 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
         children: [
           Expanded(
             child: Text(
-              _gpsStatusText(),
+              _gpsStatusText(l10n),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: subtitleStyle,
@@ -482,11 +487,11 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
             points: points,
             failure: _pointsFailure,
             onReload: _loadPoints,
-            strings: s,
+            l10n: l10n,
           ),
           const SizedBox(height: 18),
           Text(
-            s.patrolPointPointsHeading,
+            l10n.patrolPointPointsHeading,
             style: theme.titleSmall?.copyWith(
               color: Colors.white.withValues(alpha: 0.9),
               fontWeight: FontWeight.w600,
@@ -504,10 +509,10 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
               ),
             )
           else if (_pointsFailure != null)
-            _ErrorBlock(theme: theme, strings: s, onRetry: _loadPoints)
+            _ErrorBlock(theme: theme, l10n: l10n, onRetry: _loadPoints)
           else if (points == null || points.isEmpty)
             Text(
-              s.patrolPointEmpty,
+              l10n.patrolPointEmpty,
               style: theme.bodyMedium?.copyWith(
                 color: Colors.white.withValues(alpha: 0.65),
                 height: 1.5,
@@ -520,7 +525,7 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
                 child: _CheckPointCard(
                   theme: theme,
                   point: p,
-                  strings: s,
+                  l10n: l10n,
                   busy: _updatingIds.contains(p.id),
                   showQrImage: _pointIdsWithQrPayloadFromLastFetch
                           .contains(p.id) ||
@@ -544,7 +549,7 @@ class _SummaryStrip extends StatelessWidget {
     required this.points,
     required this.failure,
     required this.onReload,
-    required this.strings,
+    required this.l10n,
   });
 
   final TextTheme theme;
@@ -554,7 +559,7 @@ class _SummaryStrip extends StatelessWidget {
   final List<CheckPointDto>? points;
   final ApiFailure? failure;
   final VoidCallback onReload;
-  final AuthStrings strings;
+  final AppLocalizations l10n;
 
   @override
   Widget build(BuildContext context) {
@@ -576,7 +581,7 @@ class _SummaryStrip extends StatelessWidget {
           Expanded(
             child: loading
                 ? Text(
-                    strings.patrolPointListLoading,
+                    l10n.patrolPointListLoading,
                     style: theme.bodySmall?.copyWith(
                       color: Colors.white.withValues(alpha: 0.6),
                     ),
@@ -584,11 +589,11 @@ class _SummaryStrip extends StatelessWidget {
                 : failure != null
                     ? Text(
                         failure!.userMessage(
-                          configMissing: strings.toastApiNotConfigured,
-                          network: strings.toastNetworkErrorShort,
-                          unauthorized: strings.patrolPointUnauthorized,
-                          badResponse: strings.patrolPointLoadFailed,
-                          server: strings.patrolPointLoadFailed,
+                          configMissing: l10n.toastApiNotConfigured,
+                          network: l10n.toastNetworkErrorShort,
+                          unauthorized: l10n.patrolPointUnauthorized,
+                          badResponse: l10n.patrolPointLoadFailed,
+                          server: l10n.patrolPointLoadFailed,
                         ),
                         style: theme.bodySmall?.copyWith(
                           color: Colors.orangeAccent.withValues(alpha: 0.9),
@@ -610,7 +615,7 @@ class _SummaryStrip extends StatelessWidget {
                           if (siteAddress != null &&
                               siteAddress!.trim().isNotEmpty) ...[
                             Text(
-                              '${strings.patrolPointSiteAddressLabel}: ${siteAddress!.trim()}',
+                              '${l10n.patrolPointSiteAddressLabel}: ${siteAddress!.trim()}',
                               style: theme.bodySmall?.copyWith(
                                 color: Colors.white.withValues(alpha: 0.55),
                                 height: 1.35,
@@ -619,7 +624,7 @@ class _SummaryStrip extends StatelessWidget {
                             const SizedBox(height: 8),
                           ],
                           Text(
-                            strings.patrolPointCountSummary.replaceAll('{n}', '$n'),
+                            l10n.patrolPointCountSummary(n),
                             style: theme.labelLarge?.copyWith(
                               color: Colors.white.withValues(alpha: 0.92),
                               fontWeight: FontWeight.w600,
@@ -628,8 +633,7 @@ class _SummaryStrip extends StatelessWidget {
                           if (n > 0 && missing > 0) ...[
                             const SizedBox(height: 4),
                             Text(
-                              strings.patrolPointMissingCoordsSummary
-                                  .replaceAll('{n}', '$missing'),
+                              l10n.patrolPointMissingCoordsSummary(missing),
                               style: theme.bodySmall?.copyWith(
                                 color: PatrolShellColors.accentMuted
                                     .withValues(alpha: 0.85),
@@ -645,7 +649,7 @@ class _SummaryStrip extends StatelessWidget {
               backgroundColor: PatrolShellColors.accent.withValues(alpha: 0.18),
               foregroundColor: PatrolShellColors.accent,
             ),
-            tooltip: strings.patrolPointReload,
+            tooltip: l10n.patrolPointReload,
             icon: loading
                 ? SizedBox(
                     width: 22,
@@ -666,12 +670,12 @@ class _SummaryStrip extends StatelessWidget {
 class _ErrorBlock extends StatelessWidget {
   const _ErrorBlock({
     required this.theme,
-    required this.strings,
+    required this.l10n,
     required this.onRetry,
   });
 
   final TextTheme theme;
-  final AuthStrings strings;
+  final AppLocalizations l10n;
   final VoidCallback onRetry;
 
   @override
@@ -687,7 +691,7 @@ class _ErrorBlock extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            strings.patrolPointLoadFailed,
+            l10n.patrolPointLoadFailed,
             style: theme.bodyMedium?.copyWith(
               color: Colors.orangeAccent.withValues(alpha: 0.9),
             ),
@@ -704,7 +708,7 @@ class _ErrorBlock extends StatelessWidget {
               ),
             ),
             icon: const Icon(Icons.refresh_rounded, size: 20),
-            label: Text(strings.patrolPointReload),
+            label: Text(l10n.patrolPointReload),
           ),
         ],
       ),
@@ -716,7 +720,7 @@ class _CheckPointCard extends StatelessWidget {
   const _CheckPointCard({
     required this.theme,
     required this.point,
-    required this.strings,
+    required this.l10n,
     required this.busy,
     required this.showQrImage,
     required this.onApplyGps,
@@ -724,7 +728,7 @@ class _CheckPointCard extends StatelessWidget {
 
   final TextTheme theme;
   final CheckPointDto point;
-  final AuthStrings strings;
+  final AppLocalizations l10n;
   final bool busy;
   final bool showQrImage;
   final VoidCallback onApplyGps;
@@ -732,7 +736,8 @@ class _CheckPointCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final coordLabel = point.hasCoordinates
-        ? strings.patrolPointServerCoords(
+        ? patrolServerCoordLabel(
+            l10n,
             point.latitude!,
             point.longitude!,
             altitude: resolveAltitudeMeters(
@@ -740,7 +745,7 @@ class _CheckPointCard extends StatelessWidget {
               gpsMeters: point.gpsAltitude ?? double.nan,
             ),
           )
-        : strings.patrolPointServerNoCoords;
+        : l10n.patrolPointServerNoCoords;
     final qrPreview = showQrImage
         ? _checkPointQrPreview(point.qrImage, size: 64)
         : null;
@@ -816,7 +821,7 @@ class _CheckPointCard extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            strings.patrolPointInactive,
+                            l10n.patrolPointInactive,
                             style: theme.labelSmall?.copyWith(
                               color: Colors.white54,
                             ),
@@ -827,7 +832,7 @@ class _CheckPointCard extends StatelessWidget {
                 ),
               ),
               Tooltip(
-                message: strings.patrolPointUpdateCoordsTooltip,
+                message: l10n.patrolPointUpdateCoordsTooltip,
                 child: IconButton.filledTonal(
                   onPressed: busy ? null : onApplyGps,
                   style: IconButton.styleFrom(

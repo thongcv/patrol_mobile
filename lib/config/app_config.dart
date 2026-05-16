@@ -19,4 +19,12 @@ class AppConfig {
     }
     return '';
   }
+
+  /// Ghép base + path API (path phải bắt đầu bằng `/`, ví dụ `/api/accounts/login`).
+  static Uri resolveApiUri(String path) {
+    final base = effectiveBaseUrl;
+    final p = path.startsWith('/') ? path : '/$path';
+    if (base.isEmpty) return Uri.parse(p);
+    return Uri.parse('$base$p');
+  }
 }

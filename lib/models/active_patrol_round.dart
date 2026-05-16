@@ -16,6 +16,9 @@ class PatrolScheduleDto {
     this.roundMinutes,
     this.assignedTeamNamesJoined,
     this.assignedAccountNamesJoined,
+    this.siteName,
+    this.siteAddress,
+    this.totalCheckPoints,
   });
 
   final int id;
@@ -31,6 +34,9 @@ class PatrolScheduleDto {
   final int? roundMinutes;
   final String? assignedTeamNamesJoined;
   final String? assignedAccountNamesJoined;
+  final String? siteName;
+  final String? siteAddress;
+  final int? totalCheckPoints;
 
   factory PatrolScheduleDto.fromJson(Map<String, dynamic> json) {
     return PatrolScheduleDto(
@@ -47,7 +53,10 @@ class PatrolScheduleDto {
       roundMinutes: (json['roundMinutes'] as num?)?.toInt(),
       assignedTeamNamesJoined: json['assignedTeamNamesJoined'] as String?,
       assignedAccountNamesJoined:
-          json['assignedAccountNamesJoined'] as String?,
+      json['assignedAccountNamesJoined'] as String?,
+      siteName: json['siteName'] as String?,
+      siteAddress: json['siteAddress'] as String?,
+      totalCheckPoints: (json['totalCheckPoints'] as num?)?.toInt(),
     );
   }
 }

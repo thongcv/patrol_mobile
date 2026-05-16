@@ -24,6 +24,8 @@ class PatrolFeatureScaffold extends StatelessWidget {
     this.subtitle,
     /// Khi khác null, thay hàng phụ đề mặc định (ví dụ GPS + nút refresh).
     this.subtitleSlot,
+    /// Nút / icon bên phải hàng hero + phụ đề (ví dụ mở lịch ca).
+    this.heroRowTrailing,
     /// `false` khi nhúng trong Home (tránh Scaffold lồng route mới).
     this.useOuterScaffold = true,
   });
@@ -36,6 +38,7 @@ class PatrolFeatureScaffold extends StatelessWidget {
   final Widget child;
   final String? subtitle;
   final Widget? subtitleSlot;
+  final Widget? heroRowTrailing;
   final bool useOuterScaffold;
 
   bool get _vi => locale.languageCode == 'vi';
@@ -133,6 +136,7 @@ class PatrolFeatureScaffold extends StatelessWidget {
                         ],
                       ),
                 ),
+                ?heroRowTrailing,
               ],
             ),
           ],

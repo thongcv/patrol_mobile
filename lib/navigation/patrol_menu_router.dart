@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../l10n/auth_strings.dart';
+import '../l10n/app_localizations.dart';
 import '../screens/patrol/patrol_point_screen.dart';
 import '../screens/patrol/patrol_round_screen.dart';
 
@@ -176,7 +176,7 @@ class _PatrolPlaceholderScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = AuthStrings(locale);
+    final l10n = AppLocalizations.of(context)!;
     const bg = Color(0xFF0F172A);
     const surface = Color(0xFF1E293B);
 
@@ -193,7 +193,7 @@ class _PatrolPlaceholderScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              s.featureComingSoon,
+              l10n.featureComingSoon,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: Colors.white.withValues(alpha: 0.9),

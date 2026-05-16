@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../l10n/auth_strings.dart';
+import '../l10n/app_localizations.dart';
 import '../widgets/language_toggle_bar.dart';
 import '../widgets/login_background.dart';
 import 'login_screen.dart';
@@ -28,8 +28,6 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
   _GatePhase _phase = _GatePhase.checking;
   String? _detail;
 
-  AuthStrings get s => AuthStrings(widget.locale);
-
   @override
   void initState() {
     super.initState();
@@ -43,10 +41,12 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
     });
 
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(context)!;
     if (!serviceEnabled) {
       setState(() {
         _phase = _GatePhase.blocked;
-        _detail = s.locationServiceOff;
+        _detail = l10n.locationServiceOff;
       });
       return;
     }
@@ -56,10 +56,12 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
       permission = await Geolocator.requestPermission();
     }
 
+    if (!mounted) return;
+    final l10n2 = AppLocalizations.of(context)!;
     if (permission == LocationPermission.denied) {
       setState(() {
         _phase = _GatePhase.blocked;
-        _detail = s.locationPermissionDenied;
+        _detail = l10n2.locationPermissionDenied;
       });
       return;
     }
@@ -67,7 +69,7 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
     if (permission == LocationPermission.deniedForever) {
       setState(() {
         _phase = _GatePhase.blocked;
-        _detail = s.locationPermissionForever;
+        _detail = l10n2.locationPermissionForever;
       });
       return;
     }
@@ -97,6 +99,7 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
     }
 
     final theme = GoogleFonts.interTextTheme(Theme.of(context).textTheme);
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       body: LoginBackground(
@@ -123,7 +126,7 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          s.locationTitle,
+                          l10n.locationTitle,
                           textAlign: TextAlign.center,
                           style: theme.titleMedium?.copyWith(
                             color: Colors.white,
@@ -133,7 +136,7 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          s.locationBody,
+                          l10n.locationBody,
                           textAlign: TextAlign.center,
                           style: theme.bodySmall?.copyWith(
                             color: Colors.white.withValues(alpha: 0.55),
@@ -154,7 +157,7 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
                         const SizedBox(height: 24),
                         if (_phase == _GatePhase.checking) ...[
                           Text(
-                            s.locationChecking,
+                            l10n.locationChecking,
                             style: theme.bodyMedium?.copyWith(
                               color: Colors.white.withValues(alpha: 0.65),
                             ),
@@ -183,7 +186,7 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
                                   ),
                                 ),
                                 child: Text(
-                                  s.retry,
+                                  l10n.retry,
                                   style: theme.labelLarge?.copyWith(
                                     color: Colors.white,
                                     fontWeight: FontWeight.w700,
@@ -206,7 +209,7 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
                                     borderRadius: BorderRadius.circular(24),
                                   ),
                                 ),
-                                child: Text(s.openLocationSettings),
+                                child: Text(l10n.openLocationSettings),
                               ),
                               const SizedBox(height: 8),
                               OutlinedButton(
@@ -223,7 +226,7 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
                                     borderRadius: BorderRadius.circular(24),
                                   ),
                                 ),
-                                child: Text(s.openAppSettings),
+                                child: Text(l10n.openAppSettings),
                               ),
                             ],
                           ),

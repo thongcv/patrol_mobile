@@ -1,7 +1,5 @@
 // ignore_for_file: lines_longer_than_80_chars
-//
-// Thay file này bằng output của: dart pub global run flutterfire_cli:flutterfire configure
-// (hoặc chỉnh các hằng Android cho khớp project Firebase của bạn.)
+// File generated from android/app/google-services.json (project sps-patrol).
 //
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
@@ -24,12 +22,12 @@ class DefaultFirebaseOptions {
     }
   }
 
-  /// Giá trị mẫu để build; thay bằng project thật từ Firebase Console / FlutterFire.
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDUMMY-DUMMY-DUMMY-DUMMY-DUMMY0',
-    appId: '1:000000000000:android:aaaaaaaaaaaaaaaaaaaaaaaa',
-    messagingSenderId: '000000000000',
-    projectId: 'patrol-mobile-placeholder',
-    storageBucket: 'patrol-mobile-placeholder.appspot.com',
+    apiKey: 'AIzaSyDHwMdFnNWfu-ODKUNxtRvAAFoGC6rmcGs',
+    appId: '1:788041630665:android:a0fb990067738a0442de18',
+    messagingSenderId: '788041630665',
+    projectId: 'sps-patrol',
+    storageBucket: 'sps-patrol.firebasestorage.app',
   );
+
 }

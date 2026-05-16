@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../l10n/auth_strings.dart';
+import '../l10n/app_localizations.dart';
 
 /// Góc phải trên — giống FE login language switcher.
 class LanguageToggleBar extends StatelessWidget {
@@ -16,7 +16,7 @@ class LanguageToggleBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = AuthStrings(locale);
+    final l10n = AppLocalizations.of(context)!;
     final isVi = locale.languageCode == 'vi';
     return Positioned(
       top: 8,
@@ -37,12 +37,12 @@ class LanguageToggleBar extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             _Chip(
-              label: s.langViShort,
+              label: l10n.langViShort,
               selected: isVi,
               onTap: () => onLocaleChanged(const Locale('vi')),
             ),
             _Chip(
-              label: s.langEnShort,
+              label: l10n.langEnShort,
               selected: !isVi,
               onTap: () => onLocaleChanged(const Locale('en')),
             ),

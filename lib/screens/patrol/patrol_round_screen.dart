@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../http/api_failure.dart';
-import '../../l10n/auth_strings.dart';
+import '../../l10n/app_localizations.dart';
 import '../../models/active_patrol_round.dart';
 import '../../models/check_point.dart';
 import '../../services/patrol_round_service.dart';
@@ -36,8 +36,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   bool _loading = true;
   ApiFailure? _failure;
 
-  AuthStrings get s => AuthStrings(widget.locale);
-
   @override
   void initState() {
     super.initState();
@@ -65,37 +63,142 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
         _loading = false;
         _failure = r.failure;
       });
+      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_messageForFailure(r.failure!))),
+        SnackBar(content: Text(_messageForFailure(r.failure!, l10n))),
       );
     }
   }
 
-  String _messageForFailure(ApiFailure f) {
+  String _messageForFailure(ApiFailure f, AppLocalizations l10n) {
     return f.userMessage(
-      configMissing: s.toastApiNotConfigured,
-      network: s.toastNetworkErrorShort,
-      unauthorized: s.patrolRoundUnauthorized,
-      badResponse: s.patrolRoundLoadFailed,
-      server: s.patrolRoundLoadFailed,
+      configMissing: l10n.toastApiNotConfigured,
+      network: l10n.toastNetworkErrorShort,
+      unauthorized: l10n.patrolRoundUnauthorized,
+      badResponse: l10n.patrolRoundLoadFailed,
+      server: l10n.patrolRoundLoadFailed,
     );
   }
 
-  String _statusLabel(String status) {
+  Future<void> _openScheduleOverlay() async {
+    final theme = GoogleFonts.interTextTheme(Theme.of(context).textTheme);
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: true,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.55),
+      builder: (sheetContext) {
+        final pad = MediaQuery.paddingOf(sheetContext);
+        final h = MediaQuery.sizeOf(sheetContext).height;
+
+        void closeSheet() {
+          if (sheetContext.mounted) {
+            Navigator.of(sheetContext).pop();
+          }
+        }
+
+        return Padding(
+          padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + pad.bottom),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: StatefulBuilder(
+              builder: (modalContext, setSheetState) {
+                const handleReserve = 40.0;
+                final maxBodyHeight =
+                    (h * 0.88 - handleReserve).clamp(120.0, h);
+                final scrollPhysics = AlwaysScrollableScrollPhysics(
+                  parent: Theme.of(sheetContext).platform ==
+                          TargetPlatform.iOS
+                      ? const BouncingScrollPhysics()
+                      : const ClampingScrollPhysics(),
+                );
+
+                return ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: h * 0.88),
+                  child: Material(
+                    color: PatrolShellColors.surface,
+                    elevation: 12,
+                    shadowColor: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(20),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _SheetVerticalDismissHandle(onDismiss: closeSheet),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxHeight: maxBodyHeight,
+                          ),
+                          child: NotificationListener<ScrollNotification>(
+                            onNotification: (ScrollNotification n) {
+                              if (n is! OverscrollNotification) {
+                                return false;
+                              }
+                              if (n.overscroll.abs() >= 20) {
+                                closeSheet();
+                                return true;
+                              }
+                              return false;
+                            },
+                            child: ListView(
+                              shrinkWrap: true,
+                              physics: scrollPhysics,
+                              padding: const EdgeInsets.all(4),
+                              children: [
+                                _ScheduleCard(
+                                  theme: theme,
+                                  l10n: AppLocalizations.of(modalContext)!,
+                                  loading: _loading,
+                                  failure: _failure,
+                                  data: _active,
+                                  onReload: () async {
+                                    await _load();
+                                    if (modalContext.mounted) {
+                                      setSheetState(() {});
+                                    }
+                                  },
+                                  failureMessage: _failure != null
+                                      ? _messageForFailure(
+                                          _failure!,
+                                          AppLocalizations.of(modalContext)!,
+                                        )
+                                      : null,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _statusLabel(String status, AppLocalizations l10n) {
     switch (status.toUpperCase()) {
       case 'PENDING':
-        return s.patrolRoundStatusPending;
+        return l10n.patrolRoundStatusPending;
       case 'IN_PROGRESS':
       case 'INPROGRESS':
-        return s.patrolRoundStatusInProgress;
+        return l10n.patrolRoundStatusInProgress;
       case 'COMPLETED':
       case 'DONE':
-        return s.patrolRoundStatusCompleted;
+        return l10n.patrolRoundStatusCompleted;
       case 'CANCELLED':
       case 'CANCELED':
-        return s.patrolRoundStatusCancelled;
+        return l10n.patrolRoundStatusCancelled;
       default:
-        return status.isEmpty ? s.patrolRoundStatusOther : status;
+        return status.isEmpty ? l10n.patrolRoundStatusOther : status;
     }
   }
 
@@ -120,24 +223,25 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = GoogleFonts.interTextTheme(Theme.of(context).textTheme);
+    final l10n = AppLocalizations.of(context)!;
     final data = _active;
 
     final subtitle = _loading
-        ? s.patrolRoundLoading
+        ? l10n.patrolRoundLoading
         : data == null
-            ? s.patrolRoundSubtitle
-            : s.patrolRoundSubtitleActive(
+            ? l10n.patrolRoundSubtitle
+            : l10n.patrolRoundSubtitleActive(
                 data.schedule.name,
-                _statusLabel(data.round.status),
+                _statusLabel(data.round.status, l10n),
               );
 
     return PatrolFeatureScaffold(
       useOuterScaffold: !widget.embedded,
       locale: widget.locale,
-      title: widget.embedded ? null : s.patrolRoundTitle,
+      title: widget.embedded ? null : l10n.patrolRoundTitle,
       heroIcon: Icons.shield_moon_rounded,
       heroColor: const Color(0xFF34D399),
-      subtitle: data == null ? s.patrolRoundSubtitle : null,
+      subtitle: data == null ? l10n.patrolRoundSubtitle : null,
       subtitleSlot: data != null || _loading
           ? Text(
               subtitle,
@@ -150,32 +254,81 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
               ),
             )
           : null,
+      heroRowTrailing: IconButton(
+        icon: const Icon(Icons.calendar_month_rounded),
+        color: Colors.white.withValues(alpha: 0.92),
+        tooltip: l10n.patrolRoundScheduleHeading,
+        onPressed: _openScheduleOverlay,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _ScheduleCard(
-            theme: theme,
-            strings: s,
-            loading: _loading,
-            failure: _failure,
-            data: data,
-            onReload: _load,
-            failureMessage:
-                _failure != null ? _messageForFailure(_failure!) : null,
-          ),
+          if (_loading) ...[
+            const SizedBox(height: 28),
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 36,
+                    height: 36,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Color(0xFF34D399),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    l10n.patrolRoundLoading,
+                    textAlign: TextAlign.center,
+                    style: theme.bodyMedium?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.65),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (_failure != null) ...[
+            const SizedBox(height: 16),
+            Text(
+              _messageForFailure(_failure!, l10n),
+              style: theme.bodyMedium?.copyWith(
+                color: Colors.orangeAccent.withValues(alpha: 0.9),
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh_rounded, size: 20),
+                label: Text(l10n.patrolRoundReload),
+              ),
+            ),
+          ] else if (data == null) ...[
+            const SizedBox(height: 16),
+            Text(
+              l10n.patrolRoundEmpty,
+              style: theme.bodyMedium?.copyWith(
+                color: Colors.white.withValues(alpha: 0.65),
+                height: 1.5,
+              ),
+            ),
+          ],
           if (!_loading && _failure == null && data != null) ...[
             const SizedBox(height: 12),
             _RoundCard(
               theme: theme,
-              strings: s,
+              l10n: l10n,
               round: data.round,
-              statusLabel: _statusLabel(data.round.status),
+              statusLabel: _statusLabel(data.round.status, l10n),
               statusColor: _statusColor(data.round.status),
               locale: widget.locale,
             ),
             const SizedBox(height: 20),
             Text(
-              s.patrolRoundRouteHeading,
+              l10n.patrolRoundRouteHeading,
               style: theme.titleSmall?.copyWith(
                 color: Colors.white.withValues(alpha: 0.9),
                 fontWeight: FontWeight.w600,
@@ -184,7 +337,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
             const SizedBox(height: 12),
             if (data.checkPoints.isEmpty)
               Text(
-                s.patrolPointEmpty,
+                l10n.patrolPointEmpty,
                 style: theme.bodyMedium?.copyWith(
                   color: Colors.white.withValues(alpha: 0.65),
                   height: 1.5,
@@ -196,7 +349,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
                   padding: const EdgeInsets.only(bottom: 10),
                   child: _RoutePointCard(
                     theme: theme,
-                    strings: s,
+                    l10n: l10n,
                     point: p,
                   ),
                 ),
@@ -208,10 +361,53 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   }
 }
 
+/// Thanh kéo: vuốt nhẹ (hoặc flick nhỏ) lên/xuống là đóng sheet.
+class _SheetVerticalDismissHandle extends StatefulWidget {
+  const _SheetVerticalDismissHandle({required this.onDismiss});
+
+  final VoidCallback onDismiss;
+
+  @override
+  State<_SheetVerticalDismissHandle> createState() =>
+      _SheetVerticalDismissHandleState();
+}
+
+class _SheetVerticalDismissHandleState extends State<_SheetVerticalDismissHandle> {
+  double _dragY = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: (_) => _dragY = 0,
+      onVerticalDragUpdate: (d) => _dragY += d.delta.dy,
+      onVerticalDragEnd: (details) {
+        final v = details.primaryVelocity ?? 0;
+        if (v.abs() > 85 || _dragY.abs() > 14) {
+          widget.onDismiss();
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 10, 0, 6),
+        child: Center(
+          child: Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.28),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ScheduleCard extends StatelessWidget {
   const _ScheduleCard({
     required this.theme,
-    required this.strings,
+    required this.l10n,
     required this.loading,
     required this.data,
     required this.onReload,
@@ -220,7 +416,7 @@ class _ScheduleCard extends StatelessWidget {
   });
 
   final TextTheme theme;
-  final AuthStrings strings;
+  final AppLocalizations l10n;
   final bool loading;
   final ActivePatrolRoundDto? data;
   final ApiFailure? failure;
@@ -251,6 +447,8 @@ class _ScheduleCard extends StatelessWidget {
         : null;
     final freq = schedule?.frequencyMinutes;
     final roundMin = schedule?.roundMinutes;
+    final scheduleShowsName =
+        schedule != null && schedule.name.trim().isNotEmpty;
 
     return _PatrolPanel(
       child: Column(
@@ -266,18 +464,25 @@ class _ScheduleCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  strings.patrolRoundScheduleHeading,
-                  style: theme.titleSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  scheduleShowsName
+                      ? schedule.name
+                      : l10n.patrolRoundScheduleHeading,
+                  style: scheduleShowsName
+                      ? theme.titleMedium?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        )
+                      : theme.titleSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
                 ),
               ),
               if (schedule != null)
                 _StatusChip(
                   label: schedule.active
-                      ? strings.patrolRoundScheduleActive
-                      : strings.patrolRoundScheduleInactive,
+                      ? l10n.patrolRoundScheduleActive
+                      : l10n.patrolRoundScheduleInactive,
                   color: schedule.active
                       ? const Color(0xFF34D399)
                       : Colors.white54,
@@ -297,7 +502,7 @@ class _ScheduleCard extends StatelessWidget {
                       const Color(0xFF34D399).withValues(alpha: 0.18),
                   foregroundColor: const Color(0xFF34D399),
                 ),
-                tooltip: strings.patrolRoundReload,
+                tooltip: l10n.patrolRoundReload,
                 icon: loading
                     ? const SizedBox(
                         width: 20,
@@ -314,14 +519,14 @@ class _ScheduleCard extends StatelessWidget {
           const SizedBox(height: 12),
           if (loading)
             Text(
-              strings.patrolRoundLoading,
+              l10n.patrolRoundLoading,
               style: theme.bodyMedium?.copyWith(
                 color: Colors.white.withValues(alpha: 0.6),
               ),
             )
           else if (failure != null)
             Text(
-              failureMessage ?? strings.patrolRoundLoadFailed,
+              failureMessage ?? l10n.patrolRoundLoadFailed,
               style: theme.bodyMedium?.copyWith(
                 color: Colors.orangeAccent.withValues(alpha: 0.9),
                 height: 1.4,
@@ -329,25 +534,17 @@ class _ScheduleCard extends StatelessWidget {
             )
           else if (data == null)
             Text(
-              strings.patrolRoundEmpty,
+              l10n.patrolRoundEmpty,
               style: theme.bodyMedium?.copyWith(
                 color: Colors.white.withValues(alpha: 0.65),
                 height: 1.5,
               ),
             )
           else ...[
-            Text(
-              schedule!.name,
-              style: theme.titleMedium?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 10),
             _InfoRow(
               theme: theme,
               icon: Icons.schedule_rounded,
-              label: strings.patrolRoundShiftWindow,
+              label: l10n.patrolRoundShiftWindow,
               value: window!,
             ),
             if (effective!.isNotEmpty) ...[
@@ -355,7 +552,7 @@ class _ScheduleCard extends StatelessWidget {
               _InfoRow(
                 theme: theme,
                 icon: Icons.date_range_rounded,
-                label: strings.patrolRoundEffective,
+                label: l10n.patrolRoundEffective,
                 value: effective,
               ),
             ],
@@ -368,9 +565,8 @@ class _ScheduleCard extends StatelessWidget {
                       child: _MiniStat(
                         theme: theme,
                         icon: Icons.repeat_rounded,
-                        label: strings.patrolRoundFrequency,
-                        value: strings.patrolRoundMinutes
-                            .replaceAll('{n}', '$freq'),
+                        label: l10n.patrolRoundFrequency,
+                        value: l10n.patrolRoundMinutes(freq),
                       ),
                     ),
                   if (freq != null && roundMin != null)
@@ -380,9 +576,8 @@ class _ScheduleCard extends StatelessWidget {
                       child: _MiniStat(
                         theme: theme,
                         icon: Icons.timelapse_rounded,
-                        label: strings.patrolRoundDuration,
-                        value: strings.patrolRoundMinutes
-                            .replaceAll('{n}', '$roundMin'),
+                        label: l10n.patrolRoundDuration,
+                        value: l10n.patrolRoundMinutes(roundMin),
                       ),
                     ),
                 ],
@@ -392,14 +587,33 @@ class _ScheduleCard extends StatelessWidget {
             _InfoRow(
               theme: theme,
               icon: Icons.place_outlined,
-              label: strings.patrolRoundSiteId,
-              value: '${schedule.siteId}',
+              label: l10n.patrolRoundSiteId,
+              value: data!.schedule.siteName ?? '',
             ),
+            if (data!.schedule.siteAddress != null &&
+                data!.schedule.siteAddress!.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _InfoRow(
+                theme: theme,
+                icon: Icons.location_on_outlined,
+                label: l10n.patrolPointSiteAddressLabel,
+                value: data!.schedule.siteAddress!.trim(),
+              ),
+            ],
+            if (data!.schedule.totalCheckPoints != null) ...[
+              const SizedBox(height: 8),
+              _InfoRow(
+                theme: theme,
+                icon: Icons.flag_outlined,
+                label: l10n.patrolRoundScheduleTotalCheckPoints,
+                value: '${data!.schedule.totalCheckPoints}',
+              ),
+            ],
             const SizedBox(height: 14),
             Divider(color: Colors.white.withValues(alpha: 0.08), height: 1),
             const SizedBox(height: 12),
             Text(
-              strings.patrolRoundCountSummary.replaceAll('{n}', '$n'),
+              l10n.patrolRoundCountSummary(n),
               style: theme.labelLarge?.copyWith(
                 color: Colors.white.withValues(alpha: 0.92),
                 fontWeight: FontWeight.w600,
@@ -408,8 +622,8 @@ class _ScheduleCard extends StatelessWidget {
             if (n > 0) ...[
               const SizedBox(height: 4),
               Text(
-                '${strings.patrolRoundWithGpsSummary.replaceAll('{n}', '$withGps')} · '
-                '${strings.patrolRoundWithQrSummary.replaceAll('{n}', '$withQr')}',
+                '${l10n.patrolRoundWithGpsSummary(withGps)} · '
+                '${l10n.patrolRoundWithQrSummary(withQr)}',
                 style: theme.bodySmall?.copyWith(
                   color: const Color(0xFF6EE7B7).withValues(alpha: 0.85),
                 ),
@@ -425,7 +639,7 @@ class _ScheduleCard extends StatelessWidget {
 class _RoundCard extends StatelessWidget {
   const _RoundCard({
     required this.theme,
-    required this.strings,
+    required this.l10n,
     required this.round,
     required this.statusLabel,
     required this.statusColor,
@@ -433,7 +647,7 @@ class _RoundCard extends StatelessWidget {
   });
 
   final TextTheme theme;
-  final AuthStrings strings;
+  final AppLocalizations l10n;
   final PatrolRoundDto round;
   final String statusLabel;
   final Color statusColor;
@@ -449,6 +663,7 @@ class _RoundCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Icon(
                 Icons.route_rounded,
@@ -457,12 +672,34 @@ class _RoundCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  strings.patrolRoundRoundHeading,
-                  style: theme.titleSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        l10n.patrolRoundRoundHeading,
+                        style: theme.titleSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '#${round.id}',
+                      style: theme.headlineSmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.visible,
+                      softWrap: false,
+                    ),
+                  ],
                 ),
               ),
               _StatusChip(
@@ -473,26 +710,17 @@ class _RoundCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Text(
-            '#${round.id}',
-            style: theme.headlineSmall?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 10),
           _InfoRow(
             theme: theme,
             icon: Icons.play_circle_outline_rounded,
-            label: strings.patrolRoundExpectedStart,
+            label: l10n.patrolRoundExpectedStart,
             value: _formatIsoDateTime(round.expectedStartTime, locale),
           ),
           const SizedBox(height: 8),
           _InfoRow(
             theme: theme,
             icon: Icons.stop_circle_outlined,
-            label: strings.patrolRoundExpectedEnd,
+            label: l10n.patrolRoundExpectedEnd,
             value: _formatIsoDateTime(round.expectedEndTime, locale),
           ),
           if (_isPatrolRoundOverdue(round)) ...[
@@ -506,7 +734,7 @@ class _RoundCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 _StatusChip(
-                  label: strings.patrolRoundOverdue,
+                  label: l10n.patrolRoundOverdue,
                   color: const Color(0xFFEF4444),
                   filled: true,
                 ),
@@ -518,7 +746,7 @@ class _RoundCard extends StatelessWidget {
             _InfoRow(
               theme: theme,
               icon: Icons.person_outline_rounded,
-              label: strings.patrolRoundAssigned,
+              label: l10n.patrolRoundAssigned,
               value: assignee,
             ),
           ],
@@ -531,12 +759,12 @@ class _RoundCard extends StatelessWidget {
 class _RoutePointCard extends StatelessWidget {
   const _RoutePointCard({
     required this.theme,
-    required this.strings,
+    required this.l10n,
     required this.point,
   });
 
   final TextTheme theme;
-  final AuthStrings strings;
+  final AppLocalizations l10n;
   final CheckPointDto point;
 
   @override
@@ -618,8 +846,8 @@ class _RoutePointCard extends StatelessWidget {
               _FeatureChip(
                 theme: theme,
                 label: point.hasCoordinates
-                    ? strings.patrolRoundChipGps
-                    : strings.patrolRoundChipNoGps,
+                    ? l10n.patrolRoundChipGps
+                    : l10n.patrolRoundChipNoGps,
                 icon: point.hasCoordinates
                     ? Icons.gps_fixed_rounded
                     : Icons.gps_off_rounded,
@@ -630,21 +858,21 @@ class _RoutePointCard extends StatelessWidget {
               if (qrUrl != null)
                 _FeatureChip(
                   theme: theme,
-                  label: strings.patrolRoundChipQr,
+                  label: l10n.patrolRoundChipQr,
                   icon: Icons.qr_code_2_rounded,
                   color: const Color(0xFF6EE7B7),
                 ),
               if (hasNfc)
                 _FeatureChip(
                   theme: theme,
-                  label: strings.patrolRoundChipNfc,
+                  label: l10n.patrolRoundChipNfc,
                   icon: Icons.nfc_rounded,
                   color: Colors.white70,
                 ),
               if (!point.active)
                 _FeatureChip(
                   theme: theme,
-                  label: strings.patrolPointInactive,
+                  label: l10n.patrolPointInactive,
                   icon: Icons.block_rounded,
                   color: Colors.white54,
                 ),
@@ -909,7 +1137,6 @@ bool _isPatrolRoundOverdue(PatrolRoundDto round) {
   final status = round.status.toUpperCase();
   if (status == 'COMPLETED' ||
       status == 'DONE' ||
-      status == 'CANCELLED' ||
       status == 'CANCELED') {
     return false;
   }

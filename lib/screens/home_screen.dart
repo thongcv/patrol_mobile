@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../http/api_failure.dart';
-import '../l10n/auth_strings.dart';
+import '../l10n/app_localizations.dart';
 import '../models/account_me.dart';
 import '../navigation/patrol_menu_router.dart';
 import '../services/account_service.dart';
@@ -38,9 +38,6 @@ class _HomeScreenState extends State<HomeScreen> {
   int _navIndex = 0;
   bool _signOutBusy = false;
   MenuDto? _homeEmbeddedMenu;
-
-  AuthStrings get s => AuthStrings(widget.locale);
-
 
   @override
   void initState() {
@@ -86,7 +83,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (silent) {
       setState(() => _loading = false);
       if (!mounted) return;
-      final msg = _snackForFailure(fail);
+      final l10n = AppLocalizations.of(context)!;
+      final msg = _snackForFailure(fail, l10n);
       if (msg.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg)),
@@ -102,13 +100,13 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  String _snackForFailure(ApiFailure f) {
+  String _snackForFailure(ApiFailure f, AppLocalizations l10n) {
     return f.userMessage(
-      configMissing: s.toastApiNotConfigured,
-      network: s.toastNetworkErrorShort,
+      configMissing: l10n.toastApiNotConfigured,
+      network: l10n.toastNetworkErrorShort,
       unauthorized: '',
-      badResponse: s.toastUnreadableData,
-      server: s.toastUnreadableData,
+      badResponse: l10n.toastUnreadableData,
+      server: l10n.toastUnreadableData,
     );
   }
 
@@ -119,12 +117,13 @@ class _HomeScreenState extends State<HomeScreen> {
       final r = await AuthService.instance.logout();
       if (!mounted) return;
       if (!r.ok) {
+        final l10n = AppLocalizations.of(context)!;
         final msg = r.failure!.userMessage(
-          configMissing: s.toastApiNotConfigured,
-          network: s.toastNetworkErrorShort,
-          unauthorized: s.signOutSessionInvalid,
-          badResponse: s.signOutFailed,
-          server: s.signOutFailed,
+          configMissing: l10n.toastApiNotConfigured,
+          network: l10n.toastNetworkErrorShort,
+          unauthorized: l10n.signOutSessionInvalid,
+          badResponse: l10n.signOutFailed,
+          server: l10n.signOutFailed,
         );
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg)),
@@ -153,9 +152,10 @@ class _HomeScreenState extends State<HomeScreen> {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
     } else if (mounted) {
+      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(s.toastDialerUnavailable),
+          content: Text(l10n.toastDialerUnavailable),
         ),
       );
     }
@@ -203,11 +203,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = GoogleFonts.interTextTheme(Theme.of(context).textTheme);
+    final l10n = AppLocalizations.of(context)!;
 
     if (_loading) {
       return Scaffold(
         backgroundColor: _PatrolUi.headerBlue,
-        body: _LoadingBody(theme: theme, strings: s),
+        body: _LoadingBody(theme: theme, l10n: l10n),
       );
     }
 
@@ -216,10 +217,10 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: _PatrolUi.headerBlue,
         body: _ErrorBody(
           theme: theme,
-          strings: s,
+          l10n: l10n,
           failure: _failure!,
           onRetry: _load,
-          portalLabel: s.portalLabel,
+          portalLabel: l10n.portalLabel,
         ),
       );
     }
@@ -237,14 +238,14 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             _PatrolHeaderBar(
               theme: theme,
-              strings: s,
+              l10n: l10n,
               user: me.userInfo,
               initials: _initials(me.userInfo),
               roleLabel: _roleBadgeLabel(me.userInfo),
               onNotificationTap: () {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text(s.toastNotificationsComingSoon),
+                    content: Text(l10n.toastNotificationsComingSoon),
                   ),
                 );
               },
@@ -278,7 +279,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             onRefresh: () => _load(silent: true),
                             child: _HomeTabContent(
                               theme: theme,
-                              strings: s,
+                              l10n: l10n,
                               me: me,
                               emergencyPhone: _emergencyPhoneRaw(me),
                               emergencySubtitle: () {
@@ -286,17 +287,17 @@ class _HomeScreenState extends State<HomeScreen> {
                                 if (mp != null && mp.isNotEmpty) {
                                   final n = me.managerInfo?.name?.trim();
                                   if (n != null && n.isNotEmpty) return n;
-                                  return s.roleManager;
+                                  return l10n.roleManager;
                                 }
                                 final up = me.userInfo.phone?.trim();
                                 if (up != null && up.isNotEmpty) {
                                   final un = me.userInfo.name?.trim();
                                   if (un != null && un.isNotEmpty) return un;
-                                  return s.roleStaff;
+                                  return l10n.roleStaff;
                                 }
                                 return null;
                               }(),
-                              portalLabel: s.portalLabel,
+                              portalLabel: l10n.portalLabel,
                               formatPhone: _formatPhoneDisplay,
                               onMenuTap: (menu) => setState(
                                 () => _homeEmbeddedMenu = menu,
@@ -306,10 +307,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ))
                     : _navIndex == 1
-                        ? _HistoryPlaceholder(theme: theme, strings: s)
+                        ? _HistoryPlaceholder(theme: theme, l10n: l10n)
                         : _ProfileTab(
                             theme: theme,
-                            strings: s,
+                            l10n: l10n,
                             me: me,
                             signOutBusy: _signOutBusy,
                             onSignOut: _signOut,
@@ -345,19 +346,19 @@ class _HomeScreenState extends State<HomeScreen> {
             NavigationDestination(
               icon: Icon(Icons.home_outlined, color: Colors.grey.shade500),
               selectedIcon: const Icon(Icons.home_rounded, color: _PatrolUi.accentBlue),
-              label: s.navHome,
+              label: l10n.navHome,
             ),
             NavigationDestination(
               icon: Icon(Icons.history_rounded, color: Colors.grey.shade500),
               selectedIcon: const Icon(Icons.history_rounded, color: _PatrolUi.accentBlue),
-              label: s.navHistory,
+              label: l10n.navHistory,
             ),
             NavigationDestination(
               icon: Icon(Icons.person_outline_rounded,
                   color: Colors.grey.shade500),
               selectedIcon:
                   const Icon(Icons.person_rounded, color: _PatrolUi.accentBlue),
-              label: s.navProfile,
+              label: l10n.navProfile,
             ),
           ],
         ),
@@ -442,7 +443,7 @@ class _HomeEmbeddedPatrolShell extends StatelessWidget {
 class _PatrolHeaderBar extends StatelessWidget {
   const _PatrolHeaderBar({
     required this.theme,
-    required this.strings,
+    required this.l10n,
     required this.user,
     required this.initials,
     required this.roleLabel,
@@ -450,7 +451,7 @@ class _PatrolHeaderBar extends StatelessWidget {
   });
 
   final TextTheme theme;
-  final AuthStrings strings;
+  final AppLocalizations l10n;
   final UserInfoDto user;
   final String initials;
   final String roleLabel;
@@ -460,7 +461,7 @@ class _PatrolHeaderBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = user.name?.trim().isNotEmpty == true
         ? user.name!.trim()
-        : strings.userFallbackDisplayName;
+        : l10n.userFallbackDisplayName;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 12, 20),
@@ -514,7 +515,7 @@ class _PatrolHeaderBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  strings.homeSystemBanner,
+                  l10n.homeSystemBanner,
                   style: theme.labelSmall?.copyWith(
                     color: Colors.white.withValues(alpha: 0.65),
                     letterSpacing: 0.8,
@@ -595,7 +596,7 @@ class _PatrolHeaderBar extends StatelessWidget {
 class _HomeTabContent extends StatelessWidget {
   const _HomeTabContent({
     required this.theme,
-    required this.strings,
+    required this.l10n,
     required this.me,
     required this.emergencyPhone,
     required this.emergencySubtitle,
@@ -606,7 +607,7 @@ class _HomeTabContent extends StatelessWidget {
   });
 
   final TextTheme theme;
-  final AuthStrings strings;
+  final AppLocalizations l10n;
   final AccountMeDto me;
   final String? emergencyPhone;
   final String? emergencySubtitle;
@@ -630,7 +631,7 @@ class _HomeTabContent extends StatelessWidget {
                 ? Padding(
                     padding: const EdgeInsets.all(24),
                     child: Text(
-                      strings.homeEmptyMenus,
+                      l10n.homeEmptyMenus,
                       textAlign: TextAlign.center,
                       style: theme.bodyMedium?.copyWith(
                         color: Colors.grey.shade600,
@@ -665,7 +666,7 @@ class _HomeTabContent extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
             child: _EmergencyBanner(
               theme: theme,
-              strings: strings,
+              l10n: l10n,
               subtitle: emergencySubtitle,
               phoneDisplay:
                   phoneDisplay.isNotEmpty ? phoneDisplay : '—',
@@ -770,14 +771,14 @@ class _WhiteMenuCard extends StatelessWidget {
 class _EmergencyBanner extends StatelessWidget {
   const _EmergencyBanner({
     required this.theme,
-    required this.strings,
+    required this.l10n,
     this.subtitle,
     required this.phoneDisplay,
     required this.onCall,
   });
 
   final TextTheme theme;
-  final AuthStrings strings;
+  final AppLocalizations l10n;
   final String? subtitle;
   final String phoneDisplay;
   final VoidCallback? onCall;
@@ -823,7 +824,7 @@ class _EmergencyBanner extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      strings.homeEmergencySupport,
+                      l10n.homeEmergencySupport,
                       style: theme.labelSmall?.copyWith(
                         color: Colors.grey.shade600,
                         fontWeight: FontWeight.w600,
@@ -879,10 +880,10 @@ class _EmergencyBanner extends StatelessWidget {
 }
 
 class _HistoryPlaceholder extends StatelessWidget {
-  const _HistoryPlaceholder({required this.theme, required this.strings});
+  const _HistoryPlaceholder({required this.theme, required this.l10n});
 
   final TextTheme theme;
-  final AuthStrings strings;
+  final AppLocalizations l10n;
 
   @override
   Widget build(BuildContext context) {
@@ -895,7 +896,7 @@ class _HistoryPlaceholder extends StatelessWidget {
             Icon(Icons.history_rounded, size: 56, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text(
-              strings.historyTitle,
+              l10n.historyTitle,
               style: theme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w700,
                 color: const Color(0xFF0F172A),
@@ -903,7 +904,7 @@ class _HistoryPlaceholder extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              strings.historyInDevelopment,
+              l10n.historyInDevelopment,
               textAlign: TextAlign.center,
               style: theme.bodyMedium?.copyWith(color: Colors.grey.shade600),
             ),
@@ -917,14 +918,14 @@ class _HistoryPlaceholder extends StatelessWidget {
 class _ProfileTab extends StatelessWidget {
   const _ProfileTab({
     required this.theme,
-    required this.strings,
+    required this.l10n,
     required this.me,
     required this.signOutBusy,
     required this.onSignOut,
   });
 
   final TextTheme theme;
-  final AuthStrings strings;
+  final AppLocalizations l10n;
   final AccountMeDto me;
   final bool signOutBusy;
   final Future<void> Function() onSignOut;
@@ -938,7 +939,7 @@ class _ProfileTab extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
       children: [
         Text(
-          strings.profileAccountHeading,
+          l10n.profileAccountHeading,
           style: theme.titleMedium?.copyWith(
             fontWeight: FontWeight.w800,
             color: const Color(0xFF0F172A),
@@ -947,35 +948,35 @@ class _ProfileTab extends StatelessWidget {
         const SizedBox(height: 16),
         _ProfileInfoTile(
           icon: Icons.badge_outlined,
-          label: strings.profileFieldAccountId,
+          label: l10n.profileFieldAccountId,
           value: u.accountId ?? '—',
         ),
         _ProfileInfoTile(
           icon: Icons.email_outlined,
-          label: strings.labelEmail,
+          label: l10n.labelEmail,
           value: u.email ?? '—',
         ),
         _ProfileInfoTile(
           icon: Icons.phone_outlined,
-          label: strings.profileFieldPhone,
+          label: l10n.profileFieldPhone,
           value: u.phone ?? '—',
         ),
         if (u.address?.trim().isNotEmpty == true)
           _ProfileInfoTile(
             icon: Icons.location_on_outlined,
-            label: strings.profileFieldAddress,
+            label: l10n.profileFieldAddress,
             value: u.address!.trim(),
           ),
         if (u.branchName?.trim().isNotEmpty == true)
           _ProfileInfoTile(
             icon: Icons.storefront_outlined,
-            label: strings.profileFieldBranch,
+            label: l10n.profileFieldBranch,
             value: u.branchName!.trim(),
           ),
         if (u.merchantName?.trim().isNotEmpty == true)
           _ProfileInfoTile(
             icon: Icons.business_outlined,
-            label: strings.profileFieldMerchant,
+            label: l10n.profileFieldMerchant,
             value: u.merchantName!.trim(),
           ),
         if (m != null &&
@@ -983,7 +984,7 @@ class _ProfileTab extends StatelessWidget {
                 m.phone?.trim().isNotEmpty == true)) ...[
           const SizedBox(height: 24),
           Text(
-            strings.profileManagerHeading,
+            l10n.profileManagerHeading,
             style: theme.titleMedium?.copyWith(
               fontWeight: FontWeight.w800,
               color: const Color(0xFF0F172A),
@@ -993,19 +994,19 @@ class _ProfileTab extends StatelessWidget {
           if (m.name?.trim().isNotEmpty == true)
             _ProfileInfoTile(
               icon: Icons.supervisor_account_outlined,
-              label: strings.profileFieldFullName,
+              label: l10n.profileFieldFullName,
               value: m.name!.trim(),
             ),
           if (m.phone?.trim().isNotEmpty == true)
             _ProfileInfoTile(
               icon: Icons.phone_in_talk_outlined,
-              label: strings.profileFieldManagerPhone,
+              label: l10n.profileFieldManagerPhone,
               value: m.phone!.trim(),
             ),
           if (m.email?.trim().isNotEmpty == true)
             _ProfileInfoTile(
               icon: Icons.alternate_email_rounded,
-              label: strings.labelEmail,
+              label: l10n.labelEmail,
               value: m.email!.trim(),
             ),
         ],
@@ -1034,7 +1035,7 @@ class _ProfileTab extends StatelessWidget {
                   ),
                 )
               : const Icon(Icons.logout_rounded),
-          label: Text(strings.signOut),
+          label: Text(l10n.signOut),
         ),
       ],
     );
@@ -1099,10 +1100,10 @@ class _ProfileInfoTile extends StatelessWidget {
 }
 
 class _LoadingBody extends StatelessWidget {
-  const _LoadingBody({required this.theme, required this.strings});
+  const _LoadingBody({required this.theme, required this.l10n});
 
   final TextTheme theme;
-  final AuthStrings strings;
+  final AppLocalizations l10n;
 
   @override
   Widget build(BuildContext context) {
@@ -1121,7 +1122,7 @@ class _LoadingBody extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Text(
-            strings.homeLoadingWorkspace,
+            l10n.homeLoadingWorkspace,
             style: theme.bodyMedium?.copyWith(
               color: Colors.white.withValues(alpha: 0.65),
             ),
@@ -1135,25 +1136,25 @@ class _LoadingBody extends StatelessWidget {
 class _ErrorBody extends StatelessWidget {
   const _ErrorBody({
     required this.theme,
-    required this.strings,
+    required this.l10n,
     required this.failure,
     required this.onRetry,
     required this.portalLabel,
   });
 
   final TextTheme theme;
-  final AuthStrings strings;
+  final AppLocalizations l10n;
   final ApiFailure failure;
   final VoidCallback onRetry;
   final String portalLabel;
 
   String _message() {
     return failure.userMessage(
-      configMissing: strings.homeLoadErrorConfig,
-      network: strings.homeLoadErrorNetwork,
+      configMissing: l10n.homeLoadErrorConfig,
+      network: l10n.homeLoadErrorNetwork,
       unauthorized: '',
-      badResponse: strings.homeLoadErrorBadResponse,
-      server: strings.homeLoadErrorBadResponse,
+      badResponse: l10n.homeLoadErrorBadResponse,
+      server: l10n.homeLoadErrorBadResponse,
     );
   }
 
@@ -1193,7 +1194,7 @@ class _ErrorBody extends StatelessWidget {
                 ),
               ),
               icon: const Icon(Icons.refresh_rounded, size: 20),
-              label: Text(strings.retry),
+              label: Text(l10n.retry),
             ),
             const SizedBox(height: 40),
             Text(

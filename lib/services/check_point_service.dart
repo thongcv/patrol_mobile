@@ -1,12 +1,10 @@
-import 'dart:convert';
-
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 
 import '../config/app_config.dart';
 import '../http/api_failure.dart';
-import '../http/api_request_headers.dart';
 import '../http/api_response.dart';
 import '../http/api_result.dart';
+import '../http/patrol_dio.dart';
 import '../models/check_point.dart';
 
 extension MySiteCheckPointsApiResult on ApiResult<MySiteCheckPointsDto> {
@@ -17,78 +15,79 @@ class CheckPointService {
   CheckPointService._();
   static final CheckPointService instance = CheckPointService._();
 
-  /// GET `/api/check-points/me/site` — site + `checkPoints` (hoặc legacy: `data` là mảng).
   Future<ApiResult<MySiteCheckPointsDto>> fetchMySiteCheckPoints() async {
     final base = AppConfig.effectiveBaseUrl;
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
     }
+    PatrolDio.syncBaseUrls();
 
-    final uri = Uri.parse('$base/api/check-points/me/site');
     try {
-      final res = await http
-          .get(
-            uri,
-            headers: await ApiRequestHeaders.build(jsonBody: false),
-          )
-          .timeout(const Duration(seconds: 30));
+      final res =
+          await PatrolDio.instance.get<dynamic>('/api/check-points/me/site');
+      final status = res.statusCode ?? 0;
 
-      if (res.statusCode == 401 || res.statusCode == 403) {
-        return ApiResult.failure(ApiFailure.unauthorized(res.body));
+      if (status == 401 || status == 403) {
+        return ApiResult.failure(ApiFailure.unauthorized(res));
       }
-      if (res.statusCode != 200) {
+      if (status != 200) {
         return ApiResult.failure(
-          apiFailureFromHttpResponse(statusCode: res.statusCode, body: res.body),
+          apiFailureFromHttpResponse(statusCode: status, body: res),
         );
       }
 
       try {
-        final map = jsonObject(res.body);
+        final map = responseEnvelopeData(res.data);
         if (map != null && map['checkPoints'] is List) {
           final dto = MySiteCheckPointsDto.fromJson(map);
           return ApiResult.success(dto);
         }
 
-        return ApiResult.failure(ApiFailure.badResponse(res.body));
+        return ApiResult.failure(ApiFailure.badResponse(res));
       } catch (_) {
-        return ApiResult.failure(ApiFailure.badResponse(res.body));
+        return ApiResult.failure(ApiFailure.badResponse(res));
       }
+    } on DioException catch (e) {
+      return ApiResult.failure(apiFailureFromDioException(e));
     } catch (_) {
       return ApiResult.failure(ApiFailure.network());
     }
   }
 
-  /// PUT `/api/check-points` — body đầy đủ theo DTO check-point.
-  ///
-  /// Trả về `CheckPointDto` khi body 200 parse được (vd. có `qrImage` mới); `null` khi 204 hoặc không có payload.
   Future<ApiResult<CheckPointDto?>> updateCheckPoint(CheckPointDto body) async {
     final base = AppConfig.effectiveBaseUrl;
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
     }
+    PatrolDio.syncBaseUrls();
 
-    final uri = Uri.parse('$base/api/check-points');
     try {
-      final res = await http
-          .put(
-            uri,
-            headers: await ApiRequestHeaders.build(jsonBody: true),
-            body: jsonEncode(body.toJson()),
-          )
-          .timeout(const Duration(seconds: 30));
+      final res = await PatrolDio.instance.put<dynamic>(
+        '/api/check-points',
+        data: body.toJson(),
+      );
 
-      if (res.statusCode == 401 || res.statusCode == 403) {
-        return ApiResult.failure(ApiFailure.unauthorized(res.body));
+      final status = res.statusCode ?? 0;
+
+      if (status == 401 || status == 403) {
+        return ApiResult.failure(ApiFailure.unauthorized(res));
       }
-      if (res.statusCode != 200 && res.statusCode != 204) {
+      if (status != 200 && status != 204) {
         return ApiResult.failure(
-          apiFailureFromHttpResponse(statusCode: res.statusCode, body: res.body),
+          apiFailureFromHttpResponse(statusCode: status, body: res),
         );
       }
-      if (res.statusCode == 204 || res.body.trim().isEmpty) {
+
+      final d = res.data;
+      final noPayload = status == 204 ||
+          d == null ||
+          (d is String && d.trim().isEmpty) ||
+          (d is Map && d.isEmpty);
+      if (noPayload) {
         return ApiResult.success(null);
       }
-      final map = jsonObject(res.body);
+
+      final map = responseEnvelopeData(d);
       if (map == null) {
         return ApiResult.success(null);
       }
@@ -101,6 +100,8 @@ class CheckPointService {
       } catch (_) {
         return ApiResult.success(null);
       }
+    } on DioException catch (e) {
+      return ApiResult.failure(apiFailureFromDioException(e));
     } catch (_) {
       return ApiResult.failure(ApiFailure.network());
     }
