@@ -8,7 +8,7 @@ import '../http/patrol_dio.dart';
 import '../models/check_point.dart';
 
 extension MySiteCheckPointsApiResult on ApiResult<MySiteCheckPointsDto> {
-  List<CheckPointDto>? get points => data?.checkPoints;
+  List<CheckPoint>? get points => data?.checkPoints;
 }
 
 class CheckPointService {
@@ -54,7 +54,7 @@ class CheckPointService {
     }
   }
 
-  Future<ApiResult<CheckPointDto?>> updateCheckPoint(CheckPointDto body) async {
+  Future<ApiResult<CheckPoint?>> updateCheckPoint(CheckPoint body) async {
     final base = AppConfig.effectiveBaseUrl;
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
@@ -92,7 +92,7 @@ class CheckPointService {
         return ApiResult.success(null);
       }
       try {
-        final dto = CheckPointDto.fromJson(map);
+        final dto = CheckPoint.fromJson(map);
         if (dto.id != body.id) {
           return ApiResult.success(null);
         }

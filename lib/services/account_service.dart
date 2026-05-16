@@ -4,6 +4,7 @@ import '../config/app_config.dart';
 import '../http/api_failure.dart';
 import '../http/api_response.dart';
 import '../http/api_result.dart';
+import '../http/patrol_api_endpoints.dart';
 import '../http/patrol_dio.dart';
 import '../models/account_me.dart';
 
@@ -11,7 +12,7 @@ class AccountService {
   AccountService._();
   static final AccountService instance = AccountService._();
 
-  Future<ApiResult<AccountMeDto>> fetchMe() async {
+  Future<ApiResult<AccountMe>> fetchMe() async {
     final base = AppConfig.effectiveBaseUrl;
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
@@ -19,7 +20,8 @@ class AccountService {
     PatrolDio.syncBaseUrls();
 
     try {
-      final res = await PatrolDio.instance.get<dynamic>('/api/accounts/me');
+      final meUri = AppConfig.resolveApiUri(PatrolApiEndpoints.accountsMePath);
+      final res = await PatrolDio.instance.getUri<dynamic>(meUri);
       final status = res.statusCode ?? 0;
       if (status == 401 || status == 403) {
         return ApiResult.failure(ApiFailure.unauthorized(res));
@@ -36,7 +38,7 @@ class AccountService {
       }
 
       try {
-        final me = AccountMeDto.fromJson(map);
+        final me = AccountMe.fromJson(map);
         return ApiResult.success(me);
       } catch (_) {
         return ApiResult.failure(ApiFailure.badResponse(res));

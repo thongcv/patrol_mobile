@@ -5,6 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../http/api_failure.dart';
 import '../l10n/app_localizations.dart';
 import '../models/account_me.dart';
+import '../models/menu.dart';
+import '../models/user_info.dart';
 import '../navigation/patrol_menu_router.dart';
 import '../services/account_service.dart';
 import '../services/auth_service.dart';
@@ -32,12 +34,12 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  AccountMeDto? _me;
+  AccountMe? _me;
   ApiFailure? _failure;
   bool _loading = true;
   int _navIndex = 0;
   bool _signOutBusy = false;
-  MenuDto? _homeEmbeddedMenu;
+  Menu? _homeEmbeddedMenu;
 
   @override
   void initState() {
@@ -161,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  String _initials(UserInfoDto u) {
+  String _initials(UserInfo u) {
     final n = u.name?.trim();
     if (n == null || n.isEmpty) return '?';
     final parts = n.split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
@@ -171,7 +173,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return n.length >= 2 ? n.substring(0, 2).toUpperCase() : n[0].toUpperCase();
   }
 
-  String _roleBadgeLabel(UserInfoDto u) {
+  String _roleBadgeLabel(UserInfo u) {
     final code = u.roleCode?.trim();
     if (code != null && code.isNotEmpty) {
       return code.replaceAll('_', ' ').toUpperCase();
@@ -192,7 +194,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Số gọi khẩn cấp: ưu tiên quản lý, không có thì dùng số nhân viên.
-  String? _emergencyPhoneRaw(AccountMeDto me) {
+  String? _emergencyPhoneRaw(AccountMe me) {
     final m = me.managerInfo?.phone?.trim();
     if (m != null && m.isNotEmpty) return m;
     final u = me.userInfo.phone?.trim();
@@ -378,7 +380,7 @@ class _HomeEmbeddedPatrolShell extends StatelessWidget {
   });
 
   final TextTheme theme;
-  final MenuDto menu;
+  final Menu menu;
   final Locale locale;
   final ValueChanged<Locale> onLocaleChanged;
   final VoidCallback onClose;
@@ -452,7 +454,7 @@ class _PatrolHeaderBar extends StatelessWidget {
 
   final TextTheme theme;
   final AppLocalizations l10n;
-  final UserInfoDto user;
+  final UserInfo user;
   final String initials;
   final String roleLabel;
   final VoidCallback onNotificationTap;
@@ -608,12 +610,12 @@ class _HomeTabContent extends StatelessWidget {
 
   final TextTheme theme;
   final AppLocalizations l10n;
-  final AccountMeDto me;
+  final AccountMe me;
   final String? emergencyPhone;
   final String? emergencySubtitle;
   final String portalLabel;
   final String Function(String?) formatPhone;
-  final void Function(MenuDto) onMenuTap;
+  final void Function(Menu) onMenuTap;
   final VoidCallback onEmergencyCall;
 
   @override
@@ -700,7 +702,7 @@ class _WhiteMenuCard extends StatelessWidget {
     required this.onTap,
   });
 
-  final MenuDto menu;
+  final Menu menu;
   final TextTheme theme;
   final VoidCallback onTap;
 
@@ -926,7 +928,7 @@ class _ProfileTab extends StatelessWidget {
 
   final TextTheme theme;
   final AppLocalizations l10n;
-  final AccountMeDto me;
+  final AccountMe me;
   final bool signOutBusy;
   final Future<void> Function() onSignOut;
 

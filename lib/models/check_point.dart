@@ -1,5 +1,5 @@
-class CheckPointDto {
-  CheckPointDto({
+class CheckPoint {
+  CheckPoint({
     required this.id,
     required this.siteId,
     required this.code,
@@ -42,7 +42,7 @@ class CheckPointDto {
   bool get hasCoordinates =>
       latitude != null && longitude != null;
 
-  CheckPointDto copyWith({
+  CheckPoint copyWith({
     int? id,
     int? siteId,
     String? code,
@@ -62,7 +62,7 @@ class CheckPointDto {
     String? createdDate,
     String? updatedDate,
   }) {
-    return CheckPointDto(
+    return CheckPoint(
       id: id ?? this.id,
       siteId: siteId ?? this.siteId,
       code: code ?? this.code,
@@ -107,8 +107,8 @@ class CheckPointDto {
     };
   }
 
-  factory CheckPointDto.fromJson(Map<String, dynamic> json) {
-    return CheckPointDto(
+  factory CheckPoint.fromJson(Map<String, dynamic> json) {
+    return CheckPoint(
       id: (json['id'] as num?)?.toInt() ?? 0,
       siteId: (json['siteId'] as num?)?.toInt() ?? 0,
       code: json['code'] as String? ?? '',
@@ -144,13 +144,13 @@ class MySiteCheckPointsDto {
   final int siteId;
   final String? siteName;
   final String? siteAddress;
-  final List<CheckPointDto> checkPoints;
+  final List<CheckPoint> checkPoints;
 
   factory MySiteCheckPointsDto.fromJson(Map<String, dynamic> json) {
     final raw = json['checkPoints'] as List<dynamic>? ?? [];
     final points = raw
         .whereType<Map<String, dynamic>>()
-        .map(CheckPointDto.fromJson)
+        .map(CheckPoint.fromJson)
         .toList()
       ..sort((a, b) => a.sequenceOrder.compareTo(b.sequenceOrder));
     return MySiteCheckPointsDto(

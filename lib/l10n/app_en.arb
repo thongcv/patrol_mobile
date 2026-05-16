@@ -129,6 +129,41 @@
   "patrolRoundChipNoGps": "No GPS",
   "patrolRoundChipQr": "QR",
   "patrolRoundChipNfc": "NFC",
+  "patrolRoundChipScanned": "Scanned",
+  "patrolRoundQrPhotoTitle": "Take a photo?",
+  "patrolRoundQrPhotoMessage": "You can attach a photo to this checkpoint scan.",
+  "patrolRoundQrPhotoTake": "Take photo",
+  "patrolRoundQrPhotoSkip": "Continue without photo",
+  "patrolRoundCancel": "Cancel",
+  "patrolRoundQrOutOfRange": "You are about {distance} m from the checkpoint (allowed {radius} m). Move closer to the saved location.",
+  "@patrolRoundQrOutOfRange": {
+    "placeholders": {
+      "distance": { "type": "String" },
+      "radius": { "type": "String" }
+    }
+  },
+  "patrolRoundQrAltitudeOutOfRange": "Altitude does not match the saved checkpoint (difference {distance} m, allowed {radius} m).",
+  "@patrolRoundQrAltitudeOutOfRange": {
+    "placeholders": {
+      "distance": { "type": "String" },
+      "radius": { "type": "String" }
+    }
+  },
+  "patrolRoundQrNoCheckpointGps": "This checkpoint has no saved coordinates. Set GPS on the point first.",
+  "patrolRoundQrGpsUnavailable": "Could not read GPS. Enable location services and grant permission.",
+  "patrolRoundQrScanning": "Saving scan…",
+  "patrolRoundQrScanSuccess": "Checkpoint scanned.",
+  "patrolRoundQrScanFailed": "Could not save patrol log.",
+  "patrolRoundQrWaitingPosition": "Move closer to the checkpoint. GPS is updating…",
+  "patrolRoundQrDistanceStatus": "About {distance} m away (allowed {radius} m)",
+  "@patrolRoundQrDistanceStatus": {
+    "placeholders": {
+      "distance": { "type": "String" },
+      "radius": { "type": "String" }
+    }
+  },
+  "patrolRoundQrPositionOkSaving": "Position OK — saving scan…",
+  "patrolRoundQrWaitingBaro": "Reading barometric altitude…",
   "patrolRoundSubtitleActive": "{scheduleName} · {statusLabel}",
   "@patrolRoundSubtitleActive": {
     "placeholders": {

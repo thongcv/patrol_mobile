@@ -330,7 +330,7 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
     return l10n.patrolPointGpsTapRefresh;
   }
 
-  Future<void> _applyGpsToPoint(CheckPointDto point) async {
+  Future<void> _applyGpsToPoint(CheckPoint point) async {
     setState(() => _updatingIds.add(point.id));
 
     final gps = await _readGps();
@@ -556,7 +556,7 @@ class _SummaryStrip extends StatelessWidget {
   final bool loading;
   final String? siteName;
   final String? siteAddress;
-  final List<CheckPointDto>? points;
+  final List<CheckPoint>? points;
   final ApiFailure? failure;
   final VoidCallback onReload;
   final AppLocalizations l10n;
@@ -727,7 +727,7 @@ class _CheckPointCard extends StatelessWidget {
   });
 
   final TextTheme theme;
-  final CheckPointDto point;
+  final CheckPoint point;
   final AppLocalizations l10n;
   final bool busy;
   final bool showQrImage;

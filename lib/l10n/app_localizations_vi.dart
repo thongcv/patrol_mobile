@@ -323,6 +323,67 @@ class AppLocalizationsVi extends AppLocalizations {
   String get patrolRoundChipNfc => 'NFC';
 
   @override
+  String get patrolRoundChipScanned => 'Đã quét';
+
+  @override
+  String get patrolRoundQrPhotoTitle => 'Chụp ảnh?';
+
+  @override
+  String get patrolRoundQrPhotoMessage =>
+      'Bạn có thể đính kèm ảnh khi quét điểm này.';
+
+  @override
+  String get patrolRoundQrPhotoTake => 'Chụp ảnh';
+
+  @override
+  String get patrolRoundQrPhotoSkip => 'Tiếp tục không chụp';
+
+  @override
+  String get patrolRoundCancel => 'Hủy';
+
+  @override
+  String patrolRoundQrOutOfRange(String distance, String radius) {
+    return 'Bạn đang cách điểm khoảng $distance m (cho phép $radius m). Hãy di chuyển đến gần vị trí điểm đã lưu.';
+  }
+
+  @override
+  String patrolRoundQrAltitudeOutOfRange(String distance, String radius) {
+    return 'Độ cao không khớp với điểm đã lưu (lệch $distance m, cho phép $radius m).';
+  }
+
+  @override
+  String get patrolRoundQrNoCheckpointGps =>
+      'Điểm này chưa có tọa độ trên hệ thống. Hãy gán GPS ở màn Lấy vị trí điểm trước.';
+
+  @override
+  String get patrolRoundQrGpsUnavailable =>
+      'Không đọc được GPS. Bật dịch vụ vị trí và cấp quyền cho ứng dụng.';
+
+  @override
+  String get patrolRoundQrScanning => 'Đang lưu quét…';
+
+  @override
+  String get patrolRoundQrScanSuccess => 'Đã quét điểm tuần tra.';
+
+  @override
+  String get patrolRoundQrScanFailed => 'Không lưu được nhật ký tuần tra.';
+
+  @override
+  String get patrolRoundQrWaitingPosition =>
+      'Hãy đến gần điểm tuần tra. Đang theo dõi GPS…';
+
+  @override
+  String patrolRoundQrDistanceStatus(String distance, String radius) {
+    return 'Cách điểm khoảng $distance m (cho phép $radius m)';
+  }
+
+  @override
+  String get patrolRoundQrPositionOkSaving => 'Đã đủ vị trí — đang lưu quét…';
+
+  @override
+  String get patrolRoundQrWaitingBaro => 'Đang đọc độ cao barometer…';
+
+  @override
   String patrolRoundSubtitleActive(String scheduleName, String statusLabel) {
     return '$scheduleName · $statusLabel';
   }

@@ -11,7 +11,7 @@ class PatrolRoundService {
   PatrolRoundService._();
   static final PatrolRoundService instance = PatrolRoundService._();
 
-  Future<ApiResult<ActivePatrolRoundDto?>> fetchMyActivePatrolRound() async {
+  Future<ApiResult<ActivePatrolRound?>> fetchMyActivePatrolRound() async {
     final base = AppConfig.effectiveBaseUrl;
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
@@ -39,7 +39,7 @@ class PatrolRoundService {
         if (map == null) {
           return ApiResult.success(null);
         }
-        return ApiResult.success(ActivePatrolRoundDto.fromJson(map));
+        return ApiResult.success(ActivePatrolRound.fromJson(map));
       } catch (_) {
         return ApiResult.failure(ApiFailure.badResponse(res));
       }

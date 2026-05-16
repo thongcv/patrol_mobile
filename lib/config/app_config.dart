@@ -10,7 +10,7 @@ class AppConfig {
   );
 
   /// Khi không truyền dart-define, dùng giá trị này trong code (sửa trực tiếp khi dev).
-  static const String devFallbackBaseUrl = '';
+  static const String devFallbackBaseUrl = 'http://192.168.1.192:8080';
 
   static String get effectiveBaseUrl {
     if (apiBaseUrl.isNotEmpty) return apiBaseUrl.replaceAll(RegExp(r'/$'), '');

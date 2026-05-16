@@ -79,12 +79,15 @@ class AuthService {
           return ApiResult.failure(ApiFailure.badResponse(res));
         }
         final accessToken = AccessTokenPayload.persistableBlobFromApiEnvelope(data);
-        if (accessToken != null) {
+        final bearer = accessToken != null
+            ? AccessTokenPayload.bearerJwtFromAuthMap(accessToken)
+            : null;
+        if (accessToken != null && bearer != null && bearer.isNotEmpty) {
           final p = await SharedPreferences.getInstance();
           await p.setString(StorageKeys.accessToken, jsonEncode(accessToken));
           PatrolSession.notifyAuthStored();
           return ApiResult.success(
-            LoginSuccess(token: 'OK', accessToken: accessToken),
+            LoginSuccess(token: bearer, accessToken: accessToken),
           );
         }
         return ApiResult.failure(ApiFailure.badResponse(res));

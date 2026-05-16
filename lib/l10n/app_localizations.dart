@@ -704,6 +704,108 @@ abstract class AppLocalizations {
   /// **'NFC'**
   String get patrolRoundChipNfc;
 
+  /// No description provided for @patrolRoundChipScanned.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanned'**
+  String get patrolRoundChipScanned;
+
+  /// No description provided for @patrolRoundQrPhotoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Take a photo?'**
+  String get patrolRoundQrPhotoTitle;
+
+  /// No description provided for @patrolRoundQrPhotoMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'You can attach a photo to this checkpoint scan.'**
+  String get patrolRoundQrPhotoMessage;
+
+  /// No description provided for @patrolRoundQrPhotoTake.
+  ///
+  /// In en, this message translates to:
+  /// **'Take photo'**
+  String get patrolRoundQrPhotoTake;
+
+  /// No description provided for @patrolRoundQrPhotoSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue without photo'**
+  String get patrolRoundQrPhotoSkip;
+
+  /// No description provided for @patrolRoundCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get patrolRoundCancel;
+
+  /// No description provided for @patrolRoundQrOutOfRange.
+  ///
+  /// In en, this message translates to:
+  /// **'You are about {distance} m from the checkpoint (allowed {radius} m). Move closer to the saved location.'**
+  String patrolRoundQrOutOfRange(String distance, String radius);
+
+  /// No description provided for @patrolRoundQrAltitudeOutOfRange.
+  ///
+  /// In en, this message translates to:
+  /// **'Altitude does not match the saved checkpoint (difference {distance} m, allowed {radius} m).'**
+  String patrolRoundQrAltitudeOutOfRange(String distance, String radius);
+
+  /// No description provided for @patrolRoundQrNoCheckpointGps.
+  ///
+  /// In en, this message translates to:
+  /// **'This checkpoint has no saved coordinates. Set GPS on the point first.'**
+  String get patrolRoundQrNoCheckpointGps;
+
+  /// No description provided for @patrolRoundQrGpsUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read GPS. Enable location services and grant permission.'**
+  String get patrolRoundQrGpsUnavailable;
+
+  /// No description provided for @patrolRoundQrScanning.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving scan…'**
+  String get patrolRoundQrScanning;
+
+  /// No description provided for @patrolRoundQrScanSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Checkpoint scanned.'**
+  String get patrolRoundQrScanSuccess;
+
+  /// No description provided for @patrolRoundQrScanFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save patrol log.'**
+  String get patrolRoundQrScanFailed;
+
+  /// No description provided for @patrolRoundQrWaitingPosition.
+  ///
+  /// In en, this message translates to:
+  /// **'Move closer to the checkpoint. GPS is updating…'**
+  String get patrolRoundQrWaitingPosition;
+
+  /// No description provided for @patrolRoundQrDistanceStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'About {distance} m away (allowed {radius} m)'**
+  String patrolRoundQrDistanceStatus(String distance, String radius);
+
+  /// No description provided for @patrolRoundQrPositionOkSaving.
+  ///
+  /// In en, this message translates to:
+  /// **'Position OK — saving scan…'**
+  String get patrolRoundQrPositionOkSaving;
+
+  /// No description provided for @patrolRoundQrWaitingBaro.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading barometric altitude…'**
+  String get patrolRoundQrWaitingBaro;
+
   /// No description provided for @patrolRoundSubtitleActive.
   ///
   /// In en, this message translates to:

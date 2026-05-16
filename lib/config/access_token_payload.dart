@@ -46,23 +46,22 @@ abstract final class AccessTokenPayload {
     return t;
   }
 
-  /// Lưu prefs sau login/refresh: cả object `data` (không chỉ nested map).
+  /// Lưu prefs sau login/refresh — giống FE `storeAuth(data.accessToken, …)`:
+  /// ưu tiên object token lồng trong `data.accessToken`, không lưu cả envelope (`path`, …).
   static Map<String, dynamic>? persistableBlobFromApiEnvelope(
     Map<String, dynamic>? envelope,
   ) {
     if (envelope == null || envelope.isEmpty) return null;
 
+    final nestedAccess = jsonMapCoerce(envelope['accessToken']);
+    if (nestedAccess != null && _looksLikeAuthPayload(nestedAccess)) {
+      return nestedAccess;
+    }
+
     if (_looksLikeAuthPayload(envelope)) {
       return Map<String, dynamic>.from(envelope);
     }
 
-    final nested = envelope['accessToken'];
-    if (nested is Map<String, dynamic>) return nested;
-    if (nested is Map) {
-      try {
-        return Map<String, dynamic>.from(nested);
-      } catch (_) {}
-    }
     return null;
   }
 

@@ -323,6 +323,67 @@ class AppLocalizationsEn extends AppLocalizations {
   String get patrolRoundChipNfc => 'NFC';
 
   @override
+  String get patrolRoundChipScanned => 'Scanned';
+
+  @override
+  String get patrolRoundQrPhotoTitle => 'Take a photo?';
+
+  @override
+  String get patrolRoundQrPhotoMessage =>
+      'You can attach a photo to this checkpoint scan.';
+
+  @override
+  String get patrolRoundQrPhotoTake => 'Take photo';
+
+  @override
+  String get patrolRoundQrPhotoSkip => 'Continue without photo';
+
+  @override
+  String get patrolRoundCancel => 'Cancel';
+
+  @override
+  String patrolRoundQrOutOfRange(String distance, String radius) {
+    return 'You are about $distance m from the checkpoint (allowed $radius m). Move closer to the saved location.';
+  }
+
+  @override
+  String patrolRoundQrAltitudeOutOfRange(String distance, String radius) {
+    return 'Altitude does not match the saved checkpoint (difference $distance m, allowed $radius m).';
+  }
+
+  @override
+  String get patrolRoundQrNoCheckpointGps =>
+      'This checkpoint has no saved coordinates. Set GPS on the point first.';
+
+  @override
+  String get patrolRoundQrGpsUnavailable =>
+      'Could not read GPS. Enable location services and grant permission.';
+
+  @override
+  String get patrolRoundQrScanning => 'Saving scan…';
+
+  @override
+  String get patrolRoundQrScanSuccess => 'Checkpoint scanned.';
+
+  @override
+  String get patrolRoundQrScanFailed => 'Could not save patrol log.';
+
+  @override
+  String get patrolRoundQrWaitingPosition =>
+      'Move closer to the checkpoint. GPS is updating…';
+
+  @override
+  String patrolRoundQrDistanceStatus(String distance, String radius) {
+    return 'About $distance m away (allowed $radius m)';
+  }
+
+  @override
+  String get patrolRoundQrPositionOkSaving => 'Position OK — saving scan…';
+
+  @override
+  String get patrolRoundQrWaitingBaro => 'Reading barometric altitude…';
+
+  @override
   String patrolRoundSubtitleActive(String scheduleName, String statusLabel) {
     return '$scheduleName · $statusLabel';
   }
