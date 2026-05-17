@@ -46,6 +46,12 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
   /// Độ cao từ barometer (phiên); dùng hiển thị và khi gửi điểm.
   double? _barometricAltitude;
 
+  /// Thiết bị có barometer hợp lệ — chỉ khi đó mới ưu tiên độ cao baro trên header.
+  bool _barometerSupported = false;
+
+  /// Chống chồng lệnh khi gọi `_startGpsTracking` nhiều lần.
+  int _gpsTrackingGeneration = 0;
+
   StreamSubscription<Position>? _positionStreamSub;
   StreamSubscription<double>? _barometerStreamSub;
 
@@ -68,7 +74,8 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
 
   double? _altitudeForDisplay(Position position) {
     return resolveAltitudeMeters(
-      barometricMeters: _barometricAltitude,
+      barometricMeters:
+          _barometerSupported ? _barometricAltitude : null,
       gpsMeters: position.altitude,
     );
   }
@@ -203,7 +210,7 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
   LocationSettings _positionStreamSettings() {
     if (kIsWeb) {
       return const LocationSettings(
-        accuracy: LocationAccuracy.high,
+        accuracy: LocationAccuracy.best,
         distanceFilter: 0,
       );
     }
@@ -251,8 +258,8 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
       final altDelta = pos.altitude.isFinite && anchor.altitude.isFinite
           ? (pos.altitude - anchor.altitude).abs()
           : 0.0;
-      final altChanged =
-          altDelta >= _altitudeUiChangeThresholdM && _barometricAltitude == null;
+      final altChanged = !_barometerSupported &&
+          altDelta >= _altitudeUiChangeThresholdM;
       if (moved < _gpsUiMoveThresholdM && !betterFix && !altChanged) return;
     }
     _streamAnchor = pos;
@@ -262,22 +269,25 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
     });
   }
 
-  /// Lấy vị trí ngay, sau đó theo dõi stream để cập nhật lat/lng khi di chuyển.
+  /// Lấy vị trí ngay, sau đó stream lat/lng realtime; độ cao: barometer nếu có, không thì GPS.
   Future<void> _startGpsTracking({bool userInitiated = false}) async {
+    final generation = ++_gpsTrackingGeneration;
+
     _stopBarometerTracking();
     await _positionStreamSub?.cancel();
     _positionStreamSub = null;
     _streamAnchor = null;
     _barometricAltitude = null;
+    _barometerSupported = false;
 
-    if (!mounted) return;
+    if (!mounted || generation != _gpsTrackingGeneration) return;
     setState(() {
       _gpsBusy = true;
       if (userInitiated) _gpsMessageKey = null;
     });
 
     final r = await _readGps();
-    if (!mounted) return;
+    if (!mounted || generation != _gpsTrackingGeneration) return;
 
     if (r.position == null) {
       setState(() {
@@ -288,14 +298,24 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
       return;
     }
 
+    final initialBaro = await readBarometricAltitudeOnce();
+    if (!mounted || generation != _gpsTrackingGeneration) return;
+
+    _barometerSupported = initialBaro != null;
+    _barometricAltitude = initialBaro;
+    if (_barometerSupported) {
+      _startBarometerTracking();
+    }
+
     setState(() {
       _position = r.position;
       _gpsMessageKey = null;
       _gpsBusy = false;
     });
     _streamAnchor = r.position;
-    _startBarometerTracking();
 
+    if (generation != _gpsTrackingGeneration) return;
+    await _positionStreamSub?.cancel();
     _positionStreamSub = Geolocator.getPositionStream(
       locationSettings: _positionStreamSettings(),
     ).listen(
@@ -307,33 +327,15 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
     );
   }
 
-  String _gpsStatusText(AppLocalizations l10n) {
-    if (_gpsBusy) return l10n.patrolPointGpsLoading;
-    switch (_gpsMessageKey) {
-      case 'service':
-        return l10n.patrolPointGpsServiceOff;
-      case 'denied':
-        return l10n.patrolPointGpsDenied;
-      case 'error':
-        return l10n.patrolPointGpsError;
-      default:
-        break;
-    }
-    if (_position != null) {
-      return patrolServerCoordLabel(
-        l10n,
-        _position!.latitude,
-        _position!.longitude,
-        altitude: _altitudeForDisplay(_position!),
-      );
-    }
-    return l10n.patrolPointGpsTapRefresh;
-  }
-
   Future<void> _applyGpsToPoint(CheckPoint point) async {
     setState(() => _updatingIds.add(point.id));
 
-    final gps = await _readGps();
+    final gpsFuture = _readGps();
+    final baroFuture = _barometerSupported
+        ? readBarometricAltitudeOnce()
+        : Future<double?>.value(null);
+    final gps = await gpsFuture;
+    final freshBaro = await baroFuture;
 
     if (!mounted) return;
 
@@ -352,14 +354,19 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
       return;
     }
 
-    setState(() { 
+    final baroAltitude = _barometerSupported
+        ? (freshBaro ?? _barometricAltitude ?? point.baroAltitude)
+        : point.baroAltitude;
+
+    setState(() {
       _position = gps.position;
       _gpsMessageKey = null;
+      if (freshBaro != null) _barometricAltitude = freshBaro;
     });
+    _streamAnchor = gps.position;
 
     final gpsAlt = gps.position!.altitude;
     final gpsAltitude = gpsAlt.isFinite ? gpsAlt : point.gpsAltitude;
-    final baroAltitude = _barometricAltitude ?? point.baroAltitude;
 
     final payload = point.copyWith(
       latitude: gps.position!.latitude,
@@ -425,7 +432,28 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
       );
     }
   }
-
+  String _gpsStatusText(AppLocalizations l10n) {
+    if (_gpsBusy) return l10n.patrolPointGpsLoading;
+    switch (_gpsMessageKey) {
+      case 'service':
+        return l10n.patrolPointGpsServiceOff;
+      case 'denied':
+        return l10n.patrolPointGpsDenied;
+      case 'error':
+        return l10n.patrolPointGpsError;
+      default:
+        break;
+    }
+    if (_position != null) {
+      return patrolServerCoordLabel(
+        l10n,
+        _position!.latitude,
+        _position!.longitude,
+        altitude: _altitudeForDisplay(_position!),
+      );
+    }
+    return l10n.patrolPointGpsTapRefresh;
+  }
   @override
   Widget build(BuildContext context) {
     final theme = GoogleFonts.interTextTheme(Theme.of(context).textTheme);

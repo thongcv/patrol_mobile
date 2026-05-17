@@ -268,12 +268,13 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
         context: context,
         isDismissible: false,
         enableDrag: false,
+        isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (sheetContext) {
           return Padding(
             padding: EdgeInsets.fromLTRB(
               16,
-              12,
+              4,
               16,
               16 + MediaQuery.paddingOf(sheetContext).bottom,
             ),
@@ -281,7 +282,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
               color: PatrolShellColors.surface,
               borderRadius: BorderRadius.circular(20),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
