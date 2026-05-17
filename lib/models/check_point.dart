@@ -12,12 +12,15 @@ class CheckPoint {
     this.longitude,
     this.gpsAltitude,
     this.baroAltitude,
+    this.accuracy,
+    this.altitudeAccuracy,
     this.radius,
     this.description,
     this.createdBy,
     this.updatedBy,
     this.createdDate,
     this.updatedDate,
+    this.verified
   });
 
   final int id;
@@ -32,12 +35,15 @@ class CheckPoint {
   final double? longitude;
   final double? gpsAltitude;
   final double? baroAltitude;
+  final double? accuracy;
+  final double? altitudeAccuracy;
   final double? radius;
   final String? description;
   final String? createdBy;
   final String? updatedBy;
   final String? createdDate;
   final String? updatedDate;
+  final bool? verified;
 
   bool get hasCoordinates =>
       latitude != null && longitude != null;
@@ -55,12 +61,15 @@ class CheckPoint {
     double? longitude,
     double? gpsAltitude,
     double? baroAltitude,
+    double? accuracy,
+    double? altitudeAccuracy,
     double? radius,
     String? description,
     String? createdBy,
     String? updatedBy,
     String? createdDate,
     String? updatedDate,
+    bool? verified,
   }) {
     return CheckPoint(
       id: id ?? this.id,
@@ -75,12 +84,15 @@ class CheckPoint {
       longitude: longitude ?? this.longitude,
       gpsAltitude: gpsAltitude ?? this.gpsAltitude,
       baroAltitude: baroAltitude ?? this.baroAltitude,
+      accuracy: accuracy ?? this.accuracy,
+      altitudeAccuracy: altitudeAccuracy ?? this.altitudeAccuracy,
       radius: radius ?? this.radius,
       description: description ?? this.description,
       createdBy: createdBy ?? this.createdBy,
       updatedBy: updatedBy ?? this.updatedBy,
       createdDate: createdDate ?? this.createdDate,
       updatedDate: updatedDate ?? this.updatedDate,
+      verified: verified ?? this.verified,
     );
   }
 
@@ -98,12 +110,15 @@ class CheckPoint {
       'longitude': longitude,
       'gpsAltitude': gpsAltitude,
       'baroAltitude': baroAltitude,
+      'accuracy': accuracy,
+      'altitudeAccuracy': altitudeAccuracy,
       'radius': radius,
       'description': description,
       'createdBy': createdBy,
       'updatedBy': updatedBy,
       'createdDate': createdDate,
       'updatedDate': updatedDate,
+      'verified': verified,
     };
   }
 
@@ -122,12 +137,15 @@ class CheckPoint {
       gpsAltitude: (json['gpsAltitude'] as num?)?.toDouble() ??
           (json['altitude'] as num?)?.toDouble(),
       baroAltitude: (json['baroAltitude'] as num?)?.toDouble(),
+      accuracy: (json['accuracy'] as num?)?.toDouble(),
+      altitudeAccuracy: (json['altitudeAccuracy'] as num?)?.toDouble(),
       radius: (json['radius'] as num?)?.toDouble(),
       description: json['description'] as String?,
       createdBy: json['createdBy'] as String?,
       updatedBy: json['updatedBy'] as String?,
       createdDate: json['createdDate'] as String?,
       updatedDate: json['updatedDate'] as String?,
+      verified: json['verified'] as bool? ?? false,
     );
   }
 }

@@ -710,6 +710,12 @@ abstract class AppLocalizations {
   /// **'Scanned'**
   String get patrolRoundChipScanned;
 
+  /// No description provided for @patrolRoundChipNotScanned.
+  ///
+  /// In en, this message translates to:
+  /// **'Not scanned'**
+  String get patrolRoundChipNotScanned;
+
   /// No description provided for @patrolRoundQrPhotoTitle.
   ///
   /// In en, this message translates to:
@@ -805,6 +811,142 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Reading barometric altitude…'**
   String get patrolRoundQrWaitingBaro;
+
+  /// No description provided for @patrolRoundQrCheckpointCoords.
+  ///
+  /// In en, this message translates to:
+  /// **'Checkpoint: {lat}, {lng}'**
+  String patrolRoundQrCheckpointCoords(String lat, String lng);
+
+  /// No description provided for @patrolRoundQrCheckpointCoordsWithAlt.
+  ///
+  /// In en, this message translates to:
+  /// **'Checkpoint: {lat}, {lng} · alt {alt} m ({altKind})'**
+  String patrolRoundQrCheckpointCoordsWithAlt(
+    String lat,
+    String lng,
+    String alt,
+    String altKind,
+  );
+
+  /// No description provided for @patrolRoundQrDeviceCoords.
+  ///
+  /// In en, this message translates to:
+  /// **'You: {lat}, {lng}'**
+  String patrolRoundQrDeviceCoords(String lat, String lng);
+
+  /// No description provided for @patrolRoundQrDeviceCoordsWithAlt.
+  ///
+  /// In en, this message translates to:
+  /// **'You: {lat}, {lng} · alt {alt} m ({altKind})'**
+  String patrolRoundQrDeviceCoordsWithAlt(
+    String lat,
+    String lng,
+    String alt,
+    String altKind,
+  );
+
+  /// No description provided for @patrolRoundQrAltKindBaro.
+  ///
+  /// In en, this message translates to:
+  /// **'baro'**
+  String get patrolRoundQrAltKindBaro;
+
+  /// No description provided for @patrolRoundQrAltKindGps.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS'**
+  String get patrolRoundQrAltKindGps;
+
+  /// No description provided for @patrolRoundQrAltPending.
+  ///
+  /// In en, this message translates to:
+  /// **'reading…'**
+  String get patrolRoundQrAltPending;
+
+  /// No description provided for @patrolRoundQrAltNone.
+  ///
+  /// In en, this message translates to:
+  /// **'—'**
+  String get patrolRoundQrAltNone;
+
+  /// No description provided for @patrolRoundQrDeltaNorth.
+  ///
+  /// In en, this message translates to:
+  /// **'North–south: {delta} m · move {direction}'**
+  String patrolRoundQrDeltaNorth(String delta, String direction);
+
+  /// No description provided for @patrolRoundQrDeltaEast.
+  ///
+  /// In en, this message translates to:
+  /// **'East–west: {delta} m · move {direction}'**
+  String patrolRoundQrDeltaEast(String delta, String direction);
+
+  /// No description provided for @patrolRoundQrDeltaHorizontal.
+  ///
+  /// In en, this message translates to:
+  /// **'Distance to checkpoint: {delta} m (max {radius} m)'**
+  String patrolRoundQrDeltaHorizontal(String delta, String radius);
+
+  /// No description provided for @patrolRoundQrGpsAccuracy.
+  ///
+  /// In en, this message translates to:
+  /// **'Horizontal GPS accuracy ±{accuracy} m'**
+  String patrolRoundQrGpsAccuracy(String accuracy);
+
+  /// No description provided for @patrolRoundQrGpsAltitudeAccuracy.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS altitude accuracy ±{accuracy} m'**
+  String patrolRoundQrGpsAltitudeAccuracy(String accuracy);
+
+  /// No description provided for @patrolRoundQrDeltaAltitude.
+  ///
+  /// In en, this message translates to:
+  /// **'Δ altitude: {delta} m (max {radius} m)'**
+  String patrolRoundQrDeltaAltitude(String delta, String radius);
+
+  /// No description provided for @patrolRoundQrMoveNorth.
+  ///
+  /// In en, this message translates to:
+  /// **'north'**
+  String get patrolRoundQrMoveNorth;
+
+  /// No description provided for @patrolRoundQrMoveSouth.
+  ///
+  /// In en, this message translates to:
+  /// **'south'**
+  String get patrolRoundQrMoveSouth;
+
+  /// No description provided for @patrolRoundQrMoveEast.
+  ///
+  /// In en, this message translates to:
+  /// **'east'**
+  String get patrolRoundQrMoveEast;
+
+  /// No description provided for @patrolRoundQrMoveWest.
+  ///
+  /// In en, this message translates to:
+  /// **'west'**
+  String get patrolRoundQrMoveWest;
+
+  /// No description provided for @patrolRoundQrMoveUp.
+  ///
+  /// In en, this message translates to:
+  /// **'up'**
+  String get patrolRoundQrMoveUp;
+
+  /// No description provided for @patrolRoundQrMoveDown.
+  ///
+  /// In en, this message translates to:
+  /// **'down'**
+  String get patrolRoundQrMoveDown;
+
+  /// No description provided for @patrolRoundQrMoveOnTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'on target'**
+  String get patrolRoundQrMoveOnTarget;
 
   /// No description provided for @patrolRoundSubtitleActive.
   ///

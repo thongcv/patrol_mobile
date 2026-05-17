@@ -326,6 +326,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get patrolRoundChipScanned => 'Đã quét';
 
   @override
+  String get patrolRoundChipNotScanned => 'Chưa quét';
+
+  @override
   String get patrolRoundQrPhotoTitle => 'Chụp ảnh?';
 
   @override
@@ -382,6 +385,99 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get patrolRoundQrWaitingBaro => 'Đang đọc độ cao barometer…';
+
+  @override
+  String patrolRoundQrCheckpointCoords(String lat, String lng) {
+    return 'Mốc: $lat, $lng';
+  }
+
+  @override
+  String patrolRoundQrCheckpointCoordsWithAlt(
+    String lat,
+    String lng,
+    String alt,
+    String altKind,
+  ) {
+    return 'Mốc: $lat, $lng · cao $alt m ($altKind)';
+  }
+
+  @override
+  String patrolRoundQrDeviceCoords(String lat, String lng) {
+    return 'Bạn: $lat, $lng';
+  }
+
+  @override
+  String patrolRoundQrDeviceCoordsWithAlt(
+    String lat,
+    String lng,
+    String alt,
+    String altKind,
+  ) {
+    return 'Bạn: $lat, $lng · cao $alt m ($altKind)';
+  }
+
+  @override
+  String get patrolRoundQrAltKindBaro => 'baro';
+
+  @override
+  String get patrolRoundQrAltKindGps => 'GPS';
+
+  @override
+  String get patrolRoundQrAltPending => 'đang đọc…';
+
+  @override
+  String get patrolRoundQrAltNone => '—';
+
+  @override
+  String patrolRoundQrDeltaNorth(String delta, String direction) {
+    return 'Bắc–nam: $delta m · đi $direction';
+  }
+
+  @override
+  String patrolRoundQrDeltaEast(String delta, String direction) {
+    return 'Đông–tây: $delta m · đi $direction';
+  }
+
+  @override
+  String patrolRoundQrDeltaHorizontal(String delta, String radius) {
+    return 'Cách vị trí mốc: $delta m (tối đa $radius m)';
+  }
+
+  @override
+  String patrolRoundQrGpsAccuracy(String accuracy) {
+    return 'Sai số GPS ngang ±$accuracy m';
+  }
+
+  @override
+  String patrolRoundQrGpsAltitudeAccuracy(String accuracy) {
+    return 'Sai số độ cao GPS ±$accuracy m';
+  }
+
+  @override
+  String patrolRoundQrDeltaAltitude(String delta, String radius) {
+    return 'Lệch độ cao: $delta m (tối đa $radius m)';
+  }
+
+  @override
+  String get patrolRoundQrMoveNorth => 'bắc';
+
+  @override
+  String get patrolRoundQrMoveSouth => 'nam';
+
+  @override
+  String get patrolRoundQrMoveEast => 'đông';
+
+  @override
+  String get patrolRoundQrMoveWest => 'tây';
+
+  @override
+  String get patrolRoundQrMoveUp => 'lên';
+
+  @override
+  String get patrolRoundQrMoveDown => 'xuống';
+
+  @override
+  String get patrolRoundQrMoveOnTarget => 'đúng mốc';
 
   @override
   String patrolRoundSubtitleActive(String scheduleName, String statusLabel) {

@@ -366,6 +366,8 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
       longitude: gps.position!.longitude,
       gpsAltitude: gpsAltitude,
       baroAltitude: baroAltitude,
+      accuracy: gps.position!.accuracy,
+      altitudeAccuracy: gps.position!.altitudeAccuracy,
     );
     final r = await CheckPointService.instance.updateCheckPoint(payload);
 

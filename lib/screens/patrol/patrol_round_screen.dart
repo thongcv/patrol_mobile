@@ -169,14 +169,13 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     if (!mounted) return;
 
     final l10n = AppLocalizations.of(context)!;
-    final pos = sample.position;
 
     final submit = PatrolLogSubmit(
       roundId: roundId,
       checkpointId: point.id,
       scanTime: DateTime.now(),
-      latitude: pos.latitude,
-      longitude: pos.longitude,
+      latitude: sample.latitude,
+      longitude: sample.longitude,
       gpsAltitude: sample.gpsAltitude,
       baroAltitude: sample.baroAltitude,
       verified: true,
@@ -199,7 +198,10 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
         setState(() => _scannedCheckpointIds.add(point.id));
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.patrolRoundQrScanSuccess)),
+          SnackBar(
+            content: Text(l10n.patrolRoundQrScanSuccess),
+            duration: const Duration(milliseconds: 400),
+          ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -251,9 +253,9 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _qrScanSubmitting = false;
     });
 
-    final allowedRadiusM = point.radius ?? kDefaultCheckPointRadiusM;
-    final statusNotifier =
-        ValueNotifier<String>(l10n.patrolRoundQrWaitingPosition);
+    final statusNotifier = ValueNotifier<_QrScanProximityStatus>(
+      _QrScanProximityStatus(headline: l10n.patrolRoundQrWaitingPosition),
+    );
 
     if (!mounted) return;
 
@@ -284,16 +286,36 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    ValueListenableBuilder<String>(
+                    ValueListenableBuilder<_QrScanProximityStatus>(
                       valueListenable: statusNotifier,
-                      builder: (_, status, _) => Text(
-                        status,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
+                      builder: (_, status, _) {
+                        final bodyStyle = Theme.of(sheetContext)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(
                               color: Colors.white.withValues(alpha: 0.88),
                               height: 1.45,
+                            );
+                        final detail = status.snapshot;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              status.headline,
+                              textAlign: TextAlign.center,
+                              style: bodyStyle,
                             ),
-                      ),
+                            if (detail != null) ...[
+                              const SizedBox(height: 14),
+                              _QrProximityDetailPanel(
+                                l10n: l10n,
+                                snapshot: detail,
+                                baroPending: status.baroPending,
+                              ),
+                            ],
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 16),
                     const Center(
@@ -331,51 +353,40 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     final gpsError = await watch.start(
       enableBarometer: needsBaroValidation,
       onSample: (sample) {
-        if (!mounted || _qrScanSubmitting) return;
+        if (!mounted || _qrScanSubmitting) return false;
 
         final pos = sample.position;
         final validateBaro = needsBaroValidation && watch.barometerListening;
 
-        final horizontalM = horizontalDistanceToCheckPoint(
-          point,
-          pos.latitude,
-          pos.longitude,
-        );
-        if (horizontalM != null) {
-          statusNotifier.value = l10n.patrolRoundQrDistanceStatus(
-            horizontalM.toStringAsFixed(0),
-            allowedRadiusM.toStringAsFixed(0),
-          );
-        }
-
-        final proximity = validateCheckPointProximity(
+        final horizontalAccuracy = pos.accuracy;
+        final gpsAltitudeAccuracy = pos.altitudeAccuracy;
+        final evaluation = evaluateCheckPointProximity(
           checkpoint: point,
-          latitude: pos.latitude,
-          longitude: pos.longitude,
+          latitude: sample.latitude,
+          longitude: sample.longitude,
           gpsAltitude: sample.gpsAltitude,
           baroAltitude: sample.baroAltitude,
           validateBaroAltitude: validateBaro,
+          horizontalAccuracyM: netIncrementalAccuracyM(
+            horizontalAccuracy,
+            point.accuracy,
+          ),
+          gpsAltitudeAccuracyM: netIncrementalAccuracyM(
+            gpsAltitudeAccuracy,
+            point.altitudeAccuracy,
+          ),
         );
 
-        if (!proximity.ok) {
-          if (proximity.issue == CheckPointProximityIssue.baroAltitudePending) {
-            statusNotifier.value = l10n.patrolRoundQrWaitingBaro;
-          } else if (proximity.issue ==
-                  CheckPointProximityIssue.baroAltitudeOutOfRange ||
-              proximity.issue ==
-                  CheckPointProximityIssue.gpsAltitudeOutOfRange) {
-            final dist = proximity.distanceM?.toStringAsFixed(0) ?? '—';
-            final radius =
-                proximity.allowedRadiusM?.toStringAsFixed(0) ?? '—';
-            statusNotifier.value =
-                l10n.patrolRoundQrAltitudeOutOfRange(dist, radius);
-          }
-          return;
+        if (!evaluation.result.ok) {
+          statusNotifier.value = _qrScanProximityStatus(
+            l10n: l10n,
+            proximity: evaluation.result,
+            snapshot: evaluation.snapshot,
+          );
+          return false;
         }
 
         _qrScanSubmitting = true;
-        statusNotifier.value = l10n.patrolRoundQrPositionOkSaving;
-        unawaited(watch.stop());
         if (mounted && Navigator.of(context).canPop()) {
           Navigator.of(context).pop();
         }
@@ -387,6 +398,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
             photoPath: photoPath,
           ),
         );
+        return true;
       },
     );
 
@@ -1088,6 +1100,224 @@ class _RoundCard extends StatelessWidget {
 
 enum _QrPhotoChoice { cancel, skip, takePhoto }
 
+class _QrScanProximityStatus {
+  const _QrScanProximityStatus({
+    required this.headline,
+    this.snapshot,
+    this.baroPending = false,
+  });
+
+  final String headline;
+  final CheckPointProximitySnapshot? snapshot;
+  final bool baroPending;
+}
+
+_QrScanProximityStatus _qrScanProximityStatus({
+  required AppLocalizations l10n,
+  required CheckPointProximityResult proximity,
+  CheckPointProximitySnapshot? snapshot,
+}) {
+  if (snapshot == null) {
+    return _QrScanProximityStatus(
+      headline: l10n.patrolRoundQrWaitingPosition,
+    );
+  }
+
+  final radius = snapshot.allowedRadiusM.toStringAsFixed(0);
+
+  switch (proximity.issue) {
+    case CheckPointProximityIssue.baroAltitudePending:
+      return _QrScanProximityStatus(
+        headline: l10n.patrolRoundQrWaitingBaro,
+        snapshot: snapshot,
+        baroPending: true,
+      );
+    case CheckPointProximityIssue.baroAltitudeOutOfRange:
+    case CheckPointProximityIssue.gpsAltitudeOutOfRange:
+      final dist = proximity.distanceM?.toStringAsFixed(0) ?? '—';
+      return _QrScanProximityStatus(
+        headline: l10n.patrolRoundQrAltitudeOutOfRange(dist, radius),
+        snapshot: snapshot,
+      );
+    case CheckPointProximityIssue.horizontalOutOfRange:
+      final dist = (snapshot.slantRangeM ?? snapshot.horizontalM)
+          .toStringAsFixed(0);
+      return _QrScanProximityStatus(
+        headline: l10n.patrolRoundQrOutOfRange(dist, radius),
+        snapshot: snapshot,
+      );
+    case CheckPointProximityIssue.noCheckpointCoordinates:
+    case null:
+      return _QrScanProximityStatus(
+        headline: l10n.patrolRoundQrWaitingPosition,
+        snapshot: snapshot,
+      );
+  }
+}
+
+String _qrFmtCoord(double value) => value.toStringAsFixed(6);
+
+String _qrFmtDeltaM(double signedM) => signedM.abs().toStringAsFixed(1);
+
+String _qrFmtDistanceToCheckpointM(CheckPointProximitySnapshot s) {
+  final slant = s.slantRangeM;
+  final distanceM = (slant != null && slant.isFinite) ? slant : s.horizontalM;
+  return distanceM.toStringAsFixed(1);
+}
+
+String _qrNorthMoveDirection(AppLocalizations l10n, double signedNorthM) {
+  if (signedNorthM.abs() < 0.05) return l10n.patrolRoundQrMoveOnTarget;
+  return signedNorthM > 0
+      ? l10n.patrolRoundQrMoveNorth
+      : l10n.patrolRoundQrMoveSouth;
+}
+
+String _qrEastMoveDirection(AppLocalizations l10n, double signedEastM) {
+  if (signedEastM.abs() < 0.05) return l10n.patrolRoundQrMoveOnTarget;
+  return signedEastM > 0
+      ? l10n.patrolRoundQrMoveEast
+      : l10n.patrolRoundQrMoveWest;
+}
+
+String _qrAltMoveDirection(AppLocalizations l10n, double signedAltDeltaM) {
+  if (signedAltDeltaM.abs() < 0.05) return l10n.patrolRoundQrMoveOnTarget;
+  return signedAltDeltaM > 0
+      ? l10n.patrolRoundQrMoveDown
+      : l10n.patrolRoundQrMoveUp;
+}
+
+class _QrProximityDetailPanel extends StatelessWidget {
+  const _QrProximityDetailPanel({
+    required this.l10n,
+    required this.snapshot,
+    this.baroPending = false,
+  });
+
+  final AppLocalizations l10n;
+  final CheckPointProximitySnapshot snapshot;
+  final bool baroPending;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = snapshot;
+    final altKind =
+        s.usesBaroAltitude ? l10n.patrolRoundQrAltKindBaro : l10n.patrolRoundQrAltKindGps;
+    final radius = s.allowedRadiusM.toStringAsFixed(0);
+    final muted = Colors.white.withValues(alpha: 0.72);
+    final lineStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: muted,
+          height: 1.45,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        );
+
+    String coordsLine({
+      required bool checkpoint,
+      required double lat,
+      required double lng,
+      required double? altitude,
+    }) {
+      final latStr = _qrFmtCoord(lat);
+      final lngStr = _qrFmtCoord(lng);
+      if (altitude != null && altitude.isFinite) {
+        final altStr = altitude.toStringAsFixed(1);
+        return checkpoint
+            ? l10n.patrolRoundQrCheckpointCoordsWithAlt(
+                latStr,
+                lngStr,
+                altStr,
+                altKind,
+              )
+            : l10n.patrolRoundQrDeviceCoordsWithAlt(
+                latStr,
+                lngStr,
+                altStr,
+                altKind,
+              );
+      }
+      if (!checkpoint && baroPending && s.usesBaroAltitude) {
+        return l10n.patrolRoundQrDeviceCoordsWithAlt(
+          latStr,
+          lngStr,
+          l10n.patrolRoundQrAltPending,
+          altKind,
+        );
+      }
+      return checkpoint
+          ? l10n.patrolRoundQrCheckpointCoords(latStr, lngStr)
+          : l10n.patrolRoundQrDeviceCoords(latStr, lngStr);
+    }
+
+    final lines = <String>[
+      coordsLine(
+        checkpoint: true,
+        lat: s.checkpointLat,
+        lng: s.checkpointLng,
+        altitude: s.checkpointAltitude,
+      ),
+      coordsLine(
+        checkpoint: false,
+        lat: s.deviceLat,
+        lng: s.deviceLng,
+        altitude: s.deviceAltitude,
+      ),
+      l10n.patrolRoundQrDeltaNorth(
+        _qrFmtDeltaM(s.signedNorthToCheckpointM),
+        _qrNorthMoveDirection(l10n, s.signedNorthToCheckpointM),
+      ),
+      l10n.patrolRoundQrDeltaEast(
+        _qrFmtDeltaM(s.signedEastToCheckpointM),
+        _qrEastMoveDirection(l10n, s.signedEastToCheckpointM),
+      ),
+      l10n.patrolRoundQrDeltaHorizontal(
+        _qrFmtDistanceToCheckpointM(s),
+        radius,
+      ),
+    ];
+
+    final horizontalAcc = s.horizontalAccuracyM;
+    if (horizontalAcc != null) {
+      lines.add(
+        l10n.patrolRoundQrGpsAccuracy(horizontalAcc.toStringAsFixed(0)),
+      );
+    }
+
+    final gpsAltAcc = s.gpsAltitudeAccuracyM;
+    if (gpsAltAcc != null && !s.usesBaroAltitude) {
+      lines.add(
+        l10n.patrolRoundQrGpsAltitudeAccuracy(gpsAltAcc.toStringAsFixed(0)),
+      );
+    }
+
+    final altDelta = s.signedAltitudeDeltaM;
+    if (s.checkpointAltitude != null &&
+        altDelta != null &&
+        altDelta.isFinite) {
+      lines.add(
+        '${l10n.patrolRoundQrDeltaAltitude(_qrFmtDeltaM(altDelta), radius)} · ${_qrAltMoveDirection(l10n, altDelta)}',
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final line in lines)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(line, style: lineStyle),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RoutePointCard extends StatelessWidget {
   const _RoutePointCard({
     required this.theme,
@@ -1110,6 +1340,7 @@ class _RoutePointCard extends StatelessWidget {
     final qrUrl = resolveApiMediaUrl(point.qrImage);
     final qrPreview = _checkPointQrPreview(qrUrl, size: 56);
     final hasNfc = point.nfc != null && point.nfc!.trim().isNotEmpty;
+    final isScanned = scanned || point.verified == true;
 
     return Container(
       width: double.infinity,
@@ -1183,23 +1414,16 @@ class _RoutePointCard extends StatelessWidget {
             children: [
               _FeatureChip(
                 theme: theme,
-                label: point.hasCoordinates
-                    ? l10n.patrolRoundChipGps
-                    : l10n.patrolRoundChipNoGps,
-                icon: point.hasCoordinates
-                    ? Icons.gps_fixed_rounded
-                    : Icons.gps_off_rounded,
-                color: point.hasCoordinates
-                    ? PatrolShellColors.accentMuted
-                    : Colors.amberAccent.withValues(alpha: 0.9),
+                label: isScanned
+                    ? l10n.patrolRoundChipScanned
+                    : l10n.patrolRoundChipNotScanned,
+                icon: isScanned
+                    ? Icons.check_circle_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                color: isScanned
+                    ? const Color(0xFF34D399)
+                    : Colors.white54,
               ),
-              if (scanned)
-                _FeatureChip(
-                  theme: theme,
-                  label: l10n.patrolRoundChipScanned,
-                  icon: Icons.check_circle_rounded,
-                  color: const Color(0xFF34D399),
-                ),
               if (qrUrl != null)
                 _FeatureChip(
                   theme: theme,
@@ -1216,13 +1440,6 @@ class _RoutePointCard extends StatelessWidget {
                   label: l10n.patrolRoundChipNfc,
                   icon: Icons.nfc_rounded,
                   color: Colors.white70,
-                ),
-              if (!point.active)
-                _FeatureChip(
-                  theme: theme,
-                  label: l10n.patrolPointInactive,
-                  icon: Icons.block_rounded,
-                  color: Colors.white54,
                 ),
             ],
           ),

@@ -20,19 +20,23 @@ Stream<double> barometricAltitudeStream({
       .where((m) => m.isFinite);
 }
 
-// Hàm kiểm tra xem cảm biến có hoạt động không
-Future<bool> hasBarometer() async {
+/// Lấy một mẫu độ cao barometer (m); `null` nếu không có cảm biến hoặc hết [timeout].
+Future<double?> readBarometricAltitudeOnce({
+  Duration timeout = const Duration(seconds: 1),
+}) async {
   try {
-    // Thử lắng nghe stream trong một khoảng thời gian ngắn (ví dụ 1 giây)
-    final stream = barometerEventStream();
-    await stream.first.timeout(
-      const Duration(seconds: 1),
-      onTimeout: () => throw TimeoutException('No sensor found'),
-    );
-    return true;
-  } catch (e) {
-    return false; 
+    final alt = await barometricAltitudeStream().first.timeout(timeout);
+    return alt.isFinite ? alt : null;
+  } catch (_) {
+    return null;
   }
+}
+
+/// `true` nếu thiết bị trả về được ít nhất một mẫu độ cao hợp lệ.
+Future<bool> hasBarometer({
+  Duration timeout = const Duration(seconds: 1),
+}) async {
+  return (await readBarometricAltitudeOnce(timeout: timeout)) != null;
 }
 
 /// Barometer (nếu có) → GPS → [fallback].

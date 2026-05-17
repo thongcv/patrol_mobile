@@ -74,7 +74,7 @@ class PatrolLogService {
       files.add(
         await MultipartFile.fromFile(
           path,
-          filename: 'patrol_scan_$i.jpg',
+          filename: '${body.roundId}_scan_$i.jpg',
         ),
       );
     }

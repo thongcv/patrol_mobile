@@ -130,6 +130,7 @@
   "patrolRoundChipQr": "QR",
   "patrolRoundChipNfc": "NFC",
   "patrolRoundChipScanned": "Scanned",
+  "patrolRoundChipNotScanned": "Not scanned",
   "patrolRoundQrPhotoTitle": "Take a photo?",
   "patrolRoundQrPhotoMessage": "You can attach a photo to this checkpoint scan.",
   "patrolRoundQrPhotoTake": "Take photo",
@@ -164,6 +165,89 @@
   },
   "patrolRoundQrPositionOkSaving": "Position OK — saving scan…",
   "patrolRoundQrWaitingBaro": "Reading barometric altitude…",
+  "patrolRoundQrCheckpointCoords": "Checkpoint: {lat}, {lng}",
+  "@patrolRoundQrCheckpointCoords": {
+    "placeholders": {
+      "lat": { "type": "String" },
+      "lng": { "type": "String" }
+    }
+  },
+  "patrolRoundQrCheckpointCoordsWithAlt": "Checkpoint: {lat}, {lng} · alt {alt} m ({altKind})",
+  "@patrolRoundQrCheckpointCoordsWithAlt": {
+    "placeholders": {
+      "lat": { "type": "String" },
+      "lng": { "type": "String" },
+      "alt": { "type": "String" },
+      "altKind": { "type": "String" }
+    }
+  },
+  "patrolRoundQrDeviceCoords": "You: {lat}, {lng}",
+  "@patrolRoundQrDeviceCoords": {
+    "placeholders": {
+      "lat": { "type": "String" },
+      "lng": { "type": "String" }
+    }
+  },
+  "patrolRoundQrDeviceCoordsWithAlt": "You: {lat}, {lng} · alt {alt} m ({altKind})",
+  "@patrolRoundQrDeviceCoordsWithAlt": {
+    "placeholders": {
+      "lat": { "type": "String" },
+      "lng": { "type": "String" },
+      "alt": { "type": "String" },
+      "altKind": { "type": "String" }
+    }
+  },
+  "patrolRoundQrAltKindBaro": "baro",
+  "patrolRoundQrAltKindGps": "GPS",
+  "patrolRoundQrAltPending": "reading…",
+  "patrolRoundQrAltNone": "—",
+  "patrolRoundQrDeltaNorth": "North–south: {delta} m · move {direction}",
+  "@patrolRoundQrDeltaNorth": {
+    "placeholders": {
+      "delta": { "type": "String" },
+      "direction": { "type": "String" }
+    }
+  },
+  "patrolRoundQrDeltaEast": "East–west: {delta} m · move {direction}",
+  "@patrolRoundQrDeltaEast": {
+    "placeholders": {
+      "delta": { "type": "String" },
+      "direction": { "type": "String" }
+    }
+  },
+  "patrolRoundQrDeltaHorizontal": "Distance to checkpoint: {delta} m (max {radius} m)",
+  "@patrolRoundQrDeltaHorizontal": {
+    "placeholders": {
+      "delta": { "type": "String" },
+      "radius": { "type": "String" }
+    }
+  },
+  "patrolRoundQrGpsAccuracy": "Horizontal GPS accuracy ±{accuracy} m",
+  "@patrolRoundQrGpsAccuracy": {
+    "placeholders": {
+      "accuracy": { "type": "String" }
+    }
+  },
+  "patrolRoundQrGpsAltitudeAccuracy": "GPS altitude accuracy ±{accuracy} m",
+  "@patrolRoundQrGpsAltitudeAccuracy": {
+    "placeholders": {
+      "accuracy": { "type": "String" }
+    }
+  },
+  "patrolRoundQrDeltaAltitude": "Δ altitude: {delta} m (max {radius} m)",
+  "@patrolRoundQrDeltaAltitude": {
+    "placeholders": {
+      "delta": { "type": "String" },
+      "radius": { "type": "String" }
+    }
+  },
+  "patrolRoundQrMoveNorth": "north",
+  "patrolRoundQrMoveSouth": "south",
+  "patrolRoundQrMoveEast": "east",
+  "patrolRoundQrMoveWest": "west",
+  "patrolRoundQrMoveUp": "up",
+  "patrolRoundQrMoveDown": "down",
+  "patrolRoundQrMoveOnTarget": "on target",
   "patrolRoundSubtitleActive": "{scheduleName} · {statusLabel}",
   "@patrolRoundSubtitleActive": {
     "placeholders": {

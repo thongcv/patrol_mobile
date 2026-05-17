@@ -326,6 +326,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get patrolRoundChipScanned => 'Scanned';
 
   @override
+  String get patrolRoundChipNotScanned => 'Not scanned';
+
+  @override
   String get patrolRoundQrPhotoTitle => 'Take a photo?';
 
   @override
@@ -382,6 +385,99 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get patrolRoundQrWaitingBaro => 'Reading barometric altitude…';
+
+  @override
+  String patrolRoundQrCheckpointCoords(String lat, String lng) {
+    return 'Checkpoint: $lat, $lng';
+  }
+
+  @override
+  String patrolRoundQrCheckpointCoordsWithAlt(
+    String lat,
+    String lng,
+    String alt,
+    String altKind,
+  ) {
+    return 'Checkpoint: $lat, $lng · alt $alt m ($altKind)';
+  }
+
+  @override
+  String patrolRoundQrDeviceCoords(String lat, String lng) {
+    return 'You: $lat, $lng';
+  }
+
+  @override
+  String patrolRoundQrDeviceCoordsWithAlt(
+    String lat,
+    String lng,
+    String alt,
+    String altKind,
+  ) {
+    return 'You: $lat, $lng · alt $alt m ($altKind)';
+  }
+
+  @override
+  String get patrolRoundQrAltKindBaro => 'baro';
+
+  @override
+  String get patrolRoundQrAltKindGps => 'GPS';
+
+  @override
+  String get patrolRoundQrAltPending => 'reading…';
+
+  @override
+  String get patrolRoundQrAltNone => '—';
+
+  @override
+  String patrolRoundQrDeltaNorth(String delta, String direction) {
+    return 'North–south: $delta m · move $direction';
+  }
+
+  @override
+  String patrolRoundQrDeltaEast(String delta, String direction) {
+    return 'East–west: $delta m · move $direction';
+  }
+
+  @override
+  String patrolRoundQrDeltaHorizontal(String delta, String radius) {
+    return 'Distance to checkpoint: $delta m (max $radius m)';
+  }
+
+  @override
+  String patrolRoundQrGpsAccuracy(String accuracy) {
+    return 'Horizontal GPS accuracy ±$accuracy m';
+  }
+
+  @override
+  String patrolRoundQrGpsAltitudeAccuracy(String accuracy) {
+    return 'GPS altitude accuracy ±$accuracy m';
+  }
+
+  @override
+  String patrolRoundQrDeltaAltitude(String delta, String radius) {
+    return 'Δ altitude: $delta m (max $radius m)';
+  }
+
+  @override
+  String get patrolRoundQrMoveNorth => 'north';
+
+  @override
+  String get patrolRoundQrMoveSouth => 'south';
+
+  @override
+  String get patrolRoundQrMoveEast => 'east';
+
+  @override
+  String get patrolRoundQrMoveWest => 'west';
+
+  @override
+  String get patrolRoundQrMoveUp => 'up';
+
+  @override
+  String get patrolRoundQrMoveDown => 'down';
+
+  @override
+  String get patrolRoundQrMoveOnTarget => 'on target';
 
   @override
   String patrolRoundSubtitleActive(String scheduleName, String statusLabel) {
