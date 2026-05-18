@@ -5,25 +5,111 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 import 'barometric_altitude.dart';
+import 'gps_native_service.dart';
+
+/// Vị trí: native Super GPS (Android). Geolocator chỉ quyền/dịch vụ/khoảng cách.
+const Duration _kNativeGpsCurrentTimeout = Duration(seconds: 4);
+
+Stream<NativeGpsEvent> _deviceLocationEventStream({
+  GpsNativeStreamOptions? nativeStreamOptions,
+}) {
+  if (!GpsNativeService.isSupported) {
+    return const Stream<NativeGpsEvent>.empty();
+  }
+  if (nativeStreamOptions != null &&
+      nativeStreamOptions != GpsNativeService.streamOptions) {
+    GpsNativeService.configureStream(nativeStreamOptions);
+  }
+  return GpsNativeService.instance.locationEventStream;
+}
+
+/// One-shot native, rồi stream ngắn nếu chưa có fix.
+Future<NativeGpsEvent?> _resolveNativeGpsEvent({
+  Duration timeout = _kNativeGpsCurrentTimeout,
+  double targetAccuracyM = 4.0,
+  bool enableBarometer = false,
+}) async {
+  if (!GpsNativeService.isSupported) return null;
+
+  final event = await GpsNativeService.getCurrentLocation(
+    enableBarometer: enableBarometer,
+  );
+  if (event != null) return event;
+
+  return _readDeviceGpsEventFromNativeStream(
+    timeout: timeout,
+    targetAccuracyM: targetAccuracyM,
+    enableBarometer: enableBarometer,
+  );
+}
 
 /// Đọc GPS một lần (quyền + dịch vụ vị trí).
+/// [enableBarometer] được truyền xuống native để bật barometer.
 
-Future<({Position? position, String? messageKey})> readDeviceGpsOnce() async {
+Future<({Position? position, double? barometricAltitude, String? messageKey})>
+readDeviceGpsOnce({
+  Duration? timeout,
+  double targetAccuracyM = 4.0,
+  bool enableBarometer = false,
+}) async {
   final denied = await _ensureLocationReady();
 
   if (denied != null) {
-    return (position: null, messageKey: denied);
+    return (position: null, barometricAltitude: null, messageKey: denied);
   }
 
   try {
-    final pos = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.best),
+    final resolved = await _resolveNativeGpsEvent(
+      enableBarometer: enableBarometer,
     );
-
-    return (position: pos, messageKey: null);
+    if (resolved == null) {
+      return (position: null, barometricAltitude: null, messageKey: 'service');
+    }
+    return (
+      position: resolved.position,
+      barometricAltitude: resolved.barometricAltitude,
+      messageKey: null,
+    );
   } catch (_) {
-    return (position: null, messageKey: 'error');
+    return (position: null, barometricAltitude: null, messageKey: 'error');
   }
+}
+
+/// One-shot native thất bại — chờ fix qua stream (không gọi lại getCurrentLocation).
+Future<NativeGpsEvent?> _readDeviceGpsEventFromNativeStream({
+  Duration timeout = _kNativeGpsCurrentTimeout,
+  double targetAccuracyM = 4.0,
+  bool enableBarometer = false,
+}) async {
+  NativeGpsEvent? bestEvent;
+  final completer = Completer<NativeGpsEvent?>();
+  StreamSubscription<NativeGpsEvent>? streamSubscription;
+
+  GpsNativeService.configureStream(
+    GpsNativeStreamOptions(enableBarometer: enableBarometer),
+  );
+
+  streamSubscription = GpsNativeService.instance.locationEventStream.listen((
+    event,
+  ) {
+    final position = event.position;
+    if (bestEvent == null || position.accuracy < bestEvent!.position.accuracy) {
+      bestEvent = event;
+    }
+    if (position.accuracy <= targetAccuracyM) {
+      streamSubscription?.cancel();
+      if (!completer.isCompleted) completer.complete(bestEvent);
+    }
+  });
+
+  unawaited(
+    Future.delayed(timeout, () {
+      streamSubscription?.cancel();
+      if (!completer.isCompleted) completer.complete(bestEvent);
+    }),
+  );
+
+  return completer.future;
 }
 
 /// `null` nếu sẵn sàng; ngược lại mã lỗi `service` | `denied` | `error`.
@@ -47,46 +133,6 @@ Future<String?> _ensureLocationReady() async {
   return null;
 }
 
-LocationSettings devicePositionStreamSettings() {
-  if (kIsWeb) {
-    return const LocationSettings(
-      accuracy: LocationAccuracy.best,
-
-      distanceFilter: 0,
-    );
-  }
-
-  switch (defaultTargetPlatform) {
-    case TargetPlatform.android:
-      return AndroidSettings(
-        accuracy: LocationAccuracy.best,
-
-        distanceFilter: 0,
-
-        intervalDuration: const Duration(milliseconds: 500),
-      );
-
-    case TargetPlatform.iOS:
-    case TargetPlatform.macOS:
-      return AppleSettings(
-        accuracy: LocationAccuracy.bestForNavigation,
-
-        distanceFilter: 0,
-
-        activityType: ActivityType.fitness,
-
-        pauseLocationUpdatesAutomatically: false,
-      );
-
-    default:
-      return const LocationSettings(
-        accuracy: LocationAccuracy.high,
-
-        distanceFilter: 0,
-      );
-  }
-}
-
 typedef DeviceLocationSample = ({
   Position position,
 
@@ -106,12 +152,19 @@ typedef DeviceLocationOnSample = bool Function(DeviceLocationSample sample);
 
 const int _kGpsSmoothSampleCap = 6;
 
-/// GPS stream riêng; barometer stream riêng (chỉ khi [enableBarometer] và thiết bị hỗ trợ).
+/// GPS stream; barometer gộp trong payload native (Super GPS).
 
 class DeviceLocationWatch {
-  StreamSubscription<Position>? _positionSub;
+  DeviceLocationWatch._(this._barometerSupported);
 
-  StreamSubscription<double>? _baroSub;
+  static Future<DeviceLocationWatch> create() async {
+    final supported = await isBarometerSupported();
+    return DeviceLocationWatch._(supported);
+  }
+
+  StreamSubscription<NativeGpsEvent>? _positionSub;
+
+  bool _trackBarometer = false;
 
   Position? _lastPosition;
 
@@ -119,13 +172,13 @@ class DeviceLocationWatch {
 
   double? _barometricAltitude;
 
-  bool _barometerSupported = false;
+  final bool _barometerSupported;
 
   bool _stopped = false;
 
   /// `true` khi đã bật listener barometer (checkpoint cần baro + thiết bị hỗ trợ).
 
-  bool get barometerListening => _baroSub != null;
+  bool get barometerListening => _trackBarometer;
 
   bool get barometerSupported => _barometerSupported;
 
@@ -144,131 +197,85 @@ class DeviceLocationWatch {
 
     _smoothBuffer.clear();
 
-    _barometricAltitude = null;
+    await _positionSub?.cancel();
+    _positionSub = null;
 
-    _barometerSupported = false;
+    _trackBarometer = enableBarometer && _barometerSupported;
+    final enableNativeBaro = _trackBarometer && GpsNativeService.isSupported;
+    final streamOpts = GpsNativeStreamOptions(
+      enableBarometer: enableNativeBaro,
+    );
 
-    if (enableBarometer) {
-      _barometricAltitude = await readBarometricAltitudeOnce();
-
-      _barometerSupported = _barometricAltitude != null;
-
-      if (_barometerSupported) {
-        if (!await _initCurrentPosition()) {
-          await stop();
-
-          return 'error';
-        }
-
-        if (_emitFromBarometer(onSample) || _stopped) {
-          if (!_stopped) await stop();
-
-          return null;
-        }
-
-        _baroSub = barometricAltitudeStream().listen(
-          (alt) {
-            if (_stopped) return;
-
-            _barometricAltitude = alt.isFinite ? alt : null;
-
-            if (_emitFromBarometer(onSample)) {
-              unawaited(stop());
-            }
-          },
-
-          onError: (_) {},
-
-          cancelOnError: false,
-        );
-      } else {
-        if (!await _initCurrentPosition()) {
-          await stop();
-
-          return 'error';
-        }
-
-        if (_emitFromGps(onSample) || _stopped) {
-          if (!_stopped) await stop();
-
-          return null;
-        }
-      }
-    } else {
-      if (!await _initCurrentPosition()) {
-        await stop();
-
-        return 'error';
-      }
-
-      if (_emitFromGps(onSample) || _stopped) {
-        if (!_stopped) await stop();
-
-        return null;
-      }
+    if (!await _initCurrentPosition(enableBarometer: enableNativeBaro)) {
+      await stop();
+      return 'error';
     }
 
-    if (_stopped) return null;
-
-    _startPositionStream(onSample);
+    if (_emitSample(onSample) || _stopped) {
+      if (!_stopped) await stop();
+    }
+    _startPositionStream(onSample, streamOpts);
 
     return null;
   }
 
-  void _startPositionStream(DeviceLocationOnSample onSample) {
+  void _startPositionStream(
+    DeviceLocationOnSample onSample,
+    GpsNativeStreamOptions streamOpts,
+  ) {
     if (_stopped || _positionSub != null) return;
 
-    _positionSub =
-        Geolocator.getPositionStream(
-          locationSettings: devicePositionStreamSettings(),
-        ).listen(
-          (pos) {
+    _positionSub = _deviceLocationEventStream(nativeStreamOptions: streamOpts)
+        .listen(
+          (event) {
             if (_stopped) return;
 
-            _ingestPosition(pos);
+            _ingestPosition(event.position);
+            if (_trackBarometer) {
+              _applyBarometricAltitude(event.barometricAltitude);
+            }
 
-            if (_emitFromGps(onSample)) {
+            if (_emitSample(onSample)) {
               unawaited(stop());
             }
           },
-
-          onError: (_) {},
-
+          onError: (Object error, StackTrace stack) {
+            assert(() {
+              debugPrint('DeviceLocationWatch position stream error: $error');
+              return true;
+            }());
+          },
           cancelOnError: false,
         );
   }
 
   /// `false` nếu không lấy được vị trí ban đầu.
 
-  Future<bool> _initCurrentPosition() async {
+  Future<bool> _initCurrentPosition({bool enableBarometer = false}) async {
     try {
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.best,
-        ),
+      final event = await GpsNativeService.getCurrentLocation(
+        enableBarometer: enableBarometer,
       );
-
-      _ingestPosition(pos);
-
+      if (event == null) return false;
+      _ingestPosition(event.position);
+      if (_trackBarometer) {
+        _applyBarometricAltitude(event.barometricAltitude);
+      }
       return true;
     } catch (_) {
       return false;
     }
   }
 
-  /// `true` khi [onSample] yêu cầu dừng watch.
-
-  bool _emitFromGps(DeviceLocationOnSample onSample) {
-    final pos = _lastPosition;
-
-    if (_stopped || pos == null) return false;
-
-    return onSample(_buildSample(pos));
+  void _applyBarometricAltitude(double? altitude) {
+    if (altitude != null && altitude.isFinite) {
+      _barometricAltitude = altitude;
+    }
   }
 
   /// `true` khi [onSample] yêu cầu dừng watch.
 
-  bool _emitFromBarometer(DeviceLocationOnSample onSample) {
+  bool _emitSample(DeviceLocationOnSample onSample) {
     final pos = _lastPosition;
 
     if (_stopped || pos == null) return false;
@@ -341,18 +348,212 @@ class DeviceLocationWatch {
 
     await _positionSub?.cancel();
 
-    await _baroSub?.cancel();
-
     _positionSub = null;
-
-    _baroSub = null;
 
     _lastPosition = null;
 
     _smoothBuffer.clear();
 
     _barometricAltitude = null;
+    _trackBarometer = false;
+  }
+}
 
-    _barometerSupported = false;
+/// GPS + barometer theo thời gian thực cho UI (đọc một lần rồi stream).
+///
+/// Chỉ gọi [onChanged] khi tọa độ/độ cao/busy/message đủ thay đổi để vẽ lại.
+class LiveDeviceLocationTracker {
+  LiveDeviceLocationTracker._(
+    this._barometerSupported, {
+    required VoidCallback onChanged,
+    bool Function()? isActive,
+    this.gpsUiMoveThresholdM = 1.0,
+    this.altitudeUiChangeThresholdM = 0.5,
+  }) : _onChanged = onChanged,
+       _isActive = isActive ?? (() => true);
+
+  static Future<LiveDeviceLocationTracker> create({
+    required VoidCallback onChanged,
+    bool Function()? isActive,
+    double gpsUiMoveThresholdM = 1.0,
+    double altitudeUiChangeThresholdM = 0.5,
+  }) async {
+    final supported = await isBarometerSupported();
+    return LiveDeviceLocationTracker._(
+      supported,
+      onChanged: onChanged,
+      isActive: isActive,
+      gpsUiMoveThresholdM: gpsUiMoveThresholdM,
+      altitudeUiChangeThresholdM: altitudeUiChangeThresholdM,
+    );
+  }
+
+  final bool _barometerSupported;
+  final VoidCallback _onChanged;
+  final bool Function() _isActive;
+  final double gpsUiMoveThresholdM;
+  final double altitudeUiChangeThresholdM;
+
+  bool get barometerSupported => _barometerSupported;
+
+  bool busy = false;
+  Position? position;
+  String? messageKey;
+  double? barometricAltitude;
+
+  int _generation = 0;
+  StreamSubscription<NativeGpsEvent>? _positionStreamSub;
+  Position? _streamAnchor;
+  bool _nativeBaroEnabled = false;
+
+  double? altitudeForDisplay(Position pos) {
+    return resolveAltitudeMeters(
+      barometricMeters: barometerSupported ? barometricAltitude : null,
+      gpsMeters: pos.altitude,
+    );
+  }
+
+  /// Cập nhật sau khi gán tọa độ điểm (đọc GPS một lần từ ngoài).
+  void applyGpsReading({
+    required Position position,
+    double? freshBarometricAltitude,
+  }) {
+    this.position = position;
+    messageKey = null;
+    _streamAnchor = position;
+    if (freshBarometricAltitude != null) {
+      barometricAltitude = freshBarometricAltitude;
+    }
+    _notify();
+  }
+
+  /// Lấy vị trí ngay, sau đó stream lat/lng; độ cao: barometer nếu có, không thì GPS.
+  Future<void> start({bool userInitiated = false}) async {
+    final generation = ++_generation;
+
+    await _positionStreamSub?.cancel();
+    _positionStreamSub = null;
+    _streamAnchor = null;
+    barometricAltitude = null;
+
+    if (!_isActive() || generation != _generation) return;
+    busy = true;
+    if (userInitiated) messageKey = null;
+    _notify();
+    _nativeBaroEnabled = barometerSupported && GpsNativeService.isSupported;
+    final streamOpts = GpsNativeStreamOptions(
+      enableBarometer: _nativeBaroEnabled,
+    );
+
+    final event = await GpsNativeService.getCurrentLocation(
+      enableBarometer: _nativeBaroEnabled,
+    );
+    if (!_isActive() || generation != _generation) return;
+    if (event == null) {
+      busy = false;
+      position = null;
+      messageKey = 'service';
+      _notify();
+      return;
+    }
+
+    position = event.position;
+    if (position == null) {
+      busy = false;
+      messageKey = 'service';
+      _notify();
+      return;
+    }
+    if (event.barometricAltitude != null) {
+      barometricAltitude = event.barometricAltitude;
+    }
+    _streamAnchor = event.position;
+    messageKey = null;
+    busy = false;
+    _notify();
+    _startPositionStream(generation, streamOpts);
+  }
+
+  void _startPositionStream(int generation, GpsNativeStreamOptions streamOpts) {
+    if (_positionStreamSub != null) return;
+
+    _positionStreamSub =
+        _deviceLocationEventStream(nativeStreamOptions: streamOpts).listen(
+          (event) => _onLocationEventUpdate(event, generation),
+          onError: (Object error, StackTrace stack) {
+            assert(() {
+              debugPrint(
+                'LiveDeviceLocationTracker position stream error: $error',
+              );
+              return true;
+            }());
+            if (!_isActive() || generation != _generation) return;
+            messageKey = 'error';
+            _notify();
+          },
+          cancelOnError: false,
+        );
+  }
+
+  Future<void> dispose() async {
+    ++_generation;
+    await _positionStreamSub?.cancel();
+    _positionStreamSub = null;
+    _streamAnchor = null;
+    _nativeBaroEnabled = false;
+  }
+
+  void _onLocationEventUpdate(NativeGpsEvent event, int generation) {
+    if (!_isActive() || generation != _generation) return;
+    final anchorBefore = _streamAnchor;
+    final baroBefore = barometricAltitude;
+    final baro = event.barometricAltitude;
+    if (baro != null && baro.isFinite) {
+      final prev = barometricAltitude;
+      if (prev == null || (baro - prev).abs() >= altitudeUiChangeThresholdM) {
+        barometricAltitude = baro;
+      }
+    }
+    _onPositionStreamUpdate(event.position, generation);
+    if (_nativeBaroEnabled &&
+        barometricAltitude != baroBefore &&
+        _streamAnchor == anchorBefore) {
+      _notify();
+    }
+  }
+
+  void _onPositionStreamUpdate(Position pos, int generation) {
+    if (!_isActive() || generation != _generation) return;
+    final anchor = _streamAnchor ?? position;
+    if (anchor != null) {
+      final moved = Geolocator.distanceBetween(
+        anchor.latitude,
+        anchor.longitude,
+        pos.latitude,
+        pos.longitude,
+      );
+      final acc = pos.accuracy;
+      final anchorAcc = anchor.accuracy;
+      final betterFix =
+          acc.isFinite &&
+          anchorAcc.isFinite &&
+          acc > 0 &&
+          anchorAcc > 0 &&
+          acc < anchorAcc - 2;
+      final altDelta = pos.altitude.isFinite && anchor.altitude.isFinite
+          ? (pos.altitude - anchor.altitude).abs()
+          : 0.0;
+      final altChanged =
+          !barometerSupported && altDelta >= altitudeUiChangeThresholdM;
+      if (moved < gpsUiMoveThresholdM && !betterFix && !altChanged) return;
+    }
+    _streamAnchor = pos;
+    position = pos;
+    messageKey = null;
+    _notify();
+  }
+
+  void _notify() {
+    if (_isActive()) _onChanged();
   }
 }

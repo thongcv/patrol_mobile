@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -12,8 +11,8 @@ import '../../models/check_point.dart';
 import '../../models/patrol_round.dart';
 import '../../services/patrol_log_service.dart';
 import '../../services/patrol_round_service.dart';
-import '../../utils/api_media_url.dart';
 import '../../utils/check_point_proximity.dart';
+import '../../utils/api_image_preview.dart';
 import '../../utils/device_location.dart';
 import 'patrol_shell.dart';
 
@@ -260,7 +259,8 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     if (!mounted) return;
 
     final needsBaroValidation = point.baroAltitude != null;
-    final watch = DeviceLocationWatch();
+    final watch = await DeviceLocationWatch.create();
+    if (!mounted) return;
     _qrLocationWatch = watch;
 
     unawaited(
@@ -1338,8 +1338,7 @@ class _RoutePointCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final qrUrl = resolveApiMediaUrl(point.qrImage);
-    final qrPreview = _checkPointQrPreview(qrUrl, size: 56);
+    final qrPreview = apiImagePreview(point.qrImage, size: 56);
     final hasNfc = point.nfc != null && point.nfc!.trim().isNotEmpty;
     final isScanned = scanned || point.verified == true;
 
@@ -1425,7 +1424,7 @@ class _RoutePointCard extends StatelessWidget {
                     ? const Color(0xFF34D399)
                     : Colors.white54,
               ),
-              if (qrUrl != null)
+              if (point.qrImage != null && point.qrImage!.trim().isNotEmpty)
                 _FeatureChip(
                   theme: theme,
                   label: l10n.patrolRoundChipQr,
@@ -1740,65 +1739,5 @@ String _formatIsoDateTime(String? iso, Locale locale) {
     return '$dd/$mm/$yyyy $hh:$min';
   } catch (_) {
     return t;
-  }
-}
-
-Widget? _checkPointQrPreview(String? qrImage, {double size = 88}) {
-  final raw = qrImage?.trim();
-  if (raw == null || raw.isEmpty) return null;
-
-  Widget framed(Widget child) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        width: size,
-        height: size,
-        color: Colors.white,
-        alignment: Alignment.center,
-        child: child,
-      ),
-    );
-  }
-
-  if (raw.startsWith('http://') || raw.startsWith('https://')) {
-    return framed(
-      Image.network(
-        raw,
-        width: size,
-        height: size,
-        fit: BoxFit.contain,
-        errorBuilder: (_, _, _) => Icon(
-          Icons.broken_image_outlined,
-          size: size * 0.35,
-          color: Colors.black38,
-        ),
-      ),
-    );
-  }
-
-  String? b64Payload;
-  if (raw.startsWith('data:image')) {
-    final comma = raw.indexOf(',');
-    if (comma != -1) {
-      b64Payload = raw.substring(comma + 1);
-    }
-  } else {
-    b64Payload = raw;
-  }
-
-  if (b64Payload == null || b64Payload.isEmpty) return null;
-
-  try {
-    final bytes = base64Decode(b64Payload.replaceAll(RegExp(r'\s'), ''));
-    return framed(
-      Image.memory(
-        bytes,
-        width: size,
-        height: size,
-        fit: BoxFit.contain,
-      ),
-    );
-  } catch (_) {
-    return null;
   }
 }
