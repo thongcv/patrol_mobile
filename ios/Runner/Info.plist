@@ -7,7 +7,7 @@
 	<key>NSMotionUsageDescription</key>
 	<string>SPS Patrol cần quyền cảm biến chuyển động (theo yêu cầu iOS) để đọc barometer và ghi nhận độ cao khi cập nhật điểm tuần tra.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>SPS Patrol cần quyền camera để chụp ảnh khi quét điểm tuần tra.</string>
+	<string>SPS Patrol cần quyền camera để quét mã QR và chụp ảnh khi tuần tra.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

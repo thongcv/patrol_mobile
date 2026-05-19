@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,12 +10,35 @@ import '../../l10n/app_localizations.dart';
 import '../../models/active_patrol_round.dart';
 import '../../models/check_point.dart';
 import '../../models/patrol_round.dart';
+import '../../services/check_point_service.dart';
 import '../../services/patrol_log_service.dart';
 import '../../services/patrol_round_service.dart';
 import '../../utils/check_point_proximity.dart';
 import '../../utils/api_image_preview.dart';
 import '../../utils/device_location.dart';
+import '../../utils/patrol_datetime_format.dart';
+import '../../widgets/qr_code_scanner_page.dart';
 import 'patrol_shell.dart';
+
+/// Kích thước preview / nút QR trên thẻ điểm và thẻ vòng tuần tra.
+const double kPatrolQrPreviewSize = 64;
+
+/// Cách chọn checkpoint khi nhiều mốc có thể khớp GPS.
+enum CheckPointMatchOrder {
+  /// Chỉ mốc [points.first] (đã sort `sequenceOrder`); khớp mới trả về.
+  sequenceOrder,
+
+  /// Trong các mốc khớp, chọn khoảng cách ngang nhỏ nhất.
+  nearest,
+}
+
+/// Kết quả quét proximity: mốc khớp để gửi log và/hoặc feedback UI.
+class _CheckPointProximityScan {
+  const _CheckPointProximityScan({this.matched, this.feedback});
+
+  final CheckPoint? matched;
+  final CheckPointProximityEvaluation? feedback;
+}
 
 /// Tuần tra — `link`: `patrol-round`.
 /// GET `/api/patrol-rounds/me/active`.
@@ -39,11 +63,16 @@ class PatrolRoundScreen extends StatefulWidget {
 class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   ActivePatrolRound? _active;
   bool _loading = true;
+  bool _refreshing = false;
   ApiFailure? _failure;
   final Set<int> _scannedCheckpointIds = {};
+  /// Tăng sau mỗi lần GET active thành công — ép rebuild list / QR preview.
+  int _reloadToken = 0;
   int? _scanningCheckpointId;
   DeviceLocationWatch? _qrLocationWatch;
   bool _qrScanSubmitting = false;
+  bool _autoScanActive = false;
+  ValueNotifier<_QrScanProximityStatus>? _autoScanStatusNotifier;
 
   @override
   void initState() {
@@ -64,11 +93,52 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
   Future<void> _cancelQrScanWait() async {
     await _stopQrLocationWatch();
+    _autoScanStatusNotifier?.dispose();
+    _autoScanStatusNotifier = null;
     if (!mounted) return;
+    if (_autoScanActive && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+    setState(() {
+      _scanningCheckpointId = null;
+      _qrScanSubmitting = false;
+      _autoScanActive = false;
+    });
+  }
+
+  Future<void> _finishAutoScanSession({String? message}) async {
+    await _stopQrLocationWatch();
+    _autoScanStatusNotifier?.dispose();
+    _autoScanStatusNotifier = null;
+    if (!mounted) return;
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+    setState(() {
+      _scanningCheckpointId = null;
+      _qrScanSubmitting = false;
+      _autoScanActive = false;
+    });
+    if (message != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(milliseconds: 600),
+        ),
+      );
+    }
+  }
+
+  void _resumeAutoScanAfterCheckpoint() {
+    if (!mounted || !_autoScanActive) return;
     setState(() {
       _scanningCheckpointId = null;
       _qrScanSubmitting = false;
     });
+    final l10n = AppLocalizations.of(context)!;
+    _autoScanStatusNotifier?.value = _QrScanProximityStatus(
+      headline: l10n.patrolRoundQrWaitingPosition,
+    );
   }
 
   String _gpsMessageFromKey(String? key, AppLocalizations l10n) {
@@ -76,29 +146,41 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       'service' => l10n.patrolPointGpsServiceOff,
       'denied' => l10n.patrolPointGpsDenied,
       'error' => l10n.patrolPointGpsError,
+      'unavailable' => l10n.patrolRoundQrGpsUnavailable,
       _ => l10n.patrolRoundQrGpsUnavailable,
     };
   }
 
   Future<void> _load() async {
+    final isRefresh = _active != null;
     setState(() {
-      _loading = true;
+      if (isRefresh) {
+        _refreshing = true;
+      } else {
+        _loading = true;
+      }
       _failure = null;
     });
 
     final r = await PatrolRoundService.instance.fetchMyActivePatrolRound();
+    ActivePatrolRound? active = r.ok ? r.data : null;
+    if (active != null) {
+      active = await _mergeCheckPointQrFromSite(active);
+    }
 
     if (!mounted) return;
     if (r.ok) {
       setState(() {
-        _active = r.data;
+        _applyLoadedActiveRound(active);
         _loading = false;
+        _refreshing = false;
         _failure = null;
       });
     } else {
       setState(() {
-        _active = null;
+        _applyLoadedActiveRound(null);
         _loading = false;
+        _refreshing = false;
         _failure = r.failure;
       });
       final l10n = AppLocalizations.of(context)!;
@@ -106,6 +188,65 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
         SnackBar(content: Text(_messageForFailure(r.failure!, l10n))),
       );
     }
+  }
+
+  bool _isCheckpointScanned(CheckPoint p) =>
+      p.verified == true || _scannedCheckpointIds.contains(p.id);
+
+  /// Gán [_active], đồng bộ trạng thái đã quét từ server, ép rebuild UI.
+  void _applyLoadedActiveRound(ActivePatrolRound? active) {
+    _active = active;
+    _reloadToken++;
+    if (active == null) {
+      _scannedCheckpointIds.clear();
+      return;
+    }
+    final validIds = active.checkPoints.map((p) => p.id).toSet();
+    _scannedCheckpointIds.removeWhere((id) => !validIds.contains(id));
+    for (final p in active.checkPoints) {
+      if (p.verified == true) {
+        _scannedCheckpointIds.add(p.id);
+      }
+    }
+  }
+
+  /// GET active có thể thiếu `qrImage`; bổ sung từ `/api/check-points/me/site`.
+  Future<ActivePatrolRound> _mergeCheckPointQrFromSite(
+    ActivePatrolRound active,
+  ) async {
+    final needsMerge = active.checkPoints.any((p) {
+      final q = p.qrImage?.trim();
+      if (q == null || q.isEmpty) return true;
+      return !canPreviewApiImageSource(p.qrImage);
+    });
+    if (!needsMerge) return active;
+
+    final site = await CheckPointService.instance.fetchMySiteCheckPoints();
+    if (!site.ok || site.data == null) return active;
+
+    final qrById = <int, String>{
+      for (final p in site.data!.checkPoints)
+        if (p.qrImage != null && p.qrImage!.trim().isNotEmpty) p.id: p.qrImage!,
+    };
+    if (qrById.isEmpty) return active;
+
+    final mergedPoints = active.checkPoints.map((p) {
+      final siteQr = qrById[p.id]?.trim();
+      if (siteQr == null || siteQr.isEmpty) return p;
+      final current = p.qrImage?.trim();
+      if (current != null &&
+          current.isNotEmpty &&
+          canPreviewApiImageSource(p.qrImage)) {
+        return p;
+      }
+      return p.copyWith(qrImage: siteQr);
+    }).toList();
+
+    return ActivePatrolRound(
+      schedule: active.schedule,
+      round: active.round,
+      checkPoints: mergedPoints,
+    );
   }
 
   String _messageForFailure(ApiFailure f, AppLocalizations l10n) {
@@ -128,34 +269,15 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     );
   }
 
-  Future<_QrPhotoChoice?> _confirmPhotoDialog(AppLocalizations l10n) {
-    return showDialog<_QrPhotoChoice>(
+  /// `null` = hủy; `[]` = bỏ qua ảnh; không rỗng = danh sách đường dẫn ảnh.
+  Future<List<String>?> _confirmPhotoDialog({
+    required AppLocalizations l10n,
+    required CheckPoint point,
+  }) {
+    return showDialog<List<String>>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: PatrolShellColors.surface,
-        title: Text(
-          l10n.patrolRoundQrPhotoTitle,
-          style: const TextStyle(color: Colors.white),
-        ),
-        content: Text(
-          l10n.patrolRoundQrPhotoMessage,
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.75)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(_QrPhotoChoice.cancel),
-            child: Text(l10n.patrolRoundCancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(_QrPhotoChoice.skip),
-            child: Text(l10n.patrolRoundQrPhotoSkip),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(_QrPhotoChoice.takePhoto),
-            child: Text(l10n.patrolRoundQrPhotoTake),
-          ),
-        ],
-      ),
+      barrierDismissible: false,
+      builder: (ctx) => _QrPhotoConfirmDialog(l10n: l10n, point: point),
     );
   }
 
@@ -163,7 +285,8 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     required CheckPoint point,
     required int roundId,
     required DeviceLocationSample sample,
-    String? photoPath,
+    List<String> photoPaths = const [],
+    bool resumeAutoScan = false,
   }) async {
     if (!mounted) return;
 
@@ -178,22 +301,17 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       gpsAltitude: sample.gpsAltitude,
       baroAltitude: sample.baroAltitude,
       verified: true,
-      photoPaths: photoPath != null ? [photoPath] : const [],
+      photoPaths: photoPaths,
     );
 
+    var ok = false;
     try {
       final logResult = await PatrolLogService.instance.createPatrolLog(submit);
 
       if (!mounted) return;
 
-      setState(() {
-        _scanningCheckpointId = null;
-        _qrScanSubmitting = false;
-      });
-
-      if (!mounted) return;
-
       if (logResult.ok) {
+        ok = true;
         setState(() => _scannedCheckpointIds.add(point.id));
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -210,18 +328,216 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
         );
       }
     } catch (_) {
-      await _cancelQrScanWait();
+      if (!resumeAutoScan) {
+        await _cancelQrScanWait();
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(l10n.patrolRoundQrScanFailed)),
       );
     } finally {
-      await _stopQrLocationWatch();
+      if (mounted) {
+        if (resumeAutoScan) {
+          final remaining = _active != null
+              ? _eligibleCheckPoints(_active!)
+              : <CheckPoint>[];
+          if (ok && remaining.isEmpty) {
+            await _finishAutoScanSession(
+              message: l10n.patrolRoundAutoScanComplete,
+            );
+          } else {
+            _resumeAutoScanAfterCheckpoint();
+          }
+        } else {
+          setState(() {
+            _scanningCheckpointId = null;
+            _qrScanSubmitting = false;
+            _autoScanActive = false;
+          });
+          await _stopQrLocationWatch();
+        }
+      }
     }
   }
 
-  Future<void> _onQrScan(CheckPoint point, int roundId) async {
-    if (_scanningCheckpointId != null) return;
+  List<CheckPoint> _eligibleCheckPoints(ActivePatrolRound data) {
+    final out = <CheckPoint>[];
+    for (final p in data.checkPoints) {
+      if (_isCheckpointScanned(p)) {
+        continue;
+      }
+      if (!p.hasCoordinates) continue;
+      out.add(p);
+    }
+    out.sort((a, b) => a.sequenceOrder.compareTo(b.sequenceOrder));
+    return out;
+  }
+
+  CheckPoint? _autoScanPosition(ActivePatrolRound data) {
+    final eligible = _eligibleCheckPoints(data);
+    return eligible.isEmpty ? null : eligible.first;
+  }
+
+  CheckPointProximityEvaluation _evaluatePointProximity({
+    required CheckPoint point,
+    required DeviceLocationSample sample,
+    required bool baroListening,
+  }) {
+    final pos = sample.position;
+    final validateBaro = point.baroAltitude != null && baroListening;
+    return evaluateCheckPointProximity(
+      checkpoint: point,
+      latitude: sample.latitude,
+      longitude: sample.longitude,
+      gpsAltitude: sample.gpsAltitude,
+      baroAltitude: sample.baroAltitude,
+      validateBaroAltitude: validateBaro,
+      horizontalAccuracyM: netIncrementalAccuracyM(
+        pos.accuracy,
+        point.accuracy,
+      ),
+      gpsAltitudeAccuracyM: netIncrementalAccuracyM(
+        pos.altitudeAccuracy,
+        point.altitudeAccuracy,
+      ),
+    );
+  }
+
+  _CheckPointProximityScan _scanCheckPointsProximity(
+    List<CheckPoint> points,
+    DeviceLocationSample sample,
+    bool baroListening, {
+    CheckPointMatchOrder matchOrder = CheckPointMatchOrder.sequenceOrder,
+  }) {
+    if (points.isEmpty) return const _CheckPointProximityScan();
+
+    if (matchOrder == CheckPointMatchOrder.sequenceOrder) {
+      final evaluation = _evaluatePointProximity(
+        point: points.first,
+        sample: sample,
+        baroListening: baroListening,
+      );
+      if (evaluation.result.ok) {
+        return _CheckPointProximityScan(matched: points.first);
+      }
+      return _CheckPointProximityScan(feedback: evaluation);
+    }
+
+    CheckPoint? bestMatch;
+    double? bestMatchDistanceM;
+    CheckPointProximityEvaluation? nearestFeedback;
+    double? nearestFeedbackDistanceM;
+
+    for (final point in points) {
+      final evaluation = _evaluatePointProximity(
+        point: point,
+        sample: sample,
+        baroListening: baroListening,
+      );
+      if (evaluation.result.ok) {
+        final distanceM = evaluation.snapshot?.horizontalM;
+        if (distanceM == null) {
+          bestMatch ??= point;
+          continue;
+        }
+        if (bestMatchDistanceM == null || distanceM < bestMatchDistanceM) {
+          bestMatchDistanceM = distanceM;
+          bestMatch = point;
+        }
+      } else {
+        final distanceM = evaluation.result.distanceM;
+        if (distanceM == null) continue;
+        if (nearestFeedbackDistanceM == null ||
+            distanceM < nearestFeedbackDistanceM) {
+          nearestFeedbackDistanceM = distanceM;
+          nearestFeedback = evaluation;
+        }
+      }
+    }
+
+    if (bestMatch != null) {
+      return _CheckPointProximityScan(matched: bestMatch);
+    }
+    return _CheckPointProximityScan(feedback: nearestFeedback);
+  }
+
+  Future<void> _completeAutoScanAfterMatch({
+    required CheckPoint point,
+    required int roundId,
+    required DeviceLocationSample sample,
+  }) async {
+    if (!mounted) {
+      await _cancelQrScanWait();
+      return;
+    }
+
+    final l10n = AppLocalizations.of(context)!;
+    final photoPaths = await _confirmPhotoDialog(l10n: l10n, point: point);
+    if (!mounted) {
+      await _cancelQrScanWait();
+      return;
+    }
+    if (photoPaths == null) {
+      await _cancelQrScanWait();
+      return;
+    }
+
+    if (!mounted) {
+      _resumeAutoScanAfterCheckpoint();
+      return;
+    }
+    setState(() => _scanningCheckpointId = point.id);
+
+    await _submitPatrolLogAfterProximity(
+      point: point,
+      roundId: roundId,
+      sample: sample,
+      photoPaths: photoPaths,
+      resumeAutoScan: true,
+    );
+  }
+
+  /// Chuẩn hóa payload QR và khớp `CheckPoint.code` trên tuyến hiện tại.
+  CheckPoint? _findCheckPointByQrCode(List<CheckPoint> points, String raw) {
+    var payload = raw.trim();
+    if (payload.isEmpty) return null;
+    for (final p in points) {
+      if (p.code.trim() == payload) return p;
+    }
+    return null;
+  }
+
+  Future<void> _onRoundQrScan(ActivePatrolRound data) async {
+    if (_scanningCheckpointId != null || _autoScanActive) return;
+
+    final l10n = AppLocalizations.of(context)!;
+    final payload = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => QrCodeScannerPage(l10n: l10n),
+      ),
+    );
+    if (!mounted || payload == null || payload.trim().isEmpty) return;
+
+    final point = _findCheckPointByQrCode(data.checkPoints, payload);
+    if (point == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolRoundQrNotFound)),
+      );
+      return;
+    }
+    if (_isCheckpointScanned(point)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolRoundQrAlreadyScanned)),
+      );
+      return;
+    }
+
+    await _onQrScanCheckpoint(point, data.round.id);
+  }
+
+  /// Sau khi quét QR khớp điểm: xác nhận GPS, popup ảnh, gửi patrol log.
+  Future<void> _onQrScanCheckpoint(CheckPoint point, int roundId) async {
+    if (_scanningCheckpointId != null || _autoScanActive) return;
 
     final l10n = AppLocalizations.of(context)!;
 
@@ -232,20 +548,8 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       return;
     }
 
-    final photoChoice = await _confirmPhotoDialog(l10n);
-    if (!mounted || photoChoice == null) return;
-    if (photoChoice == _QrPhotoChoice.cancel) return;
-
-    String? photoPath;
-    if (photoChoice == _QrPhotoChoice.takePhoto) {
-      final picker = ImagePicker();
-      final file = await picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 85,
-      );
-      if (!mounted) return;
-      photoPath = file?.path;
-    }
+    final photoPaths = await _confirmPhotoDialog(l10n: l10n, point: point);
+    if (!mounted || photoPaths == null) return;
 
     setState(() {
       _scanningCheckpointId = point.id;
@@ -259,6 +563,182 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     if (!mounted) return;
 
     final needsBaroValidation = point.baroAltitude != null;
+    final watch = await DeviceLocationWatch.create();
+    if (!mounted) return;
+    _qrLocationWatch = watch;
+
+    unawaited(
+      showModalBottomSheet<void>(
+        context: context,
+        isDismissible: false,
+        enableDrag: false,
+        backgroundColor: Colors.transparent,
+        builder: (sheetContext) {
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              12,
+              16,
+              16 + MediaQuery.paddingOf(sheetContext).bottom,
+            ),
+            child: Material(
+              color: PatrolShellColors.surface,
+              borderRadius: BorderRadius.circular(20),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ValueListenableBuilder<_QrScanProximityStatus>(
+                      valueListenable: statusNotifier,
+                      builder: (_, status, _) {
+                        final bodyStyle = Theme.of(sheetContext)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.88),
+                              height: 1.45,
+                            );
+                        final detail = status.snapshot;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              status.headline,
+                              textAlign: TextAlign.center,
+                              style: bodyStyle,
+                            ),
+                            if (detail != null) ...[
+                              const SizedBox(height: 14),
+                              _QrProximityDetailPanel(
+                                l10n: l10n,
+                                snapshot: detail,
+                                baroPending: status.baroPending,
+                              ),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    const Center(
+                      child: SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Color(0xFF34D399),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(sheetContext).pop();
+                        unawaited(_cancelQrScanWait());
+                      },
+                      child: Text(l10n.patrolRoundCancel),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ).whenComplete(() {
+        statusNotifier.dispose();
+        if (_scanningCheckpointId == point.id && !_qrScanSubmitting) {
+          unawaited(_cancelQrScanWait());
+        }
+      }),
+    );
+
+    final gpsError = await watch.start(
+      enableBarometer: needsBaroValidation,
+      onSample: (sample) {
+        if (!mounted || _qrScanSubmitting || _autoScanActive) {
+          return false;
+        }
+
+        final evaluation = _evaluatePointProximity(
+          point: point,
+          sample: sample,
+          baroListening: watch.barometerListening,
+        );
+
+        if (!evaluation.result.ok) {
+          statusNotifier.value = _qrScanProximityStatus(
+            l10n: l10n,
+            proximity: evaluation.result,
+            snapshot: evaluation.snapshot,
+          );
+          return false;
+        }
+
+        _qrScanSubmitting = true;
+        statusNotifier.value = _QrScanProximityStatus(
+          headline: l10n.patrolRoundQrPositionOkSaving,
+        );
+        unawaited(watch.stop());
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+        unawaited(
+          _submitPatrolLogAfterProximity(
+            point: point,
+            roundId: roundId,
+            sample: sample,
+            photoPaths: photoPaths,
+          ),
+        );
+        return false;
+      },
+    );
+
+    if (!mounted) return;
+
+    if (gpsError != null) {
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      await _cancelQrScanWait();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_gpsMessageFromKey(gpsError, l10n))),
+      );
+    }
+  }
+
+  Future<void> _onAutoScanPosition(ActivePatrolRound data) async {
+    if (_scanningCheckpointId != null || _autoScanActive) return;
+
+    final l10n = AppLocalizations.of(context)!;
+    final eligible = _eligibleCheckPoints(data);
+    if (eligible.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolRoundAutoScanNone)),
+      );
+      return;
+    }
+
+    final roundId = data.round.id;
+
+    setState(() {
+      _autoScanActive = true;
+      _qrScanSubmitting = false;
+    });
+
+    final statusNotifier = ValueNotifier<_QrScanProximityStatus>(
+      _QrScanProximityStatus(headline: l10n.patrolRoundQrWaitingPosition),
+    );
+    _autoScanStatusNotifier = statusNotifier;
+
+    if (!mounted) return;
+
+    final needsBaroValidation =
+        eligible.any((p) => p.baroAltitude != null);
     final watch = await DeviceLocationWatch.create();
     if (!mounted) return;
     _qrLocationWatch = watch;
@@ -344,8 +824,11 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
           );
         },
       ).whenComplete(() {
-        statusNotifier.dispose();
-        if (_scanningCheckpointId == point.id && !_qrScanSubmitting) {
+        if (_autoScanStatusNotifier == statusNotifier) {
+          _autoScanStatusNotifier = null;
+          statusNotifier.dispose();
+        }
+        if (_autoScanActive && !_qrScanSubmitting) {
           unawaited(_cancelQrScanWait());
         }
       }),
@@ -354,52 +837,56 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     final gpsError = await watch.start(
       enableBarometer: needsBaroValidation,
       onSample: (sample) {
-        if (!mounted || _qrScanSubmitting) return false;
+        if (!mounted || !_autoScanActive || _qrScanSubmitting) {
+          return false;
+        }
 
-        final pos = sample.position;
-        final validateBaro = needsBaroValidation && watch.barometerListening;
+        final active = _active;
+        if (active == null) return false;
 
-        final horizontalAccuracy = pos.accuracy;
-        final gpsAltitudeAccuracy = pos.altitudeAccuracy;
-        final evaluation = evaluateCheckPointProximity(
-          checkpoint: point,
-          latitude: sample.latitude,
-          longitude: sample.longitude,
-          gpsAltitude: sample.gpsAltitude,
-          baroAltitude: sample.baroAltitude,
-          validateBaroAltitude: validateBaro,
-          horizontalAccuracyM: netIncrementalAccuracyM(
-            horizontalAccuracy,
-            point.accuracy,
-          ),
-          gpsAltitudeAccuracyM: netIncrementalAccuracyM(
-            gpsAltitudeAccuracy,
-            point.altitudeAccuracy,
-          ),
-        );
-
-        if (!evaluation.result.ok) {
-          statusNotifier.value = _qrScanProximityStatus(
-            l10n: l10n,
-            proximity: evaluation.result,
-            snapshot: evaluation.snapshot,
+        final pending = _eligibleCheckPoints(active);
+        if (pending.isEmpty) {
+          unawaited(
+            _finishAutoScanSession(
+              message: l10n.patrolRoundAutoScanComplete,
+            ),
           );
           return false;
         }
 
-        _qrScanSubmitting = true;
-        if (mounted && Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
+        final validateBaro = needsBaroValidation && watch.barometerListening;
+        const matchOrder = CheckPointMatchOrder.sequenceOrder;
+        final scan = _scanCheckPointsProximity(
+          pending,
+          sample,
+          validateBaro,
+          matchOrder: matchOrder,
+        );
+
+        if (scan.matched == null) {
+          final feedback = scan.feedback;
+          if (feedback != null) {
+            statusNotifier.value = _qrScanProximityStatus(
+              l10n: l10n,
+              proximity: feedback.result,
+              snapshot: feedback.snapshot,
+            );
+          }
+          return false;
         }
+
+        _qrScanSubmitting = true;
+        statusNotifier.value = _QrScanProximityStatus(
+          headline: l10n.patrolRoundQrPositionOkSaving,
+        );
         unawaited(
-          _submitPatrolLogAfterProximity(
-            point: point,
+          _completeAutoScanAfterMatch(
+            point: scan.matched!,
             roundId: roundId,
             sample: sample,
-            photoPath: photoPath,
           ),
         );
-        return true;
+        return false;
       },
     );
 
@@ -493,12 +980,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
                                   loading: _loading,
                                   failure: _failure,
                                   data: _active,
-                                  onReload: () async {
-                                    await _load();
-                                    if (modalContext.mounted) {
-                                      setSheetState(() {});
-                                    }
-                                  },
                                   failureMessage: _failure != null
                                       ? _messageForFailure(
                                           _failure!,
@@ -654,16 +1135,28 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
               ),
             ),
           ],
-          if (!_loading && _failure == null && data != null) ...[
+          if (_failure == null && data != null) ...[
             const SizedBox(height: 12),
             _RoundCard(
+              key: ValueKey(
+                'round-${data.round.id}-${data.round.status}-$_reloadToken',
+              ),
               theme: theme,
               l10n: l10n,
               round: data.round,
               statusLabel: _statusLabel(data.round.status, l10n),
               statusColor: _statusColor(data.round.status),
-              locale: widget.locale,
+              loading: _refreshing,
+              onReload: _load,
+              qrScanBusy: _scanningCheckpointId != null || _autoScanActive,
+              onQrScan: () => unawaited(_onRoundQrScan(data)),
+              autoScanBusy: _scanningCheckpointId != null || _autoScanActive,
+              onAutoScan: _autoScanPosition(data) != null
+                  ? () => unawaited(_onAutoScanPosition(data))
+                  : null,
             ),
+          ],
+          if (!_loading && _failure == null && data != null) ...[
             const SizedBox(height: 20),
             Text(
               l10n.patrolRoundRouteHeading,
@@ -684,16 +1177,17 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
             else
               ...data.checkPoints.map(
                 (p) => Padding(
+                  key: ValueKey(
+                    'route-${p.id}-${p.verified}-${p.updatedDate}-$_reloadToken',
+                  ),
                   padding: const EdgeInsets.only(bottom: 10),
                   child: _RoutePointCard(
                     theme: theme,
                     l10n: l10n,
                     point: p,
-                    scanned: _scannedCheckpointIds.contains(p.id),
+                    scanned: _isCheckpointScanned(p),
                     qrBusy: _scanningCheckpointId == p.id,
-                    onQrTap: p.qrImage != null && p.qrImage!.trim().isNotEmpty
-                        ? () => unawaited(_onQrScan(p, data.round.id))
-                        : null,
+                    imageReloadToken: _reloadToken,
                   ),
                 ),
               ),
@@ -753,7 +1247,6 @@ class _ScheduleCard extends StatelessWidget {
     required this.l10n,
     required this.loading,
     required this.data,
-    required this.onReload,
     this.failure,
     this.failureMessage,
   });
@@ -764,7 +1257,6 @@ class _ScheduleCard extends StatelessWidget {
   final ActivePatrolRound? data;
   final ApiFailure? failure;
   final String? failureMessage;
-  final VoidCallback onReload;
 
   @override
   Widget build(BuildContext context) {
@@ -780,10 +1272,10 @@ class _ScheduleCard extends StatelessWidget {
         0;
 
     final window = schedule != null
-        ? _formatShiftWindow(schedule.startTime, schedule.endTime)
+        ? formatShiftWindow(schedule.startTime, schedule.endTime)
         : null;
     final effective = schedule != null
-        ? _formatEffectiveRange(
+        ? formatEffectiveDateRange(
             schedule.startEffectiveDate,
             schedule.endEffectiveDate,
           )
@@ -831,32 +1323,6 @@ class _ScheduleCard extends StatelessWidget {
                       : Colors.white54,
                   filled: schedule.active,
                 ),
-              const SizedBox(width: 4),
-              IconButton.filledTonal(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 40,
-                  minHeight: 40,
-                ),
-                onPressed: loading ? null : onReload,
-                style: IconButton.styleFrom(
-                  backgroundColor:
-                      const Color(0xFF34D399).withValues(alpha: 0.18),
-                  foregroundColor: const Color(0xFF34D399),
-                ),
-                tooltip: l10n.patrolRoundReload,
-                icon: loading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Color(0xFF34D399),
-                        ),
-                      )
-                    : const Icon(Icons.refresh_rounded, size: 22),
-              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -981,12 +1447,18 @@ class _ScheduleCard extends StatelessWidget {
 
 class _RoundCard extends StatelessWidget {
   const _RoundCard({
+    super.key,
     required this.theme,
     required this.l10n,
     required this.round,
     required this.statusLabel,
     required this.statusColor,
-    required this.locale,
+    required this.loading,
+    required this.onReload,
+    this.qrScanBusy = false,
+    this.onQrScan,
+    this.autoScanBusy = false,
+    this.onAutoScan,
   });
 
   final TextTheme theme;
@@ -994,7 +1466,12 @@ class _RoundCard extends StatelessWidget {
   final PatrolRound round;
   final String statusLabel;
   final Color statusColor;
-  final Locale locale;
+  final bool loading;
+  final VoidCallback onReload;
+  final bool qrScanBusy;
+  final VoidCallback? onQrScan;
+  final bool autoScanBusy;
+  final VoidCallback? onAutoScan;
 
   @override
   Widget build(BuildContext context) {
@@ -1050,6 +1527,43 @@ class _RoundCard extends StatelessWidget {
                 color: statusColor,
                 filled: true,
               ),
+              const SizedBox(width: 4),
+              IconButton.filledTonal(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 40,
+                  minHeight: 40,
+                ),
+                onPressed: loading ? null : onReload,
+                style: IconButton.styleFrom(
+                  backgroundColor:
+                      const Color(0xFF34D399).withValues(alpha: 0.18),
+                  foregroundColor: const Color(0xFF34D399),
+                ),
+                tooltip: l10n.patrolRoundReload,
+                icon: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Icon(
+                      Icons.refresh_rounded,
+                      size: 22,
+                      color: loading
+                          ? const Color(0xFF34D399).withValues(alpha: 0.35)
+                          : const Color(0xFF34D399),
+                    ),
+                    if (loading)
+                      const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF34D399),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -1057,30 +1571,78 @@ class _RoundCard extends StatelessWidget {
             theme: theme,
             icon: Icons.play_circle_outline_rounded,
             label: l10n.patrolRoundExpectedStart,
-            value: _formatIsoDateTime(round.expectedStartTime, locale),
+            value: formatPatrolIsoDateTime(round.expectedStartTime),
           ),
           const SizedBox(height: 8),
           _InfoRow(
             theme: theme,
             icon: Icons.stop_circle_outlined,
             label: l10n.patrolRoundExpectedEnd,
-            value: _formatIsoDateTime(round.expectedEndTime, locale),
+            value: formatPatrolIsoDateTime(round.expectedEndTime),
           ),
-          if (_isPatrolRoundOverdue(round)) ...[
-            const SizedBox(height: 8),
+          if (onQrScan != null || onAutoScan != null) ...[
+            const SizedBox(height: 10),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Icon(
-                  Icons.warning_amber_rounded,
-                  size: 18,
-                  color: Color(0xFFEF4444),
-                ),
-                const SizedBox(width: 8),
-                _StatusChip(
-                  label: l10n.patrolRoundOverdue,
-                  color: const Color(0xFFEF4444),
-                  filled: true,
-                ),
+                if (onAutoScan != null)
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: autoScanBusy ? null : onAutoScan,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            autoScanBusy
+                                ? Icons.hourglass_top_rounded
+                                : Icons.auto_mode_rounded,
+                            size: 18,
+                            color: const Color(0xFF34D399),
+                          ),
+                          const SizedBox(width: 8),
+                          _StatusChip(
+                            label: l10n.patrolRoundAutoScan,
+                            color: const Color(0xFF34D399),
+                            filled: true,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (onQrScan != null) ...[
+                  const SizedBox(width: 8),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: qrScanBusy ? null : onQrScan,
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        width: kPatrolQrPreviewSize,
+                        height: kPatrolQrPreviewSize,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF34D399).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFF34D399)
+                                .withValues(alpha: 0.45),
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: Icon(
+                          qrScanBusy
+                              ? Icons.hourglass_top_rounded
+                              : Icons.qr_code_scanner_rounded,
+                          size: 36,
+                          color: qrScanBusy
+                              ? const Color(0xFF34D399).withValues(alpha: 0.45)
+                              : const Color(0xFF34D399),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ],
@@ -1099,7 +1661,311 @@ class _RoundCard extends StatelessWidget {
   }
 }
 
-enum _QrPhotoChoice { cancel, skip, takePhoto }
+/// Popup chụp ảnh sau khi khớp điểm tuần tra (GPS / quét).
+class _QrPhotoConfirmDialog extends StatefulWidget {
+  const _QrPhotoConfirmDialog({
+    required this.l10n,
+    required this.point,
+  });
+
+  final AppLocalizations l10n;
+  final CheckPoint point;
+
+  @override
+  State<_QrPhotoConfirmDialog> createState() => _QrPhotoConfirmDialogState();
+}
+
+class _QrPhotoConfirmDialogState extends State<_QrPhotoConfirmDialog> {
+  static const Color _success = Color(0xFF34D399);
+  static const int _imageQuality = 85;
+
+  final _photos = <String>[];
+  final _picker = ImagePicker();
+  bool _capturing = false;
+
+  AppLocalizations get l10n => widget.l10n;
+  CheckPoint get point => widget.point;
+
+  Future<void> _takePhoto() async {
+    if (_capturing) return;
+    setState(() => _capturing = true);
+    try {
+      final file = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: _imageQuality,
+      );
+      if (!mounted || file == null) return;
+      setState(() => _photos.add(file.path));
+    } finally {
+      if (mounted) setState(() => _capturing = false);
+    }
+  }
+
+  void _removePhoto(int index) {
+    setState(() => _photos.removeAt(index));
+  }
+
+  void _popWithPhotos() {
+    Navigator.of(context).pop(List<String>.from(_photos));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context).textTheme;
+    final hasPhotos = _photos.isNotEmpty;
+
+    return Dialog(
+      backgroundColor: PatrolShellColors.surface,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 22),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _success.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _success.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.check_circle_rounded,
+                    color: _success,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.patrolRoundQrScanSuccess,
+                        style: theme.titleMedium?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          height: 1.25,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        l10n.patrolRoundQrPhotoTitle,
+                        style: theme.bodySmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.55),
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              decoration: BoxDecoration(
+                color: PatrolShellColors.surfaceElevated.withValues(alpha: 0.45),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.08),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _success.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${point.sequenceOrder}',
+                      style: theme.labelLarge?.copyWith(
+                        color: const Color(0xFF6EE7B7),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      point.name,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.titleSmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        height: 1.25,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              l10n.patrolRoundQrPhotoMessage,
+              style: theme.bodySmall?.copyWith(
+                color: Colors.white.withValues(alpha: 0.6),
+                height: 1.35,
+              ),
+            ),
+            if (hasPhotos) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 76,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _photos.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final path = _photos[index];
+                    return Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.file(
+                            File(path),
+                            width: 76,
+                            height: 76,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => Container(
+                              width: 76,
+                              height: 76,
+                              color: PatrolShellColors.surfaceElevated,
+                              alignment: Alignment.center,
+                              child: const Icon(
+                                Icons.broken_image_outlined,
+                                color: Colors.white38,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          top: -6,
+                          right: -6,
+                          child: Material(
+                            color: PatrolShellColors.background,
+                            shape: const CircleBorder(),
+                            child: IconButton(
+                              onPressed: () => _removePhoto(index),
+                              icon: const Icon(Icons.close_rounded, size: 16),
+                              color: Colors.white70,
+                              iconSize: 16,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 28,
+                                minHeight: 28,
+                              ),
+                              tooltip: l10n.patrolRoundQrPhotoRemove,
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.black54,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+            const SizedBox(height: 18),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white54,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    minimumSize: const Size(0, 44),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(l10n.patrolRoundCancel),
+                ),
+                Expanded(
+                  child: TextButton(
+                    onPressed: hasPhotos
+                        ? _popWithPhotos
+                        : () => Navigator.of(context).pop(<String>[]),
+                    style: TextButton.styleFrom(
+                      foregroundColor: PatrolShellColors.accentMuted,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 44),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      hasPhotos
+                          ? l10n.patrolRoundQrPhotoDone(_photos.length)
+                          : l10n.patrolRoundQrPhotoSkip,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        height: 1.2,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Tooltip(
+                  message: hasPhotos
+                      ? l10n.patrolRoundQrPhotoAddMore
+                      : l10n.patrolRoundQrPhotoTake,
+                  child: FilledButton(
+                    onPressed: _capturing ? null : _takePhoto,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: PatrolShellColors.accent,
+                      foregroundColor: PatrolShellColors.background,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(52, 52),
+                      maximumSize: const Size(52, 52),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: _capturing
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: PatrolShellColors.background,
+                            ),
+                          )
+                        : Icon(
+                            hasPhotos
+                                ? Icons.add_a_photo_rounded
+                                : Icons.photo_camera_rounded,
+                            size: 26,
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _QrScanProximityStatus {
   const _QrScanProximityStatus({
@@ -1326,7 +2192,7 @@ class _RoutePointCard extends StatelessWidget {
     required this.point,
     this.scanned = false,
     this.qrBusy = false,
-    this.onQrTap,
+    this.imageReloadToken = 0,
   });
 
   final TextTheme theme;
@@ -1334,11 +2200,32 @@ class _RoutePointCard extends StatelessWidget {
   final CheckPoint point;
   final bool scanned;
   final bool qrBusy;
-  final VoidCallback? onQrTap;
+  final int imageReloadToken;
 
   @override
   Widget build(BuildContext context) {
-    final qrPreview = apiImagePreview(point.qrImage, size: 56);
+    final hasQrPayload =
+        point.qrImage != null && point.qrImage!.trim().isNotEmpty;
+    final Widget? qrPreview = hasQrPayload
+        ? KeyedSubtree(
+            key: ValueKey('qr-${point.id}-$imageReloadToken-${point.qrImage}'),
+            child: apiImagePreview(point.qrImage, size: kPatrolQrPreviewSize) ??
+                Container(
+                  width: kPatrolQrPreviewSize,
+                  height: kPatrolQrPreviewSize,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.qr_code_2_rounded,
+                    size: 36,
+                    color: Colors.black.withValues(alpha: 0.35),
+                  ),
+                ),
+          )
+        : null;
     final hasNfc = point.nfc != null && point.nfc!.trim().isNotEmpty;
     final isScanned = scanned || point.verified == true;
 
@@ -1385,25 +2272,20 @@ class _RoutePointCard extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      point.name,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.titleSmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        height: 1.25,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  point.name,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.titleSmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    height: 1.25,
+                  ),
                 ),
               ),
-              if (qrPreview != null) ...[
+              if (hasQrPayload) ...[
                 const SizedBox(width: 8),
-                qrPreview,
+                qrPreview!,
               ],
             ],
           ),
@@ -1424,7 +2306,7 @@ class _RoutePointCard extends StatelessWidget {
                     ? const Color(0xFF34D399)
                     : Colors.white54,
               ),
-              if (point.qrImage != null && point.qrImage!.trim().isNotEmpty)
+              if (hasQrPayload)
                 _FeatureChip(
                   theme: theme,
                   label: l10n.patrolRoundChipQr,
@@ -1432,7 +2314,6 @@ class _RoutePointCard extends StatelessWidget {
                       ? Icons.hourglass_top_rounded
                       : Icons.qr_code_2_rounded,
                   color: const Color(0xFF6EE7B7),
-                  onTap: qrBusy ? null : onQrTap,
                 ),
               if (hasNfc)
                 _FeatureChip(
@@ -1622,18 +2503,16 @@ class _FeatureChip extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.color,
-    this.onTap,
   });
 
   final TextTheme theme;
   final String label;
   final IconData icon;
   final Color color;
-  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final child = Container(
+    return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
@@ -1655,89 +2534,6 @@ class _FeatureChip extends StatelessWidget {
         ],
       ),
     );
-
-    if (onTap == null) return child;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: child,
-      ),
-    );
   }
 }
 
-String _formatShiftWindow(String? start, String? end) {
-  final s = _trimTime(start);
-  final e = _trimTime(end);
-  if (s.isEmpty && e.isEmpty) return '—';
-  if (s.isEmpty) return e;
-  if (e.isEmpty) return s;
-  return '$s – $e';
-}
-
-String _trimTime(String? raw) {
-  final t = raw?.trim();
-  if (t == null || t.isEmpty) return '';
-  final parts = t.split(':');
-  if (parts.length >= 2) {
-    return '${parts[0]}:${parts[1]}';
-  }
-  return t;
-}
-
-String _formatEffectiveRange(String? start, String? end) {
-  final s = _formatDateOnly(start);
-  final e = _formatDateOnly(end);
-  if (s.isEmpty && e.isEmpty) return '';
-  if (s.isEmpty) return e;
-  if (e.isEmpty) return s;
-  return '$s – $e';
-}
-
-String _formatDateOnly(String? raw) {
-  final t = raw?.trim();
-  if (t == null || t.isEmpty) return '';
-  final datePart = t.contains('T') ? t.split('T').first : t;
-  final parts = datePart.split('-');
-  if (parts.length == 3) {
-    return '${parts[2]}/${parts[1]}/${parts[0]}';
-  }
-  return datePart;
-}
-
-bool _isPatrolRoundOverdue(PatrolRound round) {
-  final endIso = round.expectedEndTime?.trim();
-  if (endIso == null || endIso.isEmpty) return false;
-
-  final status = round.status.toUpperCase();
-  if (status == 'COMPLETED' ||
-      status == 'DONE' ||
-      status == 'CANCELED') {
-    return false;
-  }
-
-  try {
-    return DateTime.now().isAfter(DateTime.parse(endIso).toLocal());
-  } catch (_) {
-    return false;
-  }
-}
-
-String _formatIsoDateTime(String? iso, Locale locale) {
-  final t = iso?.trim();
-  if (t == null || t.isEmpty) return '—';
-  try {
-    final dt = DateTime.parse(t).toLocal();
-    final dd = dt.day.toString().padLeft(2, '0');
-    final mm = dt.month.toString().padLeft(2, '0');
-    final yyyy = dt.year.toString();
-    final hh = dt.hour.toString().padLeft(2, '0');
-    final min = dt.minute.toString().padLeft(2, '0');
-    return '$dd/$mm/$yyyy $hh:$min';
-  } catch (_) {
-    return t;
-  }
-}

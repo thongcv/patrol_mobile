@@ -9,8 +9,10 @@ final class SuperGpsLocationEngine: NSObject, CLLocationManagerDelegate {
     private static let fastCacheMaxAgeMs: Int64 = 120_000
     private static let currentLocMaxAgeMs: Int64 = 60_000
     private static let currentLocMaxWaitMs: Int64 = 1_500
+    private static let oneShotBestAccuracyM = 4.0
 
     private let kalman = SuperGpsKalmanFilter()
+    private let fixGate = SuperGpsFixQualityGate()
     private let barometer = SuperGpsBarometer()
     private let lock = NSLock()
 
@@ -18,6 +20,7 @@ final class SuperGpsLocationEngine: NSObject, CLLocationManagerDelegate {
     private var sinks: [FlutterEventSink] = []
     private var streamOptions = SuperGpsStreamOptions()
     private var running = false
+    private var startGeneration = 0
 
     private var pendingOneShotResult: FlutterResult?
     private var pendingStopBarometerAfterOneShot = false
@@ -69,18 +72,58 @@ final class SuperGpsLocationEngine: NSObject, CLLocationManagerDelegate {
         }
 
         let shouldRunBaro = enableBarometer && barometer.hasHardwareSupport
-        if shouldRunBaro && !barometer.isActive {
-            barometer.start()
-        }
-
         let manager = ensureLocationManager()
 
+        if shouldRunBaro {
+            if !barometer.isActive {
+                barometer.start()
+            }
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self else { return }
+                _ = self.barometer.awaitFirstReading(
+                    timeoutMs: SuperGpsBarometer.firstReadingTimeoutMs
+                )
+                DispatchQueue.main.async {
+                    self.fetchCurrentPositionGps(
+                        manager: manager,
+                        shouldRunBaro: true,
+                        result: result
+                    )
+                }
+            }
+            return
+        }
+
+        fetchCurrentPositionGps(
+            manager: manager,
+            shouldRunBaro: false,
+            result: result
+        )
+    }
+
+    private func fetchCurrentPositionGps(
+        manager: CLLocationManager,
+        shouldRunBaro: Bool,
+        result: @escaping FlutterResult
+    ) {
+        lock.lock()
+        if !running {
+            kalman.reset()
+            fixGate.reset()
+        }
+        lock.unlock()
+
         if let cached = manager.location,
-           isLocationFresh(cached, maxAgeMs: Self.fastCacheMaxAgeMs) {
+           isLocationFresh(cached, maxAgeMs: Self.fastCacheMaxAgeMs),
+           horizontalAccuracyM(cached) <= Self.oneShotBestAccuracyM,
+           let payload = buildOneShotPayloadIfAccepted(
+               cached,
+               includeBarometer: shouldRunBaro
+           ) {
             finishGetCurrentPosition(
                 stopBarometerAfter: shouldRunBaro,
                 result: result,
-                payload: buildPayload(cached, includeBarometer: shouldRunBaro)
+                payload: payload
             )
             return
         }
@@ -107,27 +150,33 @@ final class SuperGpsLocationEngine: NSObject, CLLocationManagerDelegate {
         guard let location = locations.last else { return }
 
         if let pending = takePendingOneShotResult() {
+            let best = pickBestLocation(location, manager.location) ?? location
+            let payload = buildOneShotPayloadIfAccepted(
+                best,
+                includeBarometer: pendingStopBarometerAfterOneShot
+            )
             finishGetCurrentPosition(
                 stopBarometerAfter: pendingStopBarometerAfterOneShot,
                 result: pending,
-                payload: buildPayload(location, includeBarometer: pendingStopBarometerAfterOneShot)
+                payload: payload
             )
             return
         }
 
-        emitFilteredLocation(location)
+        tryEmitLocation(location, source: .stream)
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         if let pending = takePendingOneShotResult() {
             if let cached = manager.location {
+                let payload = buildOneShotPayloadIfAccepted(
+                    cached,
+                    includeBarometer: pendingStopBarometerAfterOneShot
+                )
                 finishGetCurrentPosition(
                     stopBarometerAfter: pendingStopBarometerAfterOneShot,
                     result: pending,
-                    payload: buildPayload(
-                        cached,
-                        includeBarometer: pendingStopBarometerAfterOneShot
-                    )
+                    payload: payload
                 )
             } else {
                 if pendingStopBarometerAfterOneShot && !running {
@@ -152,18 +201,15 @@ final class SuperGpsLocationEngine: NSObject, CLLocationManagerDelegate {
     private func completeOneShotWithFallback(manager: CLLocationManager, enableBarometer: Bool) {
         guard let pending = takePendingOneShotResult() else { return }
 
-        if let cached = manager.location,
-           isLocationFresh(cached, maxAgeMs: Self.currentLocMaxAgeMs) {
-            finishGetCurrentPosition(
-                stopBarometerAfter: enableBarometer,
-                result: pending,
-                payload: buildPayload(cached, includeBarometer: enableBarometer)
+        if let cached = manager.location {
+            let payload = buildOneShotPayloadIfAccepted(
+                cached,
+                includeBarometer: enableBarometer
             )
-        } else if let cached = manager.location {
             finishGetCurrentPosition(
                 stopBarometerAfter: enableBarometer,
                 result: pending,
-                payload: buildPayload(cached, includeBarometer: enableBarometer)
+                payload: payload
             )
         } else {
             finishGetCurrentPosition(
@@ -201,11 +247,46 @@ final class SuperGpsLocationEngine: NSObject, CLLocationManagerDelegate {
 
         let manager = ensureLocationManager()
         kalman.reset()
+        fixGate.reset()
         applyStreamOptions(to: manager)
+
+        let wantBaro = streamOptions.enableBarometer && barometer.hasHardwareSupport
+        lock.lock()
+        startGeneration += 1
+        let generation = startGeneration
+        lock.unlock()
+
+        if wantBaro {
+            barometer.reset()
+            syncBarometer(with: manager.location)
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self else { return }
+                _ = self.barometer.awaitFirstReading(
+                    timeoutMs: SuperGpsBarometer.firstReadingTimeoutMs
+                )
+                DispatchQueue.main.async {
+                    self.lock.lock()
+                    defer { self.lock.unlock() }
+                    guard self.startGeneration == generation,
+                          !self.sinks.isEmpty,
+                          !self.running else {
+                        return
+                    }
+                    self.beginGpsStream(manager)
+                }
+            }
+            return
+        }
+
         syncBarometer(with: manager.location)
+        beginGpsStream(manager)
+    }
+
+    private func beginGpsStream(_ manager: CLLocationManager) {
+        guard !running else { return }
 
         if let cached = manager.location {
-            emitFilteredLocation(cached)
+            tryEmitLocation(cached, source: .seedCache)
         }
 
         manager.startUpdatingLocation()
@@ -215,6 +296,7 @@ final class SuperGpsLocationEngine: NSObject, CLLocationManagerDelegate {
     private func restartUpdates() {
         stopInternal()
         kalman.reset()
+        fixGate.reset()
         if !sinks.isEmpty {
             startUpdates()
         }
@@ -223,9 +305,14 @@ final class SuperGpsLocationEngine: NSObject, CLLocationManagerDelegate {
     private func stopUpdates() {
         stopInternal()
         kalman.reset()
+        fixGate.reset()
     }
 
     private func stopInternal() {
+        lock.lock()
+        startGeneration += 1
+        lock.unlock()
+
         locationManager?.stopUpdatingLocation()
         running = false
         barometer.stop()
@@ -258,6 +345,23 @@ final class SuperGpsLocationEngine: NSObject, CLLocationManagerDelegate {
         }
     }
 
+    private func tryEmitLocation(_ location: CLLocation, source: SuperGpsFixQualityGate.FixSource) {
+        lock.lock()
+        if fixGate.shouldAccept(location, source: source) {
+            fixGate.noteAccepted(location)
+            lock.unlock()
+            emitFilteredLocation(location)
+            return
+        }
+        if let fallback = fixGate.peekStreamFallbackLocation() {
+            fixGate.noteAccepted(fallback)
+            lock.unlock()
+            emitFilteredLocation(fallback)
+            return
+        }
+        lock.unlock()
+    }
+
     private func emitFilteredLocation(_ location: CLLocation) {
         if streamOptions.enableBarometer && barometer.hasHardwareSupport {
             barometer.setGpsBaselineMeters(
@@ -277,17 +381,54 @@ final class SuperGpsLocationEngine: NSObject, CLLocationManagerDelegate {
         }
     }
 
-    private func buildPayload(_ location: CLLocation, includeBarometer: Bool) -> [String: Any?] {
+    private func buildOneShotPayloadIfAccepted(
+        _ location: CLLocation,
+        includeBarometer: Bool
+    ) -> [String: Any?]? {
+        lock.lock()
+        let accept = fixGate.shouldAccept(location, source: .oneShot)
+        if accept {
+            fixGate.noteAccepted(location)
+        }
+        lock.unlock()
+        guard accept else { return nil }
+        return buildPayload(location, includeBarometer: includeBarometer, applyKalman: true)
+    }
+
+    private func pickBestLocation(_ locations: CLLocation...) -> CLLocation? {
+        locations.min { horizontalAccuracyM($0) < horizontalAccuracyM($1) }
+    }
+
+    private func horizontalAccuracyM(_ location: CLLocation) -> Double {
+        let accuracy = location.horizontalAccuracy
+        return accuracy >= 0 ? accuracy : Double.greatestFiniteMagnitude
+    }
+
+    private func buildPayload(
+        _ location: CLLocation,
+        includeBarometer: Bool,
+        applyKalman: Bool = true
+    ) -> [String: Any?] {
         let accuracy = max(location.horizontalAccuracy, 0)
-        let filtered = kalman.process(
-            latitude: location.coordinate.latitude,
-            longitude: location.coordinate.longitude,
-            accuracyM: accuracy
-        )
+        let coordinate: (Double, Double)
+        if applyKalman {
+            coordinate = kalman.process(
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude,
+                accuracyM: accuracy,
+                speedMps: max(location.speed, 0),
+                timestampMs: Int64(location.timestamp.timeIntervalSince1970 * 1000)
+            )
+        } else {
+            coordinate = (
+                location.coordinate.latitude,
+                location.coordinate.longitude
+            )
+        }
 
         var map: [String: Any?] = [
-            "latitude": filtered.0,
-            "longitude": filtered.1,
+            "latitude": coordinate.0,
+            "longitude": coordinate.1,
             "raw_latitude": location.coordinate.latitude,
             "raw_longitude": location.coordinate.longitude,
             "timestamp": Int64(location.timestamp.timeIntervalSince1970 * 1000),

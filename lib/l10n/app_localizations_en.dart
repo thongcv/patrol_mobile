@@ -266,6 +266,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String get patrolRoundOverdue => 'Overdue';
 
   @override
+  String get patrolRoundScanQr => 'Scan checkpoint QR';
+
+  @override
+  String get patrolRoundQrNotFound =>
+      'No checkpoint on this route matches that QR code.';
+
+  @override
+  String get patrolRoundQrAlreadyScanned =>
+      'This checkpoint was already scanned.';
+
+  @override
+  String get patrolRoundQrCameraDenied =>
+      'Camera permission is required to scan QR codes.';
+
+  @override
+  String get patrolRoundAutoScan => 'Auto scan';
+
+  @override
+  String get patrolRoundAutoScanNone =>
+      'No checkpoints left to scan on this route.';
+
+  @override
+  String get patrolRoundAutoScanComplete =>
+      'All checkpoints on this route have been scanned.';
+
+  @override
   String get patrolRoundAssigned => 'Assigned to';
 
   @override
@@ -329,14 +355,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get patrolRoundChipNotScanned => 'Not scanned';
 
   @override
-  String get patrolRoundQrPhotoTitle => 'Take a photo?';
+  String get patrolRoundQrPhotoTitle => 'Take photos?';
 
   @override
   String get patrolRoundQrPhotoMessage =>
-      'You can attach a photo to this checkpoint scan.';
+      'You can attach one or more photos to this checkpoint scan.';
 
   @override
   String get patrolRoundQrPhotoTake => 'Take photo';
+
+  @override
+  String get patrolRoundQrPhotoAddMore => 'Add another photo';
+
+  @override
+  String patrolRoundQrPhotoDone(int count) {
+    return 'Continue ($count)';
+  }
+
+  @override
+  String get patrolRoundQrPhotoRemove => 'Remove photo';
 
   @override
   String get patrolRoundQrPhotoSkip => 'Continue without photo';

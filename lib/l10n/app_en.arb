@@ -91,6 +91,13 @@
   "patrolRoundExpectedStart": "Expected start",
   "patrolRoundExpectedEnd": "Expected end",
   "patrolRoundOverdue": "Overdue",
+  "patrolRoundScanQr": "Scan checkpoint QR",
+  "patrolRoundQrNotFound": "No checkpoint on this route matches that QR code.",
+  "patrolRoundQrAlreadyScanned": "This checkpoint was already scanned.",
+  "patrolRoundQrCameraDenied": "Camera permission is required to scan QR codes.",
+  "patrolRoundAutoScan": "Auto scan",
+  "patrolRoundAutoScanNone": "No checkpoints left to scan on this route.",
+  "patrolRoundAutoScanComplete": "All checkpoints on this route have been scanned.",
   "patrolRoundAssigned": "Assigned to",
   "patrolRoundSiteId": "Site",
   "patrolRoundScheduleTotalCheckPoints": "Checkpoints on schedule",
@@ -131,9 +138,17 @@
   "patrolRoundChipNfc": "NFC",
   "patrolRoundChipScanned": "Scanned",
   "patrolRoundChipNotScanned": "Not scanned",
-  "patrolRoundQrPhotoTitle": "Take a photo?",
-  "patrolRoundQrPhotoMessage": "You can attach a photo to this checkpoint scan.",
+  "patrolRoundQrPhotoTitle": "Take photos?",
+  "patrolRoundQrPhotoMessage": "You can attach one or more photos to this checkpoint scan.",
   "patrolRoundQrPhotoTake": "Take photo",
+  "patrolRoundQrPhotoAddMore": "Add another photo",
+  "patrolRoundQrPhotoDone": "Continue ({count})",
+  "@patrolRoundQrPhotoDone": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "patrolRoundQrPhotoRemove": "Remove photo",
   "patrolRoundQrPhotoSkip": "Continue without photo",
   "patrolRoundCancel": "Cancel",
   "patrolRoundQrOutOfRange": "You are about {distance} m from the checkpoint (allowed {radius} m). Move closer to the saved location.",

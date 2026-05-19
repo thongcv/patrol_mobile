@@ -602,6 +602,48 @@ abstract class AppLocalizations {
   /// **'Overdue'**
   String get patrolRoundOverdue;
 
+  /// No description provided for @patrolRoundScanQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan checkpoint QR'**
+  String get patrolRoundScanQr;
+
+  /// No description provided for @patrolRoundQrNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No checkpoint on this route matches that QR code.'**
+  String get patrolRoundQrNotFound;
+
+  /// No description provided for @patrolRoundQrAlreadyScanned.
+  ///
+  /// In en, this message translates to:
+  /// **'This checkpoint was already scanned.'**
+  String get patrolRoundQrAlreadyScanned;
+
+  /// No description provided for @patrolRoundQrCameraDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera permission is required to scan QR codes.'**
+  String get patrolRoundQrCameraDenied;
+
+  /// No description provided for @patrolRoundAutoScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto scan'**
+  String get patrolRoundAutoScan;
+
+  /// No description provided for @patrolRoundAutoScanNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No checkpoints left to scan on this route.'**
+  String get patrolRoundAutoScanNone;
+
+  /// No description provided for @patrolRoundAutoScanComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'All checkpoints on this route have been scanned.'**
+  String get patrolRoundAutoScanComplete;
+
   /// No description provided for @patrolRoundAssigned.
   ///
   /// In en, this message translates to:
@@ -719,13 +761,13 @@ abstract class AppLocalizations {
   /// No description provided for @patrolRoundQrPhotoTitle.
   ///
   /// In en, this message translates to:
-  /// **'Take a photo?'**
+  /// **'Take photos?'**
   String get patrolRoundQrPhotoTitle;
 
   /// No description provided for @patrolRoundQrPhotoMessage.
   ///
   /// In en, this message translates to:
-  /// **'You can attach a photo to this checkpoint scan.'**
+  /// **'You can attach one or more photos to this checkpoint scan.'**
   String get patrolRoundQrPhotoMessage;
 
   /// No description provided for @patrolRoundQrPhotoTake.
@@ -733,6 +775,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Take photo'**
   String get patrolRoundQrPhotoTake;
+
+  /// No description provided for @patrolRoundQrPhotoAddMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Add another photo'**
+  String get patrolRoundQrPhotoAddMore;
+
+  /// No description provided for @patrolRoundQrPhotoDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue ({count})'**
+  String patrolRoundQrPhotoDone(int count);
+
+  /// No description provided for @patrolRoundQrPhotoRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove photo'**
+  String get patrolRoundQrPhotoRemove;
 
   /// No description provided for @patrolRoundQrPhotoSkip.
   ///

@@ -534,15 +534,15 @@ class _PatrolHeaderBar extends StatelessWidget {
                   ),
                 ),
                 if (roleLabel.isNotEmpty) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
+                      horizontal: 6,
+                      vertical: 3,
                     ),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.22),
-                      borderRadius: BorderRadius.circular(22),
+                      borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: Colors.white.withValues(alpha: 0.18),
                       ),
@@ -552,17 +552,19 @@ class _PatrolHeaderBar extends StatelessWidget {
                       children: [
                         Icon(
                           Icons.shield_outlined,
-                          size: 16,
+                          size: 11,
                           color: Colors.white.withValues(alpha: 0.9),
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 4),
                         Flexible(
                           child: Text(
                             roleLabel,
-                            style: theme.labelMedium?.copyWith(
+                            style: theme.labelSmall?.copyWith(
                               color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.3,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0.15,
+                              height: 1.15,
                             ),
                           ),
                         ),
@@ -642,7 +644,7 @@ class _HomeTabContent extends StatelessWidget {
                   )
                 : LayoutBuilder(
                     builder: (context, c) {
-                      final gap = 14.0;
+                      const gap = 16.0;
                       final w = (c.maxWidth - gap) / 2;
                       return Wrap(
                         spacing: gap,
@@ -651,10 +653,13 @@ class _HomeTabContent extends StatelessWidget {
                           for (final menu in menus)
                             SizedBox(
                               width: w,
-                              child: _WhiteMenuCard(
-                                menu: menu,
-                                theme: theme,
-                                onTap: () => onMenuTap(menu),
+                              child: AspectRatio(
+                                aspectRatio: 0.88,
+                                child: _WhiteMenuCard(
+                                  menu: menu,
+                                  theme: theme,
+                                  onTap: () => onMenuTap(menu),
+                                ),
                               ),
                             ),
                         ],
@@ -702,6 +707,8 @@ class _WhiteMenuCard extends StatelessWidget {
     required this.onTap,
   });
 
+  static const double _radius = 24;
+
   final Menu menu;
   final TextTheme theme;
   final VoidCallback onTap;
@@ -713,55 +720,90 @@ class _WhiteMenuCard extends StatelessWidget {
     final title = menu.name?.trim().isNotEmpty == true
         ? menu.name!.trim()
         : '—';
+    final borderRadius = BorderRadius.circular(_radius);
 
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(20),
-      elevation: 0,
-      shadowColor: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.07),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: borderRadius,
+        boxShadow: [
+          BoxShadow(
+            color: style.iconColor.withValues(alpha: 0.12),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: style.circleBg,
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(icon, color: style.iconColor, size: 28),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        clipBehavior: Clip.antiAlias,
+        child: Material(
+          color: Colors.white,
+          child: InkWell(
+            onTap: onTap,
+            splashColor: style.iconColor.withValues(alpha: 0.14),
+            highlightColor: style.iconColor.withValues(alpha: 0.06),
+            child: Ink(
+              decoration: BoxDecoration(
+                borderRadius: borderRadius,
+                color: Colors.white,
+                border: Border.all(
+                  color: const Color(0xFFE2E8F0),
+                  width: 1,
                 ),
-                const SizedBox(height: 14),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.titleSmall?.copyWith(
-                    color: const Color(0xFF0F172A),
-                    fontWeight: FontWeight.w700,
-                    height: 1.25,
-                  ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 24, 14, 20),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            style.circleBg,
+                            Color.alphaBlend(
+                              style.iconColor.withValues(alpha: 0.14),
+                              style.circleBg,
+                            ),
+                          ],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: style.iconColor.withValues(alpha: 0.18),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(icon, color: style.iconColor, size: 30),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.titleSmall?.copyWith(
+                        color: const Color(0xFF0F172A),
+                        fontWeight: FontWeight.w700,
+                        height: 1.3,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),

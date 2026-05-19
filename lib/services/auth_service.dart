@@ -26,6 +26,11 @@ class AuthService {
     );
   }
 
+  Future<bool> hasStoredSession() async {
+    final token = await getStoredAccessToken();
+    return token != null && token.isNotEmpty;
+  }
+
   Future<Map<String, dynamic>?> getStoredAccessTokenObject() async {
     final p = await SharedPreferences.getInstance();
     return AccessTokenPayload.mapFromStored(

@@ -131,7 +131,7 @@ class CheckPoint {
       sequenceOrder: (json['sequenceOrder'] as num?)?.toInt() ?? 0,
       active: json['active'] as bool? ?? true,
       nfc: json['nfc'] as String?,
-      qrImage: json['qrImage'] as String?,
+      qrImage: json['qrImage'] as String? ?? json['qr_image'] as String?,
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
       gpsAltitude: (json['gpsAltitude'] as num?)?.toDouble() ??

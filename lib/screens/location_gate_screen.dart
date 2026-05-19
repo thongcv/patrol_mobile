@@ -3,8 +3,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../l10n/app_localizations.dart';
+import '../services/auth_service.dart';
 import '../widgets/language_toggle_bar.dart';
 import '../widgets/login_background.dart';
+import 'home_screen.dart';
 import 'login_screen.dart';
 
 enum _GatePhase { checking, blocked, ready }
@@ -27,6 +29,7 @@ class LocationGateScreen extends StatefulWidget {
 class _LocationGateScreenState extends State<LocationGateScreen> {
   _GatePhase _phase = _GatePhase.checking;
   String? _detail;
+  bool _hasStoredSession = false;
 
   @override
   void initState() {
@@ -74,7 +77,12 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
       return;
     }
 
-    setState(() => _phase = _GatePhase.ready);
+    final hasSession = await AuthService.instance.hasStoredSession();
+    if (!mounted) return;
+    setState(() {
+      _hasStoredSession = hasSession;
+      _phase = _GatePhase.ready;
+    });
   }
 
   Future<void> _openLocationSettings() async {
@@ -92,6 +100,12 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
   @override
   Widget build(BuildContext context) {
     if (_phase == _GatePhase.ready) {
+      if (_hasStoredSession) {
+        return HomeScreen(
+          locale: widget.locale,
+          onLocaleChanged: widget.onLocaleChanged,
+        );
+      }
       return LoginScreen(
         locale: widget.locale,
         onLocaleChanged: widget.onLocaleChanged,

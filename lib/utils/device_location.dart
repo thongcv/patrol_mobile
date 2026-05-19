@@ -10,6 +10,12 @@ import 'gps_native_service.dart';
 /// Vị trí: native Super GPS (Android). Geolocator chỉ quyền/dịch vụ/khoảng cách.
 const Duration _kNativeGpsCurrentTimeout = Duration(seconds: 4);
 
+/// Thời gian chờ stream khi lưu mốc (best-of-stream).
+const Duration kCheckpointGpsRefineTimeout = Duration(seconds: 8);
+
+/// Ngưỡng accuracy (m) để kết thúc sớm khi lưu mốc.
+const double kCheckpointGpsTargetAccuracyM = 5.0;
+
 Stream<NativeGpsEvent> _deviceLocationEventStream({
   GpsNativeStreamOptions? nativeStreamOptions,
 }) {
@@ -23,7 +29,22 @@ Stream<NativeGpsEvent> _deviceLocationEventStream({
   return GpsNativeService.instance.locationEventStream;
 }
 
-/// One-shot native, rồi stream ngắn nếu chưa có fix.
+double? _usableHorizontalAccuracyM(Position position) {
+  final accuracy = position.accuracy;
+  if (!accuracy.isFinite || accuracy <= 0) return null;
+  return accuracy;
+}
+
+bool _isBetterGpsEvent(NativeGpsEvent? current, NativeGpsEvent candidate) {
+  final candidateAccuracy = _usableHorizontalAccuracyM(candidate.position);
+  if (candidateAccuracy == null) return current == null;
+  if (current == null) return true;
+  final currentAccuracy = _usableHorizontalAccuracyM(current.position);
+  if (currentAccuracy == null) return true;
+  return candidateAccuracy < currentAccuracy;
+}
+
+/// One-shot native; nếu accuracy chưa đạt [targetAccuracyM] thì refine qua stream.
 Future<NativeGpsEvent?> _resolveNativeGpsEvent({
   Duration timeout = _kNativeGpsCurrentTimeout,
   double targetAccuracyM = 4.0,
@@ -31,21 +52,30 @@ Future<NativeGpsEvent?> _resolveNativeGpsEvent({
 }) async {
   if (!GpsNativeService.isSupported) return null;
 
-  final event = await GpsNativeService.getCurrentLocation(
+  final oneShot = await GpsNativeService.getCurrentLocation(
     enableBarometer: enableBarometer,
   );
-  if (event != null) return event;
+
+  final oneShotAccuracy = oneShot != null
+      ? _usableHorizontalAccuracyM(oneShot.position)
+      : null;
+  if (oneShotAccuracy != null && oneShotAccuracy <= targetAccuracyM) {
+    return oneShot;
+  }
 
   return _readDeviceGpsEventFromNativeStream(
     timeout: timeout,
     targetAccuracyM: targetAccuracyM,
     enableBarometer: enableBarometer,
+    seed: oneShot,
   );
 }
 
 /// Đọc GPS một lần (quyền + dịch vụ vị trí).
+///
 /// [enableBarometer] được truyền xuống native để bật barometer.
-
+/// Nếu one-shot chưa đạt [targetAccuracyM], nghe stream trong [timeout] và trả
+/// mẫu có `accuracy` tốt nhất.
 Future<({Position? position, double? barometricAltitude, String? messageKey})>
 readDeviceGpsOnce({
   Duration? timeout,
@@ -53,17 +83,22 @@ readDeviceGpsOnce({
   bool enableBarometer = false,
 }) async {
   final denied = await _ensureLocationReady();
-
   if (denied != null) {
     return (position: null, barometricAltitude: null, messageKey: denied);
   }
 
   try {
     final resolved = await _resolveNativeGpsEvent(
+      timeout: timeout ?? _kNativeGpsCurrentTimeout,
+      targetAccuracyM: targetAccuracyM,
       enableBarometer: enableBarometer,
     );
     if (resolved == null) {
-      return (position: null, barometricAltitude: null, messageKey: 'service');
+      return (
+        position: null,
+        barometricAltitude: null,
+        messageKey: 'unavailable',
+      );
     }
     return (
       position: resolved.position,
@@ -75,13 +110,14 @@ readDeviceGpsOnce({
   }
 }
 
-/// One-shot native thất bại — chờ fix qua stream (không gọi lại getCurrentLocation).
+/// Chờ fix qua stream; giữ mẫu có accuracy ngang tốt nhất.
 Future<NativeGpsEvent?> _readDeviceGpsEventFromNativeStream({
   Duration timeout = _kNativeGpsCurrentTimeout,
   double targetAccuracyM = 4.0,
   bool enableBarometer = false,
+  NativeGpsEvent? seed,
 }) async {
-  NativeGpsEvent? bestEvent;
+  NativeGpsEvent? bestEvent = seed;
   final completer = Completer<NativeGpsEvent?>();
   StreamSubscription<NativeGpsEvent>? streamSubscription;
 
@@ -89,18 +125,20 @@ Future<NativeGpsEvent?> _readDeviceGpsEventFromNativeStream({
     GpsNativeStreamOptions(enableBarometer: enableBarometer),
   );
 
-  streamSubscription = GpsNativeService.instance.locationEventStream.listen((
-    event,
-  ) {
-    final position = event.position;
-    if (bestEvent == null || position.accuracy < bestEvent!.position.accuracy) {
+  void onEvent(NativeGpsEvent event) {
+    if (_isBetterGpsEvent(bestEvent, event)) {
       bestEvent = event;
     }
-    if (position.accuracy <= targetAccuracyM) {
+    final accuracy = _usableHorizontalAccuracyM(event.position);
+    if (accuracy != null && accuracy <= targetAccuracyM) {
       streamSubscription?.cancel();
       if (!completer.isCompleted) completer.complete(bestEvent);
     }
-  });
+  }
+
+  streamSubscription = GpsNativeService.instance.locationEventStream.listen(
+    onEvent,
+  );
 
   unawaited(
     Future.delayed(timeout, () {
@@ -206,14 +244,14 @@ class DeviceLocationWatch {
       enableBarometer: enableNativeBaro,
     );
 
-    if (!await _initCurrentPosition(enableBarometer: enableNativeBaro)) {
-      await stop();
-      return 'error';
-    }
+    //if (!await _initCurrentPosition(enableBarometer: enableNativeBaro)) {
+    //  await stop();
+    //   return 'error';
+    // }
 
-    if (_emitSample(onSample) || _stopped) {
-      if (!_stopped) await stop();
-    }
+    // if (_emitSample(onSample) || _stopped) {
+    //   if (!_stopped) await stop();
+    // }
     _startPositionStream(onSample, streamOpts);
 
     return null;
@@ -229,7 +267,6 @@ class DeviceLocationWatch {
         .listen(
           (event) {
             if (_stopped) return;
-
             _ingestPosition(event.position);
             if (_trackBarometer) {
               _applyBarometricAltitude(event.barometricAltitude);
@@ -247,24 +284,6 @@ class DeviceLocationWatch {
           },
           cancelOnError: false,
         );
-  }
-
-  /// `false` nếu không lấy được vị trí ban đầu.
-
-  Future<bool> _initCurrentPosition({bool enableBarometer = false}) async {
-    try {
-      final event = await GpsNativeService.getCurrentLocation(
-        enableBarometer: enableBarometer,
-      );
-      if (event == null) return false;
-      _ingestPosition(event.position);
-      if (_trackBarometer) {
-        _applyBarometricAltitude(event.barometricAltitude);
-      }
-      return true;
-    } catch (_) {
-      return false;
-    }
   }
 
   void _applyBarometricAltitude(double? altitude) {
@@ -375,8 +394,8 @@ class LiveDeviceLocationTracker {
   static Future<LiveDeviceLocationTracker> create({
     required VoidCallback onChanged,
     bool Function()? isActive,
-    double gpsUiMoveThresholdM = 1.0,
-    double altitudeUiChangeThresholdM = 0.5,
+    double gpsUiMoveThresholdM = 0,
+    double altitudeUiChangeThresholdM = 0,
   }) async {
     final supported = await isBarometerSupported();
     return LiveDeviceLocationTracker._(
@@ -451,19 +470,13 @@ class LiveDeviceLocationTracker {
     if (!_isActive() || generation != _generation) return;
     if (event == null) {
       busy = false;
-      position = null;
-      messageKey = 'service';
+      messageKey = null;
       _notify();
+      _startPositionStream(generation, streamOpts);
       return;
     }
 
     position = event.position;
-    if (position == null) {
-      busy = false;
-      messageKey = 'service';
-      _notify();
-      return;
-    }
     if (event.barometricAltitude != null) {
       barometricAltitude = event.barometricAltitude;
     }
@@ -481,12 +494,6 @@ class LiveDeviceLocationTracker {
         _deviceLocationEventStream(nativeStreamOptions: streamOpts).listen(
           (event) => _onLocationEventUpdate(event, generation),
           onError: (Object error, StackTrace stack) {
-            assert(() {
-              debugPrint(
-                'LiveDeviceLocationTracker position stream error: $error',
-              );
-              return true;
-            }());
             if (!_isActive() || generation != _generation) return;
             messageKey = 'error';
             _notify();

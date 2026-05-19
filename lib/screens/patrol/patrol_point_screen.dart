@@ -143,7 +143,10 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
 
     final tracker = _locationTracker;
     final wantBaro = tracker != null && tracker.barometerSupported;
-    final gps = await readDeviceGpsOnce(enableBarometer: wantBaro);
+    final gps = await readDeviceGpsOnce(
+      enableBarometer: wantBaro,
+      targetAccuracyM: kCheckpointGpsTargetAccuracyM,
+    );
     final freshBaro = gps.barometricAltitude;
 
     if (!mounted) return;
@@ -155,6 +158,7 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
         'service' => l10n.patrolPointGpsServiceOff,
         'denied' => l10n.patrolPointGpsDenied,
         'error' => l10n.patrolPointGpsError,
+        'unavailable' => l10n.patrolPointUpdateNeedGps,
         _ => l10n.patrolPointUpdateNeedGps,
       };
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
@@ -250,6 +254,8 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
         return l10n.patrolPointGpsDenied;
       case 'error':
         return l10n.patrolPointGpsError;
+      case 'unavailable':
+        return l10n.patrolPointUpdateNeedGps;
       default:
         break;
     }

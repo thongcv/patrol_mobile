@@ -266,6 +266,29 @@ class AppLocalizationsVi extends AppLocalizations {
   String get patrolRoundOverdue => 'Quá giờ';
 
   @override
+  String get patrolRoundScanQr => 'Quét mã QR điểm';
+
+  @override
+  String get patrolRoundQrNotFound =>
+      'Không có điểm nào trên tuyến khớp mã QR này.';
+
+  @override
+  String get patrolRoundQrAlreadyScanned => 'Điểm này đã được quét.';
+
+  @override
+  String get patrolRoundQrCameraDenied => 'Cần quyền camera để quét mã QR.';
+
+  @override
+  String get patrolRoundAutoScan => 'Tự động scan';
+
+  @override
+  String get patrolRoundAutoScanNone =>
+      'Không còn điểm nào cần quét trên tuyến.';
+
+  @override
+  String get patrolRoundAutoScanComplete => 'Đã quét hết các điểm trên tuyến.';
+
+  @override
   String get patrolRoundAssigned => 'Phân công';
 
   @override
@@ -333,10 +356,21 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get patrolRoundQrPhotoMessage =>
-      'Bạn có thể đính kèm ảnh khi quét điểm này.';
+      'Bạn có thể chụp và đính kèm nhiều ảnh khi quét điểm này.';
 
   @override
   String get patrolRoundQrPhotoTake => 'Chụp ảnh';
+
+  @override
+  String get patrolRoundQrPhotoAddMore => 'Chụp thêm ảnh';
+
+  @override
+  String patrolRoundQrPhotoDone(int count) {
+    return 'Tiếp tục ($count)';
+  }
+
+  @override
+  String get patrolRoundQrPhotoRemove => 'Xóa ảnh';
 
   @override
   String get patrolRoundQrPhotoSkip => 'Tiếp tục không chụp';
@@ -381,7 +415,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get patrolRoundQrPositionOkSaving => 'Đã đủ vị trí — đang lưu quét…';
+  String get patrolRoundQrPositionOkSaving => 'Khớp vị trí — đang lưu quét…';
 
   @override
   String get patrolRoundQrWaitingBaro => 'Đang đọc độ cao barometer…';

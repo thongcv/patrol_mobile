@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Build
+import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.CurrentLocationRequest
@@ -26,7 +27,11 @@ internal object SuperGpsLocationEngine {
     private const val CURRENT_LOC_MAX_AGE_MS = 60_000L
     private const val CURRENT_LOC_MAX_WAIT_MS = 1_500L
 
+    /** One-shot: cache nhanh chỉ khi accuracy đủ tốt (sau Kalman). */
+    private const val ONE_SHOT_BEST_ACCURACY_M = 4f
+
     private val kalman = SuperGpsKalmanFilter()
+    private val fixGate = SuperGpsFixQualityGate()
     private val barometer = SuperGpsBarometer()
     private val sinks = linkedSetOf<EventChannel.EventSink>()
 
@@ -34,6 +39,7 @@ internal object SuperGpsLocationEngine {
     private var locationCallback: LocationCallback? = null
     private var running = false
     private var streamOptions = SuperGpsStreamOptions()
+    private var startGeneration = 0
 
     @Synchronized
     fun addListener(
@@ -76,22 +82,55 @@ internal object SuperGpsLocationEngine {
         val appContext = context.applicationContext
         barometer.bind(appContext)
         val shouldRunBaro = enableBarometer && barometer.hasHardwareSupport
-        if (shouldRunBaro && !barometer.isActive) {
-            barometer.start(appContext)
+        val client = LocationServices.getFusedLocationProviderClient(context)
+
+        if (shouldRunBaro) {
+            if (!barometer.isActive) {
+                barometer.start(appContext)
+            }
+            Thread {
+                barometer.awaitFirstReading(SuperGpsBarometer.FIRST_READING_TIMEOUT_MS)
+                Handler(Looper.getMainLooper()).post {
+                    fetchCurrentPositionGps(client, shouldRunBaro, result)
+                }
+            }.start()
+            return
         }
 
-        val client = LocationServices.getFusedLocationProviderClient(context)
+        fetchCurrentPositionGps(client, shouldRunBaro = false, result)
+    }
+
+    private fun fetchCurrentPositionGps(
+        client: FusedLocationProviderClient,
+        shouldRunBaro: Boolean,
+        result: MethodChannel.Result,
+    ) {
+        synchronized(this) {
+            if (!running) {
+                kalman.reset()
+                fixGate.reset()
+            }
+        }
 
         // 1) lastLocation — thường <50ms nếu app/OS đã có cache.
         client.lastLocation
             .addOnSuccessListener { cached ->
-                if (cached != null && isLocationFresh(cached, FAST_CACHE_MAX_AGE_MS)) {
-                    finishGetCurrentPosition(
-                        shouldRunBaro,
-                        result,
-                        buildPayload(cached, includeBarometer = shouldRunBaro),
+                if (cached != null &&
+                    isLocationFresh(cached, FAST_CACHE_MAX_AGE_MS) &&
+                    cached.accuracy <= ONE_SHOT_BEST_ACCURACY_M
+                ) {
+                    val payload = buildOneShotPayloadIfAccepted(
+                        cached,
+                        includeBarometer = shouldRunBaro,
                     )
-                    return@addOnSuccessListener
+                    if (payload != null) {
+                        finishGetCurrentPosition(
+                            shouldRunBaro,
+                            result,
+                            payload,
+                        )
+                        return@addOnSuccessListener
+                    }
                 }
                 requestCurrentLocationBounded(client, cached, shouldRunBaro, result)
             }
@@ -125,26 +164,35 @@ internal object SuperGpsLocationEngine {
 
         client.getCurrentLocation(request, CancellationTokenSource().token)
             .addOnSuccessListener { location ->
-                when {
-                    location != null -> finishGetCurrentPosition(
+                val best = pickBestLocation(location, staleFallback)
+                val payload = best?.let {
+                    buildOneShotPayloadIfAccepted(
+                        it,
+                        includeBarometer = stopBarometerAfter,
+                    )
+                }
+                if (payload != null) {
+                    finishGetCurrentPosition(
                         stopBarometerAfter,
                         result,
-                        buildPayload(location, includeBarometer = stopBarometerAfter),
+                        payload,
                     )
-                    staleFallback != null -> finishGetCurrentPosition(
-                        stopBarometerAfter,
-                        result,
-                        buildPayload(staleFallback, includeBarometer = stopBarometerAfter),
-                    )
-                    else -> finishGetCurrentPosition(stopBarometerAfter, result, null)
+                } else if (best != null) {
+                    finishGetCurrentPosition(stopBarometerAfter, result, null)
+                } else {
+                    finishGetCurrentPosition(stopBarometerAfter, result, null)
                 }
             }
             .addOnFailureListener { e ->
                 if (staleFallback != null) {
+                    val fallbackPayload = buildOneShotPayloadIfAccepted(
+                        staleFallback,
+                        includeBarometer = stopBarometerAfter,
+                    )
                     finishGetCurrentPosition(
                         stopBarometerAfter,
                         result,
-                        buildPayload(staleFallback, includeBarometer = stopBarometerAfter),
+                        fallbackPayload,
                     )
                 } else {
                     if (stopBarometerAfter && !running) {
@@ -160,6 +208,23 @@ internal object SuperGpsLocationEngine {
         return age in 0..maxAgeMs
     }
 
+    private fun pickBestLocation(vararg locations: Location?): Location? {
+        return locations.filterNotNull().minByOrNull { it.accuracy }
+    }
+
+    private fun buildOneShotPayloadIfAccepted(
+        location: Location,
+        includeBarometer: Boolean,
+    ): Map<String, Any?>? {
+        synchronized(this) {
+            if (!fixGate.shouldAccept(location, SuperGpsFixQualityGate.FixSource.ONE_SHOT)) {
+                return null
+            }
+            fixGate.noteAccepted(location)
+        }
+        return buildPayload(location, includeBarometer, applyKalman = true)
+    }
+
     @Synchronized
     private fun start(context: Context) {
         if (running) return
@@ -172,9 +237,39 @@ internal object SuperGpsLocationEngine {
         val client = LocationServices.getFusedLocationProviderClient(context)
         fusedClient = client
         kalman.reset()
+        fixGate.reset()
+
+        val appContext = context.applicationContext
+        barometer.bind(appContext)
+        val wantBaro = streamOptions.enableBarometer && barometer.hasHardwareSupport
+
+        if (wantBaro) {
+            barometer.reset()
+            syncBarometer(appContext)
+            val generation = ++startGeneration
+            Thread {
+                barometer.awaitFirstReading(SuperGpsBarometer.FIRST_READING_TIMEOUT_MS)
+                Handler(Looper.getMainLooper()).post {
+                    synchronized(this@SuperGpsLocationEngine) {
+                        if (generation != startGeneration || sinks.isEmpty() || running) {
+                            return@post
+                        }
+                        beginGpsStream(client)
+                    }
+                }
+            }.start()
+            return
+        }
+
+        syncBarometer(appContext)
+        beginGpsStream(client)
+    }
+
+    @Synchronized
+    private fun beginGpsStream(client: FusedLocationProviderClient) {
+        if (running) return
 
         seedCachedLocations(client)
-        syncBarometer(context)
 
         val request = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
@@ -189,7 +284,7 @@ internal object SuperGpsLocationEngine {
         val callback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 val location = result.lastLocation ?: return
-                emitFilteredLocation(location)
+                tryEmitLocation(location, SuperGpsFixQualityGate.FixSource.STREAM)
             }
         }
         locationCallback = callback
@@ -213,7 +308,9 @@ internal object SuperGpsLocationEngine {
     private fun seedCachedLocations(client: FusedLocationProviderClient) {
         client.lastLocation
             .addOnSuccessListener { location ->
-                if (location != null) emitFilteredLocation(location)
+                if (location != null) {
+                    tryEmitLocation(location, SuperGpsFixQualityGate.FixSource.SEED_CACHE)
+                }
             }
 
         val request = CurrentLocationRequest.Builder()
@@ -222,7 +319,9 @@ internal object SuperGpsLocationEngine {
             .build()
         client.getCurrentLocation(request, CancellationTokenSource().token)
             .addOnSuccessListener { location ->
-                if (location != null) emitFilteredLocation(location)
+                if (location != null) {
+                    tryEmitLocation(location, SuperGpsFixQualityGate.FixSource.SEED_CACHE)
+                }
             }
     }
 
@@ -230,6 +329,7 @@ internal object SuperGpsLocationEngine {
     private fun restartUpdates(context: Context) {
         stopInternal()
         kalman.reset()
+        fixGate.reset()
         if (sinks.isNotEmpty()) {
             start(context)
         }
@@ -239,9 +339,11 @@ internal object SuperGpsLocationEngine {
     private fun stop() {
         stopInternal()
         kalman.reset()
+        fixGate.reset()
     }
 
     private fun stopInternal() {
+        startGeneration++
         val callback = locationCallback
         if (callback != null) {
             fusedClient?.removeLocationUpdates(callback)
@@ -262,6 +364,19 @@ internal object SuperGpsLocationEngine {
         }
     }
 
+    private fun tryEmitLocation(location: Location, source: SuperGpsFixQualityGate.FixSource) {
+        synchronized(this) {
+            if (fixGate.shouldAccept(location, source)) {
+                fixGate.noteAccepted(location)
+                emitFilteredLocation(location)
+                return
+            }
+            val fallback = fixGate.peekStreamFallbackLocation() ?: return
+            fixGate.noteAccepted(fallback)
+            emitFilteredLocation(fallback)
+        }
+    }
+
     private fun emitFilteredLocation(location: Location) {
         val includeBaro =
             streamOptions.enableBarometer && barometer.hasHardwareSupport
@@ -279,13 +394,20 @@ internal object SuperGpsLocationEngine {
     private fun buildPayload(
         location: Location,
         includeBarometer: Boolean,
+        applyKalman: Boolean = true,
     ): Map<String, Any?> {
-        val (filteredLat, filteredLng) = kalman.process(
-            location.latitude,
-            location.longitude,
-            location.accuracy,
-        )
-        return locationToMap(location, filteredLat, filteredLng, includeBarometer)
+        val (outLat, outLng) = if (applyKalman) {
+            kalman.process(
+                location.latitude,
+                location.longitude,
+                location.accuracy,
+                location.speed.coerceAtLeast(0f),
+                location.time,
+            )
+        } else {
+            location.latitude to location.longitude
+        }
+        return locationToMap(location, outLat, outLng, includeBarometer)
     }
 
     private fun emitError(code: String, message: String) {

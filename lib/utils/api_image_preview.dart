@@ -1,10 +1,70 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
-/// Ảnh từ API: URL `http(s)://`, `data:image/...;base64,...`, hoặc chuỗi base64 thuần.
-Widget? apiImagePreview(String? imageSource, {double size = 88}) {
+import '../config/app_config.dart';
+import '../http/patrol_dio.dart';
+
+/// Chuẩn hóa nguồn ảnh từ API (URL tuyệt đối, path `/uploads/...`, base64).
+String? resolveApiImageSource(String? imageSource) {
   final raw = imageSource?.trim();
+  if (raw == null || raw.isEmpty) return null;
+
+  if (raw.startsWith('http://') ||
+      raw.startsWith('https://') ||
+      raw.startsWith('data:image')) {
+    return raw;
+  }
+
+  if (raw.startsWith('/')) {
+    final base = AppConfig.effectiveBaseUrl;
+    if (base.isEmpty) return null;
+    return '$base$raw';
+  }
+
+  return raw;
+}
+
+bool _isPatrolApiUrl(String url) {
+  final base = AppConfig.effectiveBaseUrl;
+  if (base.isEmpty) return false;
+  return url == base || url.startsWith('$base/');
+}
+
+/// `true` nếu có thể hiển thị preview (URL hoặc base64 hợp lệ).
+bool canPreviewApiImageSource(String? imageSource) {
+  final raw = resolveApiImageSource(imageSource);
+  if (raw == null || raw.isEmpty) return false;
+
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    return true;
+  }
+
+  String? b64Payload;
+  if (raw.startsWith('data:image')) {
+    final comma = raw.indexOf(',');
+    if (comma != -1) {
+      b64Payload = raw.substring(comma + 1);
+    }
+  } else {
+    b64Payload = raw;
+  }
+
+  if (b64Payload == null || b64Payload.isEmpty) return false;
+
+  try {
+    base64Decode(b64Payload.replaceAll(RegExp(r'\s'), ''));
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Ảnh từ API: URL `http(s)://`, path `/...`, `data:image/...;base64,...`, hoặc base64 thuần.
+Widget? apiImagePreview(String? imageSource, {double size = 88}) {
+  final raw = resolveApiImageSource(imageSource);
   if (raw == null || raw.isEmpty) return null;
 
   Widget framed(Widget child) {
@@ -21,6 +81,9 @@ Widget? apiImagePreview(String? imageSource, {double size = 88}) {
   }
 
   if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    if (_isPatrolApiUrl(raw)) {
+      return framed(_PatrolApiNetworkImage(url: raw, size: size));
+    }
     return framed(
       Image.network(
         raw,
@@ -55,5 +118,90 @@ Widget? apiImagePreview(String? imageSource, {double size = 88}) {
     );
   } catch (_) {
     return null;
+  }
+}
+
+class _PatrolApiNetworkImage extends StatefulWidget {
+  const _PatrolApiNetworkImage({required this.url, required this.size});
+
+  final String url;
+  final double size;
+
+  @override
+  State<_PatrolApiNetworkImage> createState() => _PatrolApiNetworkImageState();
+}
+
+class _PatrolApiNetworkImageState extends State<_PatrolApiNetworkImage> {
+  Uint8List? _bytes;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PatrolApiNetworkImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _bytes = null;
+      _failed = false;
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    try {
+      PatrolDio.syncBaseUrls();
+      final res = await PatrolDio.instance.get<dynamic>(
+        widget.url,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      if (!mounted) return;
+      if (res.statusCode == 200 && res.data != null) {
+        final data = res.data;
+        final bytes = data is List<int>
+            ? Uint8List.fromList(data)
+            : data is Uint8List
+                ? data
+                : null;
+        if (bytes != null && bytes.isNotEmpty) {
+          setState(() {
+            _bytes = bytes;
+            _failed = false;
+          });
+          return;
+        }
+      }
+    } catch (_) {
+      // fall through to failed state
+    }
+    if (!mounted) return;
+    setState(() => _failed = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_bytes != null) {
+      return Image.memory(
+        _bytes!,
+        width: widget.size,
+        height: widget.size,
+        fit: BoxFit.contain,
+      );
+    }
+    if (_failed) {
+      return Icon(
+        Icons.broken_image_outlined,
+        size: widget.size * 0.35,
+        color: Colors.black38,
+      );
+    }
+    return SizedBox(
+      width: widget.size * 0.45,
+      height: widget.size * 0.45,
+      child: const CircularProgressIndicator(strokeWidth: 2),
+    );
   }
 }
