@@ -17,6 +17,7 @@ import '../../utils/check_point_proximity.dart';
 import '../../utils/api_image_preview.dart';
 import '../../utils/device_location.dart';
 import '../../utils/patrol_datetime_format.dart';
+import '../../utils/top_toast.dart';
 import '../../widgets/qr_code_scanner_page.dart';
 import 'patrol_shell.dart';
 
@@ -82,6 +83,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
   @override
   void dispose() {
+    TopToast.hide();
     unawaited(_stopQrLocationWatch());
     super.dispose();
   }
@@ -120,12 +122,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _autoScanActive = false;
     });
     if (message != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(milliseconds: 600),
-        ),
-      );
+      context.showTopToast(message);
     }
   }
 
@@ -314,27 +311,19 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
         ok = true;
         setState(() => _scannedCheckpointIds.add(point.id));
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.patrolRoundQrScanSuccess),
-            duration: const Duration(milliseconds: 400),
-          ),
-        );
+        context.showTopToast(l10n.patrolRoundQrScanSuccess,
+         duration: const Duration(milliseconds: 400));
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_messageForScanFailure(logResult.failure!, l10n)),
-          ),
-        );
+        context.showTopToast(_messageForScanFailure(logResult.failure!, l10n),
+         duration: const Duration(milliseconds: 400));
       }
     } catch (_) {
       if (!resumeAutoScan) {
         await _cancelQrScanWait();
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.patrolRoundQrScanFailed)),
-      );
+      context.showTopToast(l10n.patrolRoundQrScanFailed,
+       duration: const Duration(milliseconds: 400));
     } finally {
       if (mounted) {
         if (resumeAutoScan) {
