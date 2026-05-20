@@ -188,7 +188,6 @@ typedef DeviceLocationSample = ({
 
 typedef DeviceLocationOnSample = bool Function(DeviceLocationSample sample);
 
-const int _kGpsSmoothSampleCap = 6;
 
 /// GPS stream; barometer gộp trong payload native (Super GPS).
 
@@ -206,7 +205,7 @@ class DeviceLocationWatch {
 
   Position? _lastPosition;
 
-  final List<Position> _smoothBuffer = [];
+  //final List<Position> _smoothBuffer = [];
 
   double? _barometricAltitude;
 
@@ -233,7 +232,7 @@ class DeviceLocationWatch {
 
     _lastPosition = null;
 
-    _smoothBuffer.clear();
+   // _smoothBuffer.clear();
 
     await _positionSub?.cancel();
     _positionSub = null;
@@ -277,10 +276,7 @@ class DeviceLocationWatch {
             }
           },
           onError: (Object error, StackTrace stack) {
-            assert(() {
-              debugPrint('DeviceLocationWatch position stream error: $error');
-              return true;
-            }());
+          
           },
           cancelOnError: false,
         );
@@ -305,13 +301,13 @@ class DeviceLocationWatch {
   void _ingestPosition(Position pos) {
     _lastPosition = pos;
 
-    _smoothBuffer.add(pos);
+   // _smoothBuffer.add(pos);
 
-    if (_smoothBuffer.length > _kGpsSmoothSampleCap) {
-      _smoothBuffer.removeAt(0);
-    }
+   // if (_smoothBuffer.length > _kGpsSmoothSampleCap) {
+   //   _smoothBuffer.removeAt(0);
+   // }
   }
-
+  /*
   ({double lat, double lng}) _smoothedCoordinates(Position latest) {
     var weightSum = 0.0;
 
@@ -342,19 +338,19 @@ class DeviceLocationWatch {
     }
 
     return (lat: lat / weightSum, lng: lng / weightSum);
-  }
+  }*/
 
   DeviceLocationSample _buildSample(Position pos) {
-    final coords = _smoothedCoordinates(pos);
+    //final coords = _smoothedCoordinates(pos);
 
     final gpsAlt = pos.altitude.isFinite ? pos.altitude : null;
 
     return (
       position: pos,
 
-      latitude: coords.lat,
+      latitude: pos.latitude,
 
-      longitude: coords.lng,
+      longitude: pos.longitude,
 
       gpsAltitude: gpsAlt,
 
@@ -371,7 +367,7 @@ class DeviceLocationWatch {
 
     _lastPosition = null;
 
-    _smoothBuffer.clear();
+   // _smoothBuffer.clear();
 
     _barometricAltitude = null;
     _trackBarometer = false;
@@ -380,19 +376,18 @@ class DeviceLocationWatch {
 
 /// GPS + barometer theo thời gian thực cho UI (đọc một lần rồi stream).
 ///
-/// Chỉ gọi [onChanged] khi tọa độ/độ cao/busy/message đủ thay đổi để vẽ lại.
-class LiveDeviceLocationTracker {
+/// Gọi [notifyListeners] khi tọa độ/độ cao/busy/message đủ thay đổi để vẽ lại.
+///
+/// Ghép UI bằng [ListenableBuilder] / [AnimatedBuilder] thay vì `setState` cả trang.
+class LiveDeviceLocationTracker extends ChangeNotifier {
   LiveDeviceLocationTracker._(
     this._barometerSupported, {
-    required VoidCallback onChanged,
     bool Function()? isActive,
     this.gpsUiMoveThresholdM = 1.0,
     this.altitudeUiChangeThresholdM = 0.5,
-  }) : _onChanged = onChanged,
-       _isActive = isActive ?? (() => true);
+  }) : _isActive = isActive ?? (() => true);
 
   static Future<LiveDeviceLocationTracker> create({
-    required VoidCallback onChanged,
     bool Function()? isActive,
     double gpsUiMoveThresholdM = 0,
     double altitudeUiChangeThresholdM = 0,
@@ -400,7 +395,6 @@ class LiveDeviceLocationTracker {
     final supported = await isBarometerSupported();
     return LiveDeviceLocationTracker._(
       supported,
-      onChanged: onChanged,
       isActive: isActive,
       gpsUiMoveThresholdM: gpsUiMoveThresholdM,
       altitudeUiChangeThresholdM: altitudeUiChangeThresholdM,
@@ -408,7 +402,6 @@ class LiveDeviceLocationTracker {
   }
 
   final bool _barometerSupported;
-  final VoidCallback _onChanged;
   final bool Function() _isActive;
   final double gpsUiMoveThresholdM;
   final double altitudeUiChangeThresholdM;
@@ -502,12 +495,15 @@ class LiveDeviceLocationTracker {
         );
   }
 
-  Future<void> dispose() async {
+  @override
+  void dispose() {
     ++_generation;
-    await _positionStreamSub?.cancel();
+    final sub = _positionStreamSub;
     _positionStreamSub = null;
     _streamAnchor = null;
     _nativeBaroEnabled = false;
+    if (sub != null) unawaited(sub.cancel());
+    super.dispose();
   }
 
   void _onLocationEventUpdate(NativeGpsEvent event, int generation) {
@@ -561,6 +557,6 @@ class LiveDeviceLocationTracker {
   }
 
   void _notify() {
-    if (_isActive()) _onChanged();
+    if (_isActive()) notifyListeners();
   }
 }

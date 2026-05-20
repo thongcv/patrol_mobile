@@ -46,6 +46,11 @@ dependencies:
   firebase_messaging: ^16.2.1
   image_picker: ^1.1.2
   mobile_scanner: ^7.0.0
+  nfc_manager: ^4.2.1
+  flutter_blue_plus: ^2.3.2
+  # Chỉ để `flutter pub get` trên máy dev Windows; APK/IPA không dùng.
+  flutter_blue_plus_winrt: ^0.0.20
+  permission_handler: ^12.0.1
 
 dev_dependencies:
   flutter_test:

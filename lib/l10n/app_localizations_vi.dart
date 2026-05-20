@@ -279,7 +279,21 @@ class AppLocalizationsVi extends AppLocalizations {
   String get patrolRoundQrCameraDenied => 'Cần quyền camera để quét mã QR.';
 
   @override
-  String get patrolRoundAutoScan => 'Tự động scan';
+  String get patrolRoundAutoScan => 'Tự động quét GPS';
+
+  @override
+  String get patrolRoundAutoScanBluetooth => 'Quét BT';
+
+  @override
+  String get patrolRoundAutoScanBluetoothNone =>
+      'Không còn điểm nào có Bluetooth cần quét trên tuyến.';
+
+  @override
+  String get patrolRoundBluetoothWaiting => 'Đang tìm beacon Bluetooth…';
+
+  @override
+  String get patrolRoundBluetoothScanFailed =>
+      'Không đọc được beacon Bluetooth gần đây.';
 
   @override
   String get patrolRoundAutoScanNone =>
@@ -287,6 +301,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get patrolRoundAutoScanComplete => 'Đã quét hết các điểm trên tuyến.';
+
+  @override
+  String get patrolRoundNfcNotFound =>
+      'Không có điểm nào trên tuyến khớp thẻ NFC này.';
+
+  @override
+  String get patrolRoundNfcAlreadyScanned => 'Điểm này đã được quét rồi.';
 
   @override
   String get patrolRoundAssigned => 'Phân công';
@@ -344,6 +365,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get patrolRoundChipNfc => 'NFC';
+
+  @override
+  String get patrolRoundChipBluetooth => 'BT';
 
   @override
   String get patrolRoundChipScanned => 'Đã quét';
@@ -610,6 +634,113 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get patrolPointSiteAddressLabel => 'Địa chỉ';
+
+  @override
+  String get patrolPointUpdateNfcTooltip => 'Gán mã NFC cho điểm này';
+
+  @override
+  String get patrolPointUpdateBluetoothTooltip =>
+      'Gán mã Bluetooth cho điểm này';
+
+  @override
+  String get patrolPointDialogSave => 'Lưu';
+
+  @override
+  String get patrolPointNfcDialogTitle => 'Mã NFC';
+
+  @override
+  String get patrolPointNfcDialogHint => 'Quét thẻ hoặc nhập mã NFC';
+
+  @override
+  String get patrolPointNfcScanButton => 'Quét thẻ NFC';
+
+  @override
+  String get patrolPointNfcScanning => 'Đưa thẻ vào gần thiết bị…';
+
+  @override
+  String get patrolPointNfcUnavailable => 'Thiết bị không hỗ trợ NFC.';
+
+  @override
+  String get patrolPointNfcDisabled => 'Hãy bật NFC trong cài đặt thiết bị.';
+
+  @override
+  String get patrolPointNfcScanFailed => 'Không đọc được thẻ NFC.';
+
+  @override
+  String get patrolPointNfcScanTimeout => 'Không phát hiện thẻ. Thử lại.';
+
+  @override
+  String get patrolPointBluetoothDialogTitle => 'Mã Bluetooth';
+
+  @override
+  String get patrolPointBluetoothDialogHint =>
+      'Quét beacon hoặc nhập MAC / UUID';
+
+  @override
+  String get patrolPointBluetoothScanButton => 'Quét beacon gần đây';
+
+  @override
+  String get patrolPointBluetoothScanning => 'Đang tìm beacon Bluetooth…';
+
+  @override
+  String get patrolPointBluetoothUnavailable =>
+      'Thiết bị không hỗ trợ Bluetooth.';
+
+  @override
+  String get patrolPointBluetoothDisabled =>
+      'Hãy bật Bluetooth trong cài đặt thiết bị.';
+
+  @override
+  String get patrolPointBluetoothPermissionDenied =>
+      'Chưa cấp quyền Bluetooth cho ứng dụng.';
+
+  @override
+  String get patrolPointBluetoothScanFailed => 'Không quét được beacon.';
+
+  @override
+  String get patrolPointBluetoothScanTimeout =>
+      'Không phát hiện beacon. Thử lại.';
+
+  @override
+  String patrolPointBluetoothScanSummary(int rssi, String distance) {
+    return 'Tín hiệu: $rssi dBm · Khoảng cách: ~$distance m';
+  }
+
+  @override
+  String patrolPointBluetoothScanMeta(
+    String address,
+    String major,
+    String minor,
+  ) {
+    return 'MAC: $address · Major: $major · Minor: $minor';
+  }
+
+  @override
+  String patrolPointBluetoothScanName(String name) {
+    return 'Tên: $name';
+  }
+
+  @override
+  String get patrolPointIdentifierEmpty => 'Mã không được để trống.';
+
+  @override
+  String patrolPointNfcValue(String value) {
+    return 'NFC: $value';
+  }
+
+  @override
+  String patrolPointBluetoothValue(String value) {
+    return 'Bluetooth: $value';
+  }
+
+  @override
+  String get patrolPointFieldUpdateSuccess => 'Đã cập nhật.';
+
+  @override
+  String get patrolPointFieldUpdateFailed => 'Không cập nhật được.';
+
+  @override
+  String get patrolPointCheckpointMetaChange => 'Thay đổi';
 
   @override
   String get featureComingSoon => 'Chức năng đang được triển khai';

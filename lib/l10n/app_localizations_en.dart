@@ -281,7 +281,21 @@ class AppLocalizationsEn extends AppLocalizations {
       'Camera permission is required to scan QR codes.';
 
   @override
-  String get patrolRoundAutoScan => 'Auto scan';
+  String get patrolRoundAutoScan => 'Auto scan GPS';
+
+  @override
+  String get patrolRoundAutoScanBluetooth => 'Auto scan Bluetooth';
+
+  @override
+  String get patrolRoundAutoScanBluetoothNone =>
+      'No checkpoints with Bluetooth left to scan on this route.';
+
+  @override
+  String get patrolRoundBluetoothWaiting => 'Searching for Bluetooth beacon…';
+
+  @override
+  String get patrolRoundBluetoothScanFailed =>
+      'Could not read a nearby Bluetooth beacon.';
 
   @override
   String get patrolRoundAutoScanNone =>
@@ -290,6 +304,14 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get patrolRoundAutoScanComplete =>
       'All checkpoints on this route have been scanned.';
+
+  @override
+  String get patrolRoundNfcNotFound =>
+      'No checkpoint on this route matches that NFC tag.';
+
+  @override
+  String get patrolRoundNfcAlreadyScanned =>
+      'This checkpoint was already scanned.';
 
   @override
   String get patrolRoundAssigned => 'Assigned to';
@@ -347,6 +369,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get patrolRoundChipNfc => 'NFC';
+
+  @override
+  String get patrolRoundChipBluetooth => 'BT';
 
   @override
   String get patrolRoundChipScanned => 'Scanned';
@@ -612,6 +637,114 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get patrolPointSiteAddressLabel => 'Address';
+
+  @override
+  String get patrolPointUpdateNfcTooltip => 'Assign NFC tag ID to this point';
+
+  @override
+  String get patrolPointUpdateBluetoothTooltip =>
+      'Assign Bluetooth ID to this point';
+
+  @override
+  String get patrolPointDialogSave => 'Save';
+
+  @override
+  String get patrolPointNfcDialogTitle => 'NFC tag ID';
+
+  @override
+  String get patrolPointNfcDialogHint => 'Scan a tag or enter the NFC ID';
+
+  @override
+  String get patrolPointNfcScanButton => 'Scan NFC tag';
+
+  @override
+  String get patrolPointNfcScanning => 'Hold the tag near your device…';
+
+  @override
+  String get patrolPointNfcUnavailable =>
+      'NFC is not available on this device.';
+
+  @override
+  String get patrolPointNfcDisabled => 'Turn on NFC in your device settings.';
+
+  @override
+  String get patrolPointNfcScanFailed => 'Could not read the NFC tag.';
+
+  @override
+  String get patrolPointNfcScanTimeout => 'No tag detected. Try again.';
+
+  @override
+  String get patrolPointBluetoothDialogTitle => 'Bluetooth ID';
+
+  @override
+  String get patrolPointBluetoothDialogHint =>
+      'Scan a beacon or enter MAC / UUID';
+
+  @override
+  String get patrolPointBluetoothScanButton => 'Scan nearby beacon';
+
+  @override
+  String get patrolPointBluetoothScanning => 'Searching for Bluetooth beacons…';
+
+  @override
+  String get patrolPointBluetoothUnavailable =>
+      'Bluetooth is not available on this device.';
+
+  @override
+  String get patrolPointBluetoothDisabled =>
+      'Turn on Bluetooth in your device settings.';
+
+  @override
+  String get patrolPointBluetoothPermissionDenied =>
+      'Bluetooth permission was not granted.';
+
+  @override
+  String get patrolPointBluetoothScanFailed => 'Could not scan for beacons.';
+
+  @override
+  String get patrolPointBluetoothScanTimeout =>
+      'No beacon detected. Try again.';
+
+  @override
+  String patrolPointBluetoothScanSummary(int rssi, String distance) {
+    return 'Signal: $rssi dBm · Distance: ~$distance m';
+  }
+
+  @override
+  String patrolPointBluetoothScanMeta(
+    String address,
+    String major,
+    String minor,
+  ) {
+    return 'MAC: $address · Major: $major · Minor: $minor';
+  }
+
+  @override
+  String patrolPointBluetoothScanName(String name) {
+    return 'Name: $name';
+  }
+
+  @override
+  String get patrolPointIdentifierEmpty => 'ID cannot be empty.';
+
+  @override
+  String patrolPointNfcValue(String value) {
+    return 'NFC: $value';
+  }
+
+  @override
+  String patrolPointBluetoothValue(String value) {
+    return 'Bluetooth: $value';
+  }
+
+  @override
+  String get patrolPointFieldUpdateSuccess => 'Updated.';
+
+  @override
+  String get patrolPointFieldUpdateFailed => 'Could not update.';
+
+  @override
+  String get patrolPointCheckpointMetaChange => 'Change';
 
   @override
   String get featureComingSoon => 'Feature coming soon';

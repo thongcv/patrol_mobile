@@ -629,8 +629,32 @@ abstract class AppLocalizations {
   /// No description provided for @patrolRoundAutoScan.
   ///
   /// In en, this message translates to:
-  /// **'Auto scan'**
+  /// **'Auto scan GPS'**
   String get patrolRoundAutoScan;
+
+  /// No description provided for @patrolRoundAutoScanBluetooth.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto scan Bluetooth'**
+  String get patrolRoundAutoScanBluetooth;
+
+  /// No description provided for @patrolRoundAutoScanBluetoothNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No checkpoints with Bluetooth left to scan on this route.'**
+  String get patrolRoundAutoScanBluetoothNone;
+
+  /// No description provided for @patrolRoundBluetoothWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching for Bluetooth beacon…'**
+  String get patrolRoundBluetoothWaiting;
+
+  /// No description provided for @patrolRoundBluetoothScanFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read a nearby Bluetooth beacon.'**
+  String get patrolRoundBluetoothScanFailed;
 
   /// No description provided for @patrolRoundAutoScanNone.
   ///
@@ -643,6 +667,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'All checkpoints on this route have been scanned.'**
   String get patrolRoundAutoScanComplete;
+
+  /// No description provided for @patrolRoundNfcNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No checkpoint on this route matches that NFC tag.'**
+  String get patrolRoundNfcNotFound;
+
+  /// No description provided for @patrolRoundNfcAlreadyScanned.
+  ///
+  /// In en, this message translates to:
+  /// **'This checkpoint was already scanned.'**
+  String get patrolRoundNfcAlreadyScanned;
 
   /// No description provided for @patrolRoundAssigned.
   ///
@@ -745,6 +781,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'NFC'**
   String get patrolRoundChipNfc;
+
+  /// No description provided for @patrolRoundChipBluetooth.
+  ///
+  /// In en, this message translates to:
+  /// **'BT'**
+  String get patrolRoundChipBluetooth;
 
   /// No description provided for @patrolRoundChipScanned.
   ///
@@ -1175,6 +1217,184 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Address'**
   String get patrolPointSiteAddressLabel;
+
+  /// No description provided for @patrolPointUpdateNfcTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Assign NFC tag ID to this point'**
+  String get patrolPointUpdateNfcTooltip;
+
+  /// No description provided for @patrolPointUpdateBluetoothTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Assign Bluetooth ID to this point'**
+  String get patrolPointUpdateBluetoothTooltip;
+
+  /// No description provided for @patrolPointDialogSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get patrolPointDialogSave;
+
+  /// No description provided for @patrolPointNfcDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'NFC tag ID'**
+  String get patrolPointNfcDialogTitle;
+
+  /// No description provided for @patrolPointNfcDialogHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan a tag or enter the NFC ID'**
+  String get patrolPointNfcDialogHint;
+
+  /// No description provided for @patrolPointNfcScanButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan NFC tag'**
+  String get patrolPointNfcScanButton;
+
+  /// No description provided for @patrolPointNfcScanning.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold the tag near your device…'**
+  String get patrolPointNfcScanning;
+
+  /// No description provided for @patrolPointNfcUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'NFC is not available on this device.'**
+  String get patrolPointNfcUnavailable;
+
+  /// No description provided for @patrolPointNfcDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on NFC in your device settings.'**
+  String get patrolPointNfcDisabled;
+
+  /// No description provided for @patrolPointNfcScanFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read the NFC tag.'**
+  String get patrolPointNfcScanFailed;
+
+  /// No description provided for @patrolPointNfcScanTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'No tag detected. Try again.'**
+  String get patrolPointNfcScanTimeout;
+
+  /// No description provided for @patrolPointBluetoothDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth ID'**
+  String get patrolPointBluetoothDialogTitle;
+
+  /// No description provided for @patrolPointBluetoothDialogHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan a beacon or enter MAC / UUID'**
+  String get patrolPointBluetoothDialogHint;
+
+  /// No description provided for @patrolPointBluetoothScanButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan nearby beacon'**
+  String get patrolPointBluetoothScanButton;
+
+  /// No description provided for @patrolPointBluetoothScanning.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching for Bluetooth beacons…'**
+  String get patrolPointBluetoothScanning;
+
+  /// No description provided for @patrolPointBluetoothUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth is not available on this device.'**
+  String get patrolPointBluetoothUnavailable;
+
+  /// No description provided for @patrolPointBluetoothDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on Bluetooth in your device settings.'**
+  String get patrolPointBluetoothDisabled;
+
+  /// No description provided for @patrolPointBluetoothPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth permission was not granted.'**
+  String get patrolPointBluetoothPermissionDenied;
+
+  /// No description provided for @patrolPointBluetoothScanFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not scan for beacons.'**
+  String get patrolPointBluetoothScanFailed;
+
+  /// No description provided for @patrolPointBluetoothScanTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'No beacon detected. Try again.'**
+  String get patrolPointBluetoothScanTimeout;
+
+  /// No description provided for @patrolPointBluetoothScanSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Signal: {rssi} dBm · Distance: ~{distance} m'**
+  String patrolPointBluetoothScanSummary(int rssi, String distance);
+
+  /// No description provided for @patrolPointBluetoothScanMeta.
+  ///
+  /// In en, this message translates to:
+  /// **'MAC: {address} · Major: {major} · Minor: {minor}'**
+  String patrolPointBluetoothScanMeta(
+    String address,
+    String major,
+    String minor,
+  );
+
+  /// No description provided for @patrolPointBluetoothScanName.
+  ///
+  /// In en, this message translates to:
+  /// **'Name: {name}'**
+  String patrolPointBluetoothScanName(String name);
+
+  /// No description provided for @patrolPointIdentifierEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'ID cannot be empty.'**
+  String get patrolPointIdentifierEmpty;
+
+  /// No description provided for @patrolPointNfcValue.
+  ///
+  /// In en, this message translates to:
+  /// **'NFC: {value}'**
+  String patrolPointNfcValue(String value);
+
+  /// No description provided for @patrolPointBluetoothValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth: {value}'**
+  String patrolPointBluetoothValue(String value);
+
+  /// No description provided for @patrolPointFieldUpdateSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated.'**
+  String get patrolPointFieldUpdateSuccess;
+
+  /// No description provided for @patrolPointFieldUpdateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not update.'**
+  String get patrolPointFieldUpdateFailed;
+
+  /// No description provided for @patrolPointCheckpointMetaChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change'**
+  String get patrolPointCheckpointMetaChange;
 
   /// No description provided for @featureComingSoon.
   ///

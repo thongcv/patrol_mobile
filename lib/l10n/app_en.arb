@@ -95,9 +95,15 @@
   "patrolRoundQrNotFound": "No checkpoint on this route matches that QR code.",
   "patrolRoundQrAlreadyScanned": "This checkpoint was already scanned.",
   "patrolRoundQrCameraDenied": "Camera permission is required to scan QR codes.",
-  "patrolRoundAutoScan": "Auto scan",
+  "patrolRoundAutoScan": "Auto scan GPS",
+  "patrolRoundAutoScanBluetooth": "Auto scan Bluetooth",
+  "patrolRoundAutoScanBluetoothNone": "No checkpoints with Bluetooth left to scan on this route.",
+  "patrolRoundBluetoothWaiting": "Searching for Bluetooth beacon…",
+  "patrolRoundBluetoothScanFailed": "Could not read a nearby Bluetooth beacon.",
   "patrolRoundAutoScanNone": "No checkpoints left to scan on this route.",
   "patrolRoundAutoScanComplete": "All checkpoints on this route have been scanned.",
+  "patrolRoundNfcNotFound": "No checkpoint on this route matches that NFC tag.",
+  "patrolRoundNfcAlreadyScanned": "This checkpoint was already scanned.",
   "patrolRoundAssigned": "Assigned to",
   "patrolRoundSiteId": "Site",
   "patrolRoundScheduleTotalCheckPoints": "Checkpoints on schedule",
@@ -136,6 +142,7 @@
   "patrolRoundChipNoGps": "No GPS",
   "patrolRoundChipQr": "QR",
   "patrolRoundChipNfc": "NFC",
+  "patrolRoundChipBluetooth": "BT",
   "patrolRoundChipScanned": "Scanned",
   "patrolRoundChipNotScanned": "Not scanned",
   "patrolRoundQrPhotoTitle": "Take photos?",
@@ -338,6 +345,63 @@
   "patrolPointUpdateSuccess": "Coordinates updated.",
   "patrolPointUpdateFailed": "Could not update coordinates.",
   "patrolPointSiteAddressLabel": "Address",
+  "patrolPointUpdateNfcTooltip": "Assign NFC tag ID to this point",
+  "patrolPointUpdateBluetoothTooltip": "Assign Bluetooth ID to this point",
+  "patrolPointDialogSave": "Save",
+  "patrolPointNfcDialogTitle": "NFC tag ID",
+  "patrolPointNfcDialogHint": "Scan a tag or enter the NFC ID",
+  "patrolPointNfcScanButton": "Scan NFC tag",
+  "patrolPointNfcScanning": "Hold the tag near your device…",
+  "patrolPointNfcUnavailable": "NFC is not available on this device.",
+  "patrolPointNfcDisabled": "Turn on NFC in your device settings.",
+  "patrolPointNfcScanFailed": "Could not read the NFC tag.",
+  "patrolPointNfcScanTimeout": "No tag detected. Try again.",
+  "patrolPointBluetoothDialogTitle": "Bluetooth ID",
+  "patrolPointBluetoothDialogHint": "Scan a beacon or enter MAC / UUID",
+  "patrolPointBluetoothScanButton": "Scan nearby beacon",
+  "patrolPointBluetoothScanning": "Searching for Bluetooth beacons…",
+  "patrolPointBluetoothUnavailable": "Bluetooth is not available on this device.",
+  "patrolPointBluetoothDisabled": "Turn on Bluetooth in your device settings.",
+  "patrolPointBluetoothPermissionDenied": "Bluetooth permission was not granted.",
+  "patrolPointBluetoothScanFailed": "Could not scan for beacons.",
+  "patrolPointBluetoothScanTimeout": "No beacon detected. Try again.",
+  "patrolPointBluetoothScanSummary": "Signal: {rssi} dBm · Distance: ~{distance} m",
+  "@patrolPointBluetoothScanSummary": {
+    "placeholders": {
+      "rssi": { "type": "int" },
+      "distance": { "type": "String" }
+    }
+  },
+  "patrolPointBluetoothScanMeta": "MAC: {address} · Major: {major} · Minor: {minor}",
+  "@patrolPointBluetoothScanMeta": {
+    "placeholders": {
+      "address": { "type": "String" },
+      "major": { "type": "String" },
+      "minor": { "type": "String" }
+    }
+  },
+  "patrolPointBluetoothScanName": "Name: {name}",
+  "@patrolPointBluetoothScanName": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "patrolPointIdentifierEmpty": "ID cannot be empty.",
+  "patrolPointNfcValue": "NFC: {value}",
+  "@patrolPointNfcValue": {
+    "placeholders": {
+      "value": { "type": "String" }
+    }
+  },
+  "patrolPointBluetoothValue": "Bluetooth: {value}",
+  "@patrolPointBluetoothValue": {
+    "placeholders": {
+      "value": { "type": "String" }
+    }
+  },
+  "patrolPointFieldUpdateSuccess": "Updated.",
+  "patrolPointFieldUpdateFailed": "Could not update.",
+  "patrolPointCheckpointMetaChange": "Change",
   "featureComingSoon": "Feature coming soon",
   "apiBaseMissing": "API not configured: set API_BASE_URL or AppConfig.devFallbackBaseUrl",
   "loginFailed": "Sign-in failed. Check credentials or server.",

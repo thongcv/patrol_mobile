@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -13,9 +14,11 @@ import '../../models/patrol_round.dart';
 import '../../services/check_point_service.dart';
 import '../../services/patrol_log_service.dart';
 import '../../services/patrol_round_service.dart';
+import '../../utils/bluetooth_beacon_reader.dart';
 import '../../utils/check_point_proximity.dart';
 import '../../utils/api_image_preview.dart';
 import '../../utils/device_location.dart';
+import '../../utils/nfc_tag_reader.dart';
 import '../../utils/patrol_datetime_format.dart';
 import '../../utils/top_toast.dart';
 import '../../widgets/qr_code_scanner_page.dart';
@@ -32,6 +35,8 @@ enum CheckPointMatchOrder {
   /// Trong các mốc khớp, chọn khoảng cách ngang nhỏ nhất.
   nearest,
 }
+
+enum _RoundAutoScanKind { gps, bluetooth }
 
 /// Kết quả quét proximity: mốc khớp để gửi log và/hoặc feedback UI.
 class _CheckPointProximityScan {
@@ -73,6 +78,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   DeviceLocationWatch? _qrLocationWatch;
   bool _qrScanSubmitting = false;
   bool _autoScanActive = false;
+  _RoundAutoScanKind? _autoScanKind;
   ValueNotifier<_QrScanProximityStatus>? _autoScanStatusNotifier;
 
   @override
@@ -105,6 +111,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _scanningCheckpointId = null;
       _qrScanSubmitting = false;
       _autoScanActive = false;
+      _autoScanKind = null;
     });
   }
 
@@ -120,6 +127,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _scanningCheckpointId = null;
       _qrScanSubmitting = false;
       _autoScanActive = false;
+      _autoScanKind = null;
     });
     if (message != null && mounted) {
       context.showTopToast(message);
@@ -133,9 +141,10 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _qrScanSubmitting = false;
     });
     final l10n = AppLocalizations.of(context)!;
-    _autoScanStatusNotifier?.value = _QrScanProximityStatus(
-      headline: l10n.patrolRoundQrWaitingPosition,
-    );
+    final headline = _autoScanKind == _RoundAutoScanKind.bluetooth
+        ? l10n.patrolRoundBluetoothWaiting
+        : l10n.patrolRoundQrWaitingPosition;
+    _autoScanStatusNotifier?.value = _QrScanProximityStatus(headline: headline);
   }
 
   String _gpsMessageFromKey(String? key, AppLocalizations l10n) {
@@ -162,20 +171,23 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     final r = await PatrolRoundService.instance.fetchMyActivePatrolRound();
     ActivePatrolRound? active = r.ok ? r.data : null;
     if (active != null) {
-      active = await _mergeCheckPointQrFromSite(active);
+      active = await _mergeActiveRoundCheckPoints(
+        active,
+        fullRefresh: isRefresh,
+      );
     }
 
     if (!mounted) return;
     if (r.ok) {
       setState(() {
-        _applyLoadedActiveRound(active);
+        _applyLoadedActiveRound(active, fromRefresh: isRefresh);
         _loading = false;
         _refreshing = false;
         _failure = null;
       });
     } else {
       setState(() {
-        _applyLoadedActiveRound(null);
+        _applyLoadedActiveRound(null, fromRefresh: isRefresh);
         _loading = false;
         _refreshing = false;
         _failure = r.failure;
@@ -190,53 +202,114 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   bool _isCheckpointScanned(CheckPoint p) =>
       p.verified == true || _scannedCheckpointIds.contains(p.id);
 
-  /// Gán [_active], đồng bộ trạng thái đã quét từ server, ép rebuild UI.
-  void _applyLoadedActiveRound(ActivePatrolRound? active) {
-    _active = active;
+  /// Gán [_active], đồng bộ `verified` từ server vào model + [_scannedCheckpointIds].
+  void _applyLoadedActiveRound(
+    ActivePatrolRound? active, {
+    required bool fromRefresh,
+  }) {
     _reloadToken++;
     if (active == null) {
+      _active = null;
       _scannedCheckpointIds.clear();
       return;
     }
-    final validIds = active.checkPoints.map((p) => p.id).toSet();
-    _scannedCheckpointIds.removeWhere((id) => !validIds.contains(id));
+
+    // Khi user bấm refresh: chỉ tin `verified` từ GET active, không giữ quét cục bộ.
+    final pendingLocal = fromRefresh
+        ? <int>{}
+        : _scannedCheckpointIds
+            .where((id) => active.checkPoints.any((p) => p.id == id))
+            .toSet();
+
+    final scannedIds = <int>{};
     for (final p in active.checkPoints) {
-      if (p.verified == true) {
-        _scannedCheckpointIds.add(p.id);
+      if (p.verified == true) scannedIds.add(p.id);
+    }
+    if (!fromRefresh) {
+      for (final id in pendingLocal) {
+        if (scannedIds.contains(id)) continue;
+        final point = active.checkPoints.firstWhere((p) => p.id == id);
+        if (point.verified != true) scannedIds.add(id);
       }
     }
+
+    _scannedCheckpointIds
+      ..clear()
+      ..addAll(scannedIds);
+
+    _active = ActivePatrolRound(
+      schedule: active.schedule,
+      round: active.round,
+      checkPoints: [
+        for (final p in active.checkPoints)
+          scannedIds.contains(p.id)
+              ? p.copyWith(verified: true)
+              : fromRefresh
+                  ? p.copyWith(verified: false)
+                  : p,
+      ],
+    );
   }
 
-  /// GET active có thể thiếu `qrImage`; bổ sung từ `/api/check-points/me/site`.
-  Future<ActivePatrolRound> _mergeCheckPointQrFromSite(
-    ActivePatrolRound active,
-  ) async {
-    final needsMerge = active.checkPoints.any((p) {
-      final q = p.qrImage?.trim();
-      if (q == null || q.isEmpty) return true;
-      return !canPreviewApiImageSource(p.qrImage);
+  void _markCheckpointVerified(int checkpointId) {
+    final active = _active;
+    if (active == null) return;
+    setState(() {
+      _scannedCheckpointIds.add(checkpointId);
+      _active = ActivePatrolRound(
+        schedule: active.schedule,
+        round: active.round,
+        checkPoints: [
+          for (final p in active.checkPoints)
+            p.id == checkpointId ? p.copyWith(verified: true) : p,
+        ],
+      );
     });
-    if (!needsMerge) return active;
+  }
+
+  /// Bổ sung QR/metadata từ site. Khi [fullRefresh], không ghi đè field từ GET active.
+  Future<ActivePatrolRound> _mergeActiveRoundCheckPoints(
+    ActivePatrolRound active, {
+    required bool fullRefresh,
+  }) async {
+    final needsSiteMerge = active.checkPoints.any((p) {
+      final q = p.qrImage?.trim();
+      final needsQr =
+          q == null || q.isEmpty || !canPreviewApiImageSource(p.qrImage);
+      final bt = p.bluetooth?.trim();
+      final needsBluetooth = bt == null || bt.isEmpty;
+      final nfc = p.nfc?.trim();
+      final needsNfc = nfc == null || nfc.isEmpty;
+      return needsQr || needsBluetooth || needsNfc;
+    });
+    if (!needsSiteMerge) return active;
 
     final site = await CheckPointService.instance.fetchMySiteCheckPoints();
     if (!site.ok || site.data == null) return active;
 
-    final qrById = <int, String>{
-      for (final p in site.data!.checkPoints)
-        if (p.qrImage != null && p.qrImage!.trim().isNotEmpty) p.id: p.qrImage!,
+    final siteById = {
+      for (final p in site.data!.checkPoints) p.id: p,
     };
-    if (qrById.isEmpty) return active;
+    if (siteById.isEmpty) return active;
 
+    final preferActive = fullRefresh;
     final mergedPoints = active.checkPoints.map((p) {
-      final siteQr = qrById[p.id]?.trim();
-      if (siteQr == null || siteQr.isEmpty) return p;
-      final current = p.qrImage?.trim();
-      if (current != null &&
-          current.isNotEmpty &&
-          canPreviewApiImageSource(p.qrImage)) {
-        return p;
+      final sitePoint = siteById[p.id];
+      if (sitePoint == null) return p;
+
+      var merged = p.mergeSiteMetadata(sitePoint, preferActive: preferActive);
+
+      final siteQr = sitePoint.qrImage?.trim();
+      if (siteQr != null && siteQr.isNotEmpty) {
+        final current = merged.qrImage?.trim();
+        if (current == null ||
+            current.isEmpty ||
+            !canPreviewApiImageSource(merged.qrImage)) {
+          merged = merged.copyWith(qrImage: siteQr);
+        }
       }
-      return p.copyWith(qrImage: siteQr);
+
+      return merged;
     }).toList();
 
     return ActivePatrolRound(
@@ -309,7 +382,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
       if (logResult.ok) {
         ok = true;
-        setState(() => _scannedCheckpointIds.add(point.id));
+        _markCheckpointVerified(point.id);
         if (!mounted) return;
         context.showTopToast(l10n.patrolRoundQrScanSuccess,
          duration: const Duration(milliseconds: 400));
@@ -328,7 +401,12 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       if (mounted) {
         if (resumeAutoScan) {
           final remaining = _active != null
-              ? _eligibleCheckPoints(_active!)
+              ? switch (_autoScanKind) {
+                  _RoundAutoScanKind.bluetooth =>
+                    _eligibleBluetoothCheckPoints(_active!),
+                  _RoundAutoScanKind.gps || null =>
+                    _eligibleCheckPoints(_active!),
+                }
               : <CheckPoint>[];
           if (ok && remaining.isEmpty) {
             await _finishAutoScanSession(
@@ -342,6 +420,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
             _scanningCheckpointId = null;
             _qrScanSubmitting = false;
             _autoScanActive = false;
+            _autoScanKind = null;
           });
           await _stopQrLocationWatch();
         }
@@ -362,9 +441,96 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     return out;
   }
 
-  CheckPoint? _autoScanPosition(ActivePatrolRound data) {
+  CheckPoint? _autoScanCheckPoint(ActivePatrolRound data) {
     final eligible = _eligibleCheckPoints(data);
     return eligible.isEmpty ? null : eligible.first;
+  }
+
+  List<CheckPoint> _eligibleBluetoothCheckPoints(ActivePatrolRound data) {
+    final out = <CheckPoint>[];
+    for (final p in data.checkPoints) {
+      if (_isCheckpointScanned(p)) continue;
+      final bt = p.bluetooth?.trim();
+      if (bt == null || bt.isEmpty) continue;
+      out.add(p);
+    }
+    out.sort((a, b) => a.sequenceOrder.compareTo(b.sequenceOrder));
+    return out;
+  }
+
+  CheckPoint? _matchBluetoothCheckPoint(
+    List<CheckPoint> candidates, {
+    required String identifier,
+    String? deviceAddress,
+  }) {
+    for (final p in candidates) {
+      final bt = p.bluetooth?.trim();
+      if (bt == null || bt.isEmpty) continue;
+      if (bluetoothIdentifiersMatch(bt, identifier)) return p;
+      final addr = deviceAddress?.trim();
+      if (addr != null &&
+          addr.isNotEmpty &&
+          bluetoothIdentifiersMatch(bt, addr)) {
+        return p;
+      }
+    }
+    return null;
+  }
+
+  CheckPoint? _findCheckPointByNfc(List<CheckPoint> points, String raw) {
+    final payload = raw.trim();
+    if (payload.isEmpty) return null;
+    for (final p in points) {
+      if (p.nfc?.trim() == payload) return p;
+    }
+    return null;
+  }
+
+  String _bluetoothScanFailureMessage(
+    AppLocalizations l10n,
+    BluetoothReadFailure failure,
+  ) {
+    return switch (failure) {
+      BluetoothReadFailure.disabled => l10n.patrolPointBluetoothDisabled,
+      BluetoothReadFailure.permissionDenied =>
+        l10n.patrolPointBluetoothPermissionDenied,
+      BluetoothReadFailure.timeout => l10n.patrolPointBluetoothScanTimeout,
+      BluetoothReadFailure.unavailable => l10n.patrolPointBluetoothUnavailable,
+      BluetoothReadFailure.failed => l10n.patrolRoundBluetoothScanFailed,
+    };
+  }
+
+  String _nfcScanFailureMessage(AppLocalizations l10n, NfcReadFailure failure) {
+    return switch (failure) {
+      NfcReadFailure.disabled => l10n.patrolPointNfcDisabled,
+      NfcReadFailure.timeout => l10n.patrolPointNfcScanTimeout,
+      NfcReadFailure.unavailable => l10n.patrolPointNfcUnavailable,
+      NfcReadFailure.noIdentifier || NfcReadFailure.failed =>
+        l10n.patrolPointNfcScanFailed,
+    };
+  }
+
+  DeviceLocationSample _fallbackLocationSampleForCheckpoint(CheckPoint point) {
+    final lat = point.latitude!;
+    final lng = point.longitude!;
+    return (
+      position: Position(
+        latitude: lat,
+        longitude: lng,
+        timestamp: DateTime.now(),
+        accuracy: double.maxFinite,
+        altitude: 0,
+        heading: 0,
+        speed: 0,
+        speedAccuracy: 0,
+        altitudeAccuracy: 0,
+        headingAccuracy: 0,
+      ),
+      latitude: lat,
+      longitude: lng,
+      gpsAltitude: null,
+      baroAltitude: null,
+    );
   }
 
   CheckPointProximityEvaluation _evaluatePointProximity({
@@ -486,14 +652,54 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     );
   }
 
-  /// Chuẩn hóa payload QR và khớp `CheckPoint.code` trên tuyến hiện tại.
+  /// Chuẩn hóa payload QR và khớp `CheckPoint.qrCode` trên tuyến hiện tại.
   CheckPoint? _findCheckPointByQrCode(List<CheckPoint> points, String raw) {
     var payload = raw.trim();
     if (payload.isEmpty) return null;
     for (final p in points) {
-      if (p.code.trim() == payload) return p;
+      if (p.qrCode?.trim() == payload) return p;
     }
     return null;
+  }
+
+  Future<void> _onRoundNfcScan(ActivePatrolRound data) async {
+    if (_scanningCheckpointId != null || _autoScanActive) return;
+
+    final l10n = AppLocalizations.of(context)!;
+    if (!isNfcScanSupported) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolPointNfcUnavailable)),
+      );
+      return;
+    }
+
+    final result = await readNfcTagIdentifier(
+      iosAlertMessage: l10n.patrolPointNfcScanning,
+    );
+    if (!mounted || !result.ok || result.identifier == null) {
+      if (mounted && result.failure != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_nfcScanFailureMessage(l10n, result.failure!))),
+        );
+      }
+      return;
+    }
+
+    final point = _findCheckPointByNfc(data.checkPoints, result.identifier!);
+    if (point == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolRoundNfcNotFound)),
+      );
+      return;
+    }
+    if (_isCheckpointScanned(point)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolRoundNfcAlreadyScanned)),
+      );
+      return;
+    }
+
+    await _onQrScanCheckpoint(point, data.round.id);
   }
 
   Future<void> _onRoundQrScan(ActivePatrolRound data) async {
@@ -524,7 +730,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     await _onQrScanCheckpoint(point, data.round.id);
   }
 
-  /// Sau khi quét QR khớp điểm: xác nhận GPS, popup ảnh, gửi patrol log.
+  /// Sau khi quét QR khớp điểm: popup ảnh, đọc GPS một lần, gửi patrol log.
   Future<void> _onQrScanCheckpoint(CheckPoint point, int roundId) async {
     if (_scanningCheckpointId != null || _autoScanActive) return;
 
@@ -542,161 +748,46 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
     setState(() {
       _scanningCheckpointId = point.id;
-      _qrScanSubmitting = false;
+      _qrScanSubmitting = true;
     });
 
-    final statusNotifier = ValueNotifier<_QrScanProximityStatus>(
-      _QrScanProximityStatus(headline: l10n.patrolRoundQrWaitingPosition),
+    final needsBaro = point.baroAltitude != null;
+    final gps = await readDeviceGpsOnce(
+      enableBarometer: needsBaro,
+      targetAccuracyM: kCheckpointGpsTargetAccuracyM,
     );
 
     if (!mounted) return;
 
-    final needsBaroValidation = point.baroAltitude != null;
-    final watch = await DeviceLocationWatch.create();
-    if (!mounted) return;
-    _qrLocationWatch = watch;
-
-    unawaited(
-      showModalBottomSheet<void>(
-        context: context,
-        isDismissible: false,
-        enableDrag: false,
-        backgroundColor: Colors.transparent,
-        builder: (sheetContext) {
-          return Padding(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              12,
-              16,
-              16 + MediaQuery.paddingOf(sheetContext).bottom,
-            ),
-            child: Material(
-              color: PatrolShellColors.surface,
-              borderRadius: BorderRadius.circular(20),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    ValueListenableBuilder<_QrScanProximityStatus>(
-                      valueListenable: statusNotifier,
-                      builder: (_, status, _) {
-                        final bodyStyle = Theme.of(sheetContext)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.88),
-                              height: 1.45,
-                            );
-                        final detail = status.snapshot;
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text(
-                              status.headline,
-                              textAlign: TextAlign.center,
-                              style: bodyStyle,
-                            ),
-                            if (detail != null) ...[
-                              const SizedBox(height: 14),
-                              _QrProximityDetailPanel(
-                                l10n: l10n,
-                                snapshot: detail,
-                                baroPending: status.baroPending,
-                              ),
-                            ],
-                          ],
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    const Center(
-                      child: SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: Color(0xFF34D399),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(sheetContext).pop();
-                        unawaited(_cancelQrScanWait());
-                      },
-                      child: Text(l10n.patrolRoundCancel),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ).whenComplete(() {
-        statusNotifier.dispose();
-        if (_scanningCheckpointId == point.id && !_qrScanSubmitting) {
-          unawaited(_cancelQrScanWait());
-        }
-      }),
-    );
-
-    final gpsError = await watch.start(
-      enableBarometer: needsBaroValidation,
-      onSample: (sample) {
-        if (!mounted || _qrScanSubmitting || _autoScanActive) {
-          return false;
-        }
-
-        final evaluation = _evaluatePointProximity(
-          point: point,
-          sample: sample,
-          baroListening: watch.barometerListening,
-        );
-
-        if (!evaluation.result.ok) {
-          statusNotifier.value = _qrScanProximityStatus(
-            l10n: l10n,
-            proximity: evaluation.result,
-            snapshot: evaluation.snapshot,
-          );
-          return false;
-        }
-
-        _qrScanSubmitting = true;
-        statusNotifier.value = _QrScanProximityStatus(
-          headline: l10n.patrolRoundQrPositionOkSaving,
-        );
-        unawaited(watch.stop());
-        if (mounted && Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
-        }
-        unawaited(
-          _submitPatrolLogAfterProximity(
-            point: point,
-            roundId: roundId,
-            sample: sample,
-            photoPaths: photoPaths,
-          ),
-        );
-        return false;
-      },
-    );
-
-    if (!mounted) return;
-
-    if (gpsError != null) {
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-      await _cancelQrScanWait();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_gpsMessageFromKey(gpsError, l10n))),
+    if (gps.position == null) {
+      context.showTopToast(
+        _gpsMessageFromKey(gps.messageKey, l10n),
+        backgroundColor: const Color(0xFFF59E0B),
+        duration: const Duration(milliseconds: 800),
       );
     }
+
+    final pos = gps.position;
+    final DeviceLocationSample sample;
+    if (pos != null) {
+      final gpsAlt = pos.altitude.isFinite ? pos.altitude : null;
+      sample = (
+        position: pos,
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+        gpsAltitude: gpsAlt,
+        baroAltitude: gps.barometricAltitude,
+      );
+    } else {
+      sample = _fallbackLocationSampleForCheckpoint(point);
+    }
+
+    await _submitPatrolLogAfterProximity(
+      point: point,
+      roundId: roundId,
+      sample: sample,
+      photoPaths: photoPaths,
+    );
   }
 
   Future<void> _onAutoScanPosition(ActivePatrolRound data) async {
@@ -716,6 +807,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
     setState(() {
       _autoScanActive = true;
+      _autoScanKind = _RoundAutoScanKind.gps;
       _qrScanSubmitting = false;
     });
 
@@ -726,8 +818,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
     if (!mounted) return;
 
-    final needsBaroValidation =
-        eligible.any((p) => p.baroAltitude != null);
+    final needsBaroValidation = eligible.any((p) => p.baroAltitude != null);
     final watch = await DeviceLocationWatch.create();
     if (!mounted) return;
     _qrLocationWatch = watch;
@@ -892,6 +983,273 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
         SnackBar(content: Text(_gpsMessageFromKey(gpsError, l10n))),
       );
     }
+  }
+
+  Future<void> _completeBluetoothAutoScanAfterMatch({
+    required CheckPoint point,
+    required int roundId,
+  }) async {
+    if (!mounted) {
+      await _cancelQrScanWait();
+      return;
+    }
+
+    final l10n = AppLocalizations.of(context)!;
+    final photoPaths = await _confirmPhotoDialog(l10n: l10n, point: point);
+    if (!mounted) {
+      await _cancelQrScanWait();
+      return;
+    }
+    if (photoPaths == null) {
+      await _cancelQrScanWait();
+      return;
+    }
+
+    if (!mounted) {
+      _resumeAutoScanAfterCheckpoint();
+      return;
+    }
+    setState(() => _scanningCheckpointId = point.id);
+
+    final needsBaro = point.baroAltitude != null;
+    final gps = await readDeviceGpsOnce(
+      enableBarometer: needsBaro,
+      targetAccuracyM: kCheckpointGpsTargetAccuracyM,
+    );
+
+    if (!mounted) return;
+
+    if (gps.position == null) {
+      context.showTopToast(
+        _gpsMessageFromKey(gps.messageKey, l10n),
+        backgroundColor: const Color(0xFFF59E0B),
+        duration: const Duration(milliseconds: 800),
+      );
+    }
+
+    final pos = gps.position;
+    final DeviceLocationSample sample;
+    if (pos != null) {
+      final gpsAlt = pos.altitude.isFinite ? pos.altitude : null;
+      sample = (
+        position: pos,
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+        gpsAltitude: gpsAlt,
+        baroAltitude: gps.barometricAltitude,
+      );
+    } else {
+      sample = _fallbackLocationSampleForCheckpoint(point);
+    }
+
+    await _submitPatrolLogAfterProximity(
+      point: point,
+      roundId: roundId,
+      sample: sample,
+      photoPaths: photoPaths,
+      resumeAutoScan: true,
+    );
+  }
+
+  Future<void> _runBluetoothAutoScanLoop({
+    required int roundId,
+    required ValueNotifier<_QrScanProximityStatus> statusNotifier,
+  }) async {
+    final l10n = AppLocalizations.of(context)!;
+
+    while (mounted && _autoScanActive && _autoScanKind == _RoundAutoScanKind.bluetooth) {
+      if (_qrScanSubmitting) {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        continue;
+      }
+
+      final active = _active;
+      if (active == null) break;
+
+      final pending = _eligibleBluetoothCheckPoints(active);
+      if (pending.isEmpty) {
+        unawaited(
+          _finishAutoScanSession(message: l10n.patrolRoundAutoScanComplete),
+        );
+        return;
+      }
+
+      final remoteIds = pending
+          .map((p) => p.bluetooth!.trim())
+          .where((id) => id.isNotEmpty)
+          .toList();
+
+      statusNotifier.value = _QrScanProximityStatus(
+        headline: l10n.patrolRoundBluetoothWaiting,
+      );
+
+      if (!isBluetoothScanSupported) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.patrolPointBluetoothUnavailable)),
+        );
+        await _cancelQrScanWait();
+        return;
+      }
+
+      final result = await readBluetoothBeaconIdentifier(
+        mode: bluetoothScanModeForIdentifiers(remoteIds),
+        remoteIds: remoteIds,
+        stableHits: 1,
+        successRssi: -85,
+      );
+
+      if (!mounted || !_autoScanActive || _autoScanKind != _RoundAutoScanKind.bluetooth) {
+        return;
+      }
+
+      if (!result.ok) {
+        if (result.failure != null) {
+          statusNotifier.value = _QrScanProximityStatus(
+            headline: _bluetoothScanFailureMessage(l10n, result.failure!),
+          );
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        continue;
+      }
+
+      final matched = _matchBluetoothCheckPoint(
+        pending,
+        identifier: result.identifier!,
+        deviceAddress: result.beacon?.deviceAddress,
+      );
+      if (matched == null) {
+        statusNotifier.value = _QrScanProximityStatus(
+          headline: l10n.patrolRoundBluetoothScanFailed,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        continue;
+      }
+
+      setState(() => _qrScanSubmitting = true);
+      statusNotifier.value = _QrScanProximityStatus(
+        headline: l10n.patrolRoundQrPositionOkSaving,
+      );
+      await _completeBluetoothAutoScanAfterMatch(
+        point: matched,
+        roundId: roundId,
+      );
+    }
+  }
+
+  Future<void> _onAutoScanBluetooth(ActivePatrolRound data) async {
+    if (_scanningCheckpointId != null || _autoScanActive) return;
+
+    final l10n = AppLocalizations.of(context)!;
+    final eligible = _eligibleBluetoothCheckPoints(data);
+    if (eligible.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolRoundAutoScanBluetoothNone)),
+      );
+      return;
+    }
+
+    final roundId = data.round.id;
+
+    setState(() {
+      _autoScanActive = true;
+      _autoScanKind = _RoundAutoScanKind.bluetooth;
+      _qrScanSubmitting = false;
+    });
+
+    final statusNotifier = ValueNotifier<_QrScanProximityStatus>(
+      _QrScanProximityStatus(headline: l10n.patrolRoundBluetoothWaiting),
+    );
+    _autoScanStatusNotifier = statusNotifier;
+
+    if (!mounted) return;
+
+    unawaited(
+      showModalBottomSheet<void>(
+        context: context,
+        isDismissible: false,
+        enableDrag: false,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (sheetContext) {
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              4,
+              16,
+              16 + MediaQuery.paddingOf(sheetContext).bottom,
+            ),
+            child: Material(
+              color: PatrolShellColors.surface,
+              borderRadius: BorderRadius.circular(20),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ValueListenableBuilder<_QrScanProximityStatus>(
+                      valueListenable: statusNotifier,
+                      builder: (_, status, _) {
+                        final bodyStyle = Theme.of(sheetContext)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.88),
+                              height: 1.45,
+                            );
+                        return Text(
+                          status.headline,
+                          textAlign: TextAlign.center,
+                          style: bodyStyle,
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    const Center(
+                      child: SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Color(0xFF34D399),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(sheetContext).pop();
+                        unawaited(_cancelQrScanWait());
+                      },
+                      child: Text(l10n.patrolRoundCancel),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ).whenComplete(() {
+        if (_autoScanStatusNotifier == statusNotifier) {
+          _autoScanStatusNotifier = null;
+          statusNotifier.dispose();
+        }
+        if (_autoScanActive &&
+            _autoScanKind == _RoundAutoScanKind.bluetooth &&
+            !_qrScanSubmitting) {
+          unawaited(_cancelQrScanWait());
+        }
+      }),
+    );
+
+    unawaited(
+      _runBluetoothAutoScanLoop(
+        roundId: roundId,
+        statusNotifier: statusNotifier,
+      ),
+    );
   }
 
   Future<void> _openScheduleOverlay() async {
@@ -1128,7 +1486,9 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
             const SizedBox(height: 12),
             _RoundCard(
               key: ValueKey(
-                'round-${data.round.id}-${data.round.status}-$_reloadToken',
+                'round-${data.round.id}-${data.round.status}-'
+                '${data.round.expectedStartTime}-${data.round.expectedEndTime}-'
+                '${data.round.assignedName}-$_reloadToken',
               ),
               theme: theme,
               l10n: l10n,
@@ -1139,9 +1499,18 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
               onReload: _load,
               qrScanBusy: _scanningCheckpointId != null || _autoScanActive,
               onQrScan: () => unawaited(_onRoundQrScan(data)),
+              nfcScanBusy: _scanningCheckpointId != null || _autoScanActive,
+              onNfcScan: isNfcScanSupported
+                  ? () => unawaited(_onRoundNfcScan(data))
+                  : null,
               autoScanBusy: _scanningCheckpointId != null || _autoScanActive,
-              onAutoScan: _autoScanPosition(data) != null
+              onAutoScan: _autoScanCheckPoint(data) != null
                   ? () => unawaited(_onAutoScanPosition(data))
+                  : null,
+              autoScanBluetoothBusy:
+                  _scanningCheckpointId != null || _autoScanActive,
+              onAutoScanBluetooth: isBluetoothScanSupported
+                  ? () => unawaited(_onAutoScanBluetooth(data))
                   : null,
             ),
           ],
@@ -1167,7 +1536,8 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
               ...data.checkPoints.map(
                 (p) => Padding(
                   key: ValueKey(
-                    'route-${p.id}-${p.verified}-${p.updatedDate}-$_reloadToken',
+                    'route-${p.id}-${p.verified}-${p.updatedDate}-'
+                    '${p.latitude}-${p.longitude}-${p.name}-$_reloadToken',
                   ),
                   padding: const EdgeInsets.only(bottom: 10),
                   child: _RoutePointCard(
@@ -1176,7 +1546,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
                     point: p,
                     scanned: _isCheckpointScanned(p),
                     qrBusy: _scanningCheckpointId == p.id,
-                    imageReloadToken: _reloadToken,
                   ),
                 ),
               ),
@@ -1446,8 +1815,12 @@ class _RoundCard extends StatelessWidget {
     required this.onReload,
     this.qrScanBusy = false,
     this.onQrScan,
+    this.nfcScanBusy = false,
+    this.onNfcScan,
     this.autoScanBusy = false,
     this.onAutoScan,
+    this.autoScanBluetoothBusy = false,
+    this.onAutoScanBluetooth,
   });
 
   final TextTheme theme;
@@ -1459,8 +1832,12 @@ class _RoundCard extends StatelessWidget {
   final VoidCallback onReload;
   final bool qrScanBusy;
   final VoidCallback? onQrScan;
+  final bool nfcScanBusy;
+  final VoidCallback? onNfcScan;
   final bool autoScanBusy;
   final VoidCallback? onAutoScan;
+  final bool autoScanBluetoothBusy;
+  final VoidCallback? onAutoScanBluetooth;
 
   @override
   Widget build(BuildContext context) {
@@ -1569,39 +1946,40 @@ class _RoundCard extends StatelessWidget {
             label: l10n.patrolRoundExpectedEnd,
             value: formatPatrolIsoDateTime(round.expectedEndTime),
           ),
-          if (onQrScan != null || onAutoScan != null) ...[
+          if (assignee != null && assignee.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _InfoRow(
+              theme: theme,
+              icon: Icons.person_outline_rounded,
+              label: l10n.patrolRoundAssigned,
+              value: assignee,
+            ),
+          ],
+          if (onQrScan != null ||
+              onNfcScan != null ||
+              onAutoScan != null ||
+              onAutoScanBluetooth != null) ...[
             const SizedBox(height: 10),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 if (onAutoScan != null)
-                  Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: autoScanBusy ? null : onAutoScan,
-                      borderRadius: BorderRadius.circular(20),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            autoScanBusy
-                                ? Icons.hourglass_top_rounded
-                                : Icons.auto_mode_rounded,
-                            size: 18,
-                            color: const Color(0xFF34D399),
-                          ),
-                          const SizedBox(width: 8),
-                          _StatusChip(
-                            label: l10n.patrolRoundAutoScan,
-                            color: const Color(0xFF34D399),
-                            filled: true,
-                          ),
-                        ],
-                      ),
-                    ),
+                  _PatrolScanActionTile(
+                    onTap: onAutoScan,
+                    busy: autoScanBusy,
+                    icon: Icons.auto_mode_rounded,
+                    label: l10n.patrolRoundAutoScan,
                   ),
-                if (onQrScan != null) ...[
-                  const SizedBox(width: 8),
+                if (onAutoScanBluetooth != null)
+                  _PatrolScanActionTile(
+                    onTap: onAutoScanBluetooth,
+                    busy: autoScanBluetoothBusy,
+                    icon: Icons.bluetooth_rounded,
+                    label: l10n.patrolRoundAutoScanBluetooth,
+                  ),
+                if (onQrScan != null)
                   Material(
                     color: Colors.transparent,
                     child: InkWell(
@@ -1631,17 +2009,37 @@ class _RoundCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                ],
+                if (onNfcScan != null)
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: nfcScanBusy ? null : onNfcScan,
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        width: kPatrolQrPreviewSize,
+                        height: kPatrolQrPreviewSize,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF34D399).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFF34D399)
+                                .withValues(alpha: 0.45),
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: Icon(
+                          nfcScanBusy
+                              ? Icons.hourglass_top_rounded
+                              : Icons.nfc_rounded,
+                          size: 36,
+                          color: nfcScanBusy
+                              ? const Color(0xFF34D399).withValues(alpha: 0.45)
+                              : const Color(0xFF34D399),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
-            ),
-          ],
-          if (assignee != null && assignee.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _InfoRow(
-              theme: theme,
-              icon: Icons.person_outline_rounded,
-              label: l10n.patrolRoundAssigned,
-              value: assignee,
             ),
           ],
         ],
@@ -2181,7 +2579,6 @@ class _RoutePointCard extends StatelessWidget {
     required this.point,
     this.scanned = false,
     this.qrBusy = false,
-    this.imageReloadToken = 0,
   });
 
   final TextTheme theme;
@@ -2189,33 +2586,14 @@ class _RoutePointCard extends StatelessWidget {
   final CheckPoint point;
   final bool scanned;
   final bool qrBusy;
-  final int imageReloadToken;
 
   @override
   Widget build(BuildContext context) {
     final hasQrPayload =
         point.qrImage != null && point.qrImage!.trim().isNotEmpty;
-    final Widget? qrPreview = hasQrPayload
-        ? KeyedSubtree(
-            key: ValueKey('qr-${point.id}-$imageReloadToken-${point.qrImage}'),
-            child: apiImagePreview(point.qrImage, size: kPatrolQrPreviewSize) ??
-                Container(
-                  width: kPatrolQrPreviewSize,
-                  height: kPatrolQrPreviewSize,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(
-                    Icons.qr_code_2_rounded,
-                    size: 36,
-                    color: Colors.black.withValues(alpha: 0.35),
-                  ),
-                ),
-          )
-        : null;
     final hasNfc = point.nfc != null && point.nfc!.trim().isNotEmpty;
+    final hasBluetooth =
+        point.bluetooth != null && point.bluetooth!.trim().isNotEmpty;
     final isScanned = scanned || point.verified == true;
 
     return Container(
@@ -2272,10 +2650,6 @@ class _RoutePointCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (hasQrPayload) ...[
-                const SizedBox(width: 8),
-                qrPreview!,
-              ],
             ],
           ),
           const SizedBox(height: 10),
@@ -2310,6 +2684,13 @@ class _RoutePointCard extends StatelessWidget {
                   label: l10n.patrolRoundChipNfc,
                   icon: Icons.nfc_rounded,
                   color: Colors.white70,
+                ),
+              if (hasBluetooth)
+                _FeatureChip(
+                  theme: theme,
+                  label: l10n.patrolRoundChipBluetooth,
+                  icon: Icons.bluetooth_rounded,
+                  color: const Color(0xFF93C5FD),
                 ),
             ],
           ),
@@ -2346,6 +2727,69 @@ class _PatrolPanel extends StatelessWidget {
         ],
       ),
       child: child,
+    );
+  }
+}
+
+/// Nút quét vuông: icon và nhãn trong cùng khung (giống QR/NFC).
+class _PatrolScanActionTile extends StatelessWidget {
+  const _PatrolScanActionTile({
+    required this.onTap,
+    required this.busy,
+    required this.icon,
+    required this.label,
+  });
+
+  final VoidCallback? onTap;
+  final bool busy;
+  final IconData icon;
+  final String label;
+
+  static const Color _accent = Color(0xFF34D399);
+
+  @override
+  Widget build(BuildContext context) {
+    final color = busy ? _accent.withValues(alpha: 0.45) : _accent;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: busy ? null : onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: kPatrolQrPreviewSize,
+          height: kPatrolQrPreviewSize,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          decoration: BoxDecoration(
+            color: _accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _accent.withValues(alpha: 0.45)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                busy ? Icons.hourglass_top_rounded : icon,
+                size: 26,
+                color: color,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  height: 1.15,
+                  letterSpacing: 0.1,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

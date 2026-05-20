@@ -88,9 +88,15 @@
   "patrolRoundQrNotFound": "Không có điểm nào trên tuyến khớp mã QR này.",
   "patrolRoundQrAlreadyScanned": "Điểm này đã được quét.",
   "patrolRoundQrCameraDenied": "Cần quyền camera để quét mã QR.",
-  "patrolRoundAutoScan": "Tự động scan",
+  "patrolRoundAutoScan": "Tự động quét GPS",
+  "patrolRoundAutoScanBluetooth": "Quét BT",
+  "patrolRoundAutoScanBluetoothNone": "Không còn điểm nào có Bluetooth cần quét trên tuyến.",
+  "patrolRoundBluetoothWaiting": "Đang tìm beacon Bluetooth…",
+  "patrolRoundBluetoothScanFailed": "Không đọc được beacon Bluetooth gần đây.",
   "patrolRoundAutoScanNone": "Không còn điểm nào cần quét trên tuyến.",
   "patrolRoundAutoScanComplete": "Đã quét hết các điểm trên tuyến.",
+  "patrolRoundNfcNotFound": "Không có điểm nào trên tuyến khớp thẻ NFC này.",
+  "patrolRoundNfcAlreadyScanned": "Điểm này đã được quét rồi.",
   "patrolRoundAssigned": "Phân công",
   "patrolRoundSiteId": "Site",
   "patrolRoundScheduleTotalCheckPoints": "Điểm theo lịch",
@@ -108,6 +114,7 @@
   "patrolRoundChipNoGps": "Chưa GPS",
   "patrolRoundChipQr": "QR",
   "patrolRoundChipNfc": "NFC",
+  "patrolRoundChipBluetooth": "BT",
   "patrolRoundChipScanned": "Đã quét",
   "patrolRoundChipNotScanned": "Chưa quét",
   "patrolRoundQrPhotoTitle": "Chụp ảnh?",
@@ -183,6 +190,63 @@
   "patrolPointUpdateSuccess": "Đã cập nhật tọa độ.",
   "patrolPointUpdateFailed": "Không cập nhật được tọa độ.",
   "patrolPointSiteAddressLabel": "Địa chỉ",
+  "patrolPointUpdateNfcTooltip": "Gán mã NFC cho điểm này",
+  "patrolPointUpdateBluetoothTooltip": "Gán mã Bluetooth cho điểm này",
+  "patrolPointDialogSave": "Lưu",
+  "patrolPointNfcDialogTitle": "Mã NFC",
+  "patrolPointNfcDialogHint": "Quét thẻ hoặc nhập mã NFC",
+  "patrolPointNfcScanButton": "Quét thẻ NFC",
+  "patrolPointNfcScanning": "Đưa thẻ vào gần thiết bị…",
+  "patrolPointNfcUnavailable": "Thiết bị không hỗ trợ NFC.",
+  "patrolPointNfcDisabled": "Hãy bật NFC trong cài đặt thiết bị.",
+  "patrolPointNfcScanFailed": "Không đọc được thẻ NFC.",
+  "patrolPointNfcScanTimeout": "Không phát hiện thẻ. Thử lại.",
+  "patrolPointBluetoothDialogTitle": "Mã Bluetooth",
+  "patrolPointBluetoothDialogHint": "Quét beacon hoặc nhập MAC / UUID",
+  "patrolPointBluetoothScanButton": "Quét beacon gần đây",
+  "patrolPointBluetoothScanning": "Đang tìm beacon Bluetooth…",
+  "patrolPointBluetoothUnavailable": "Thiết bị không hỗ trợ Bluetooth.",
+  "patrolPointBluetoothDisabled": "Hãy bật Bluetooth trong cài đặt thiết bị.",
+  "patrolPointBluetoothPermissionDenied": "Chưa cấp quyền Bluetooth cho ứng dụng.",
+  "patrolPointBluetoothScanFailed": "Không quét được beacon.",
+  "patrolPointBluetoothScanTimeout": "Không phát hiện beacon. Thử lại.",
+  "patrolPointBluetoothScanSummary": "Tín hiệu: {rssi} dBm · Khoảng cách: ~{distance} m",
+  "@patrolPointBluetoothScanSummary": {
+    "placeholders": {
+      "rssi": { "type": "int" },
+      "distance": { "type": "String" }
+    }
+  },
+  "patrolPointBluetoothScanMeta": "MAC: {address} · Major: {major} · Minor: {minor}",
+  "@patrolPointBluetoothScanMeta": {
+    "placeholders": {
+      "address": { "type": "String" },
+      "major": { "type": "String" },
+      "minor": { "type": "String" }
+    }
+  },
+  "patrolPointBluetoothScanName": "Tên: {name}",
+  "@patrolPointBluetoothScanName": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "patrolPointIdentifierEmpty": "Mã không được để trống.",
+  "patrolPointNfcValue": "NFC: {value}",
+  "@patrolPointNfcValue": {
+    "placeholders": {
+      "value": { "type": "String" }
+    }
+  },
+  "patrolPointBluetoothValue": "Bluetooth: {value}",
+  "@patrolPointBluetoothValue": {
+    "placeholders": {
+      "value": { "type": "String" }
+    }
+  },
+  "patrolPointFieldUpdateSuccess": "Đã cập nhật.",
+  "patrolPointFieldUpdateFailed": "Không cập nhật được.",
+  "patrolPointCheckpointMetaChange": "Thay đổi",
   "featureComingSoon": "Chức năng đang được triển khai",
   "apiBaseMissing": "Chưa cấu hình API: đặt API_BASE_URL (--dart-define) hoặc AppConfig.devFallbackBaseUrl",
   "loginFailed": "Đăng nhập thất bại. Kiểm tra tài khoản hoặc máy chủ.",

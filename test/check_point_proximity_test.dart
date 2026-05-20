@@ -12,7 +12,7 @@ CheckPoint _checkpoint({
   return CheckPoint(
     id: 1,
     siteId: 1,
-    code: 'CP1',
+    qrCode: 'CP1',
     name: 'Test',
     sequenceOrder: 1,
     active: true,
