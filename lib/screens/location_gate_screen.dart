@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../l10n/app_localizations.dart';
-import '../services/auth_service.dart';
+import '../navigation/patrol_session.dart';
+import '../services/account_session_store.dart';
 import '../widgets/language_toggle_bar.dart';
 import '../widgets/login_background.dart';
 import 'home_screen.dart';
@@ -30,11 +33,22 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
   _GatePhase _phase = _GatePhase.checking;
   String? _detail;
   bool _hasStoredSession = false;
+  StreamSubscription<void>? _sessionEndedSub;
 
   @override
   void initState() {
     super.initState();
+    _sessionEndedSub = PatrolSession.sessionEnded.listen((_) {
+      if (!mounted) return;
+      setState(() => _hasStoredSession = false);
+    });
     _verify();
+  }
+
+  @override
+  void dispose() {
+    _sessionEndedSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _verify() async {
@@ -77,7 +91,7 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
       return;
     }
 
-    final hasSession = await AuthService.instance.hasStoredSession();
+    final hasSession = await AccountSessionStore.instance.hasStoredSession();
     if (!mounted) return;
     setState(() {
       _hasStoredSession = hasSession;

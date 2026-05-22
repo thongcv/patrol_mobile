@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -13,44 +11,11 @@ import '../http/api_response.dart';
 import '../http/api_result.dart';
 import '../http/patrol_api_endpoints.dart';
 import '../http/patrol_dio.dart';
-import '../navigation/patrol_session.dart';
+import 'account_session_store.dart';
 
 class AuthService {
   AuthService._();
   static final AuthService instance = AuthService._();
-
-  Future<String?> getStoredAccessToken() async {
-    final p = await SharedPreferences.getInstance();
-    return AccessTokenPayload.getAccessTokenStored(
-      p.getString(StorageKeys.accessToken),
-    );
-  }
-
-  Future<bool> hasStoredSession() async {
-    final token = await getStoredAccessToken();
-    return token != null && token.isNotEmpty;
-  }
-
-  Future<Map<String, dynamic>?> getStoredAccessTokenObject() async {
-    final p = await SharedPreferences.getInstance();
-    return AccessTokenPayload.mapFromStored(
-      p.getString(StorageKeys.accessToken),
-    );
-  }
-
-  Future<void> clearToken() async {
-    await AccessTokenPayload.clearStored();
-  }
-
-  Future<void> cacheDevicePushToken(String? token) async {
-    final p = await SharedPreferences.getInstance();
-    final t = token?.trim();
-    if (t == null || t.isEmpty) {
-      await p.remove(StorageKeys.devicePushToken);
-    } else {
-      await p.setString(StorageKeys.devicePushToken, t);
-    }
-  }
 
   Future<ApiResult<LoginSuccess>> login({
     required String username,
@@ -88,9 +53,7 @@ class AuthService {
             ? AccessTokenPayload.bearerJwtFromAuthMap(accessToken)
             : null;
         if (accessToken != null && bearer != null && bearer.isNotEmpty) {
-          final p = await SharedPreferences.getInstance();
-          await p.setString(StorageKeys.accessToken, jsonEncode(accessToken));
-          PatrolSession.notifyAuthStored();
+          await AccountSessionStore.instance.storeAccessToken(accessToken);
           return ApiResult.success(
             LoginSuccess(token: bearer, accessToken: accessToken),
           );
@@ -172,7 +135,7 @@ class AuthService {
       final t = await FirebaseMessaging.instance.getToken();
       final s = t?.trim();
       if (s != null && s.isNotEmpty) {
-        await cacheDevicePushToken(s);
+        await AccountSessionStore.instance.cacheDevicePushToken(s);
         return s;
       }
     } catch (_) {

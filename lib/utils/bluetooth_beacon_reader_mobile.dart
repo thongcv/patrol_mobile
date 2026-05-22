@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../services/account_session_store.dart';
 import 'bluetooth_beacon_reader_types.dart';
 
 bool get isBluetoothScanSupported =>
@@ -206,7 +207,6 @@ class _BeaconCandidate {
     this.major,
     this.minor,
     this.txPowerAt1m,
-    this.distanceEstimate = false,
   });
 
   final String identifier;
@@ -217,18 +217,13 @@ class _BeaconCandidate {
   final int? minor;
   final int? txPowerAt1m;
 
-  /// When false (generic BLE), only [rssi] is meaningful — no path-loss distance.
-  final bool distanceEstimate;
-
   BluetoothBeaconDetails toDetails() {
     return BluetoothBeaconDetails(
       rssi: rssi,
-      distanceMeters: distanceEstimate
-          ? BluetoothBeaconDetails.estimateDistanceMeters(
-              rssi: rssi,
-              txPowerAt1m: txPowerAt1m,
-            )
-          : null,
+      distanceMeters: BluetoothBeaconDetails.estimateDistanceMeters(
+        rssi: rssi,
+        txPowerAt1m: txPowerAt1m,
+      ),
       deviceAddress: deviceAddress,
       deviceName: deviceName,
       major: major,
@@ -260,71 +255,17 @@ _BeaconCandidate? _candidateFromIBeaconScanResult(ScanResult result) {
     major: meta?.major,
     minor: meta?.minor,
     txPowerAt1m: meta?.txPowerAt1m,
-    distanceEstimate: true,
-  );
-}
-
-_BeaconCandidate? _candidateFromGenericScanResult(
-  ScanResult result, {
-  String? namePrefix,
-  List<String>? remoteIds,
-}) {
-  final adv = result.advertisementData;
-  final name = adv.advName.trim();
-  final remote = result.device.remoteId.str.trim();
-  final address =
-      remote.isEmpty ? null : _normalizeBleIdentifier(remote);
-
-  final prefix = namePrefix?.trim();
-  if (prefix != null && prefix.isNotEmpty) {
-    if (name.isEmpty || !name.toUpperCase().startsWith(prefix.toUpperCase())) {
-      return null;
-    }
-  }
-
-  if (remoteIds != null && remoteIds.isNotEmpty) {
-    if (address == null) return null;
-    if (!remoteIds.any((id) => bluetoothIdentifiersMatch(id, address))) {
-      return null;
-    }
-  }
-
-  String? identifier;
-  if (address != null && address.isNotEmpty) {
-    identifier = address;
-  } else if (adv.serviceUuids.isNotEmpty) {
-    identifier = adv.serviceUuids.first.str;
-  } else if (name.isNotEmpty) {
-    identifier = name;
-  } else {
-    return null;
-  }
-
-  return _BeaconCandidate(
-    identifier: identifier,
-    rssi: result.rssi,
-    deviceAddress: address,
-    deviceName: name.isEmpty ? null : name,
-    distanceEstimate: false,
   );
 }
 
 void _trackNearestCandidate(
   Map<String, _BeaconCandidate> bestById,
   ScanResult result, {
-  required BluetoothScanMode mode,
   required int minRssi,
-  String? namePrefix,
   List<String>? remoteIds,
 }) {
   if (result.rssi < minRssi) return;
-  final candidate = mode == BluetoothScanMode.iBeacon
-      ? _candidateFromIBeaconScanResult(result)
-      : _candidateFromGenericScanResult(
-          result,
-          namePrefix: namePrefix,
-          remoteIds: remoteIds,
-        );
+  final candidate = _candidateFromIBeaconScanResult(result);
   if (candidate == null) return;
   if (remoteIds != null &&
       remoteIds.isNotEmpty &&
@@ -386,13 +327,16 @@ Future<void> _stopScanIfActive() async {
   } catch (_) {}
 }
 
+List<String>? _companyBeaconRemoteIds() {
+  final uuid = AccountSessionStore.instance.companyBeaconUuid;
+  return uuid != null ? [uuid] : null;
+}
+
 Future<BluetoothReadResult> readBluetoothBeaconIdentifier({
   Duration timeout = kBluetoothDiscoveryScanTimeout,
-  BluetoothScanMode mode = BluetoothScanMode.generic,
   int minRssi = kBluetoothDiscoveryMinRssi,
   int successRssi = kBluetoothDiscoverySuccessRssi,
   int stableHits = kBluetoothDiscoveryStableHits,
-  String? namePrefix,
   List<String>? remoteIds,
 }) async {
   if (!isBluetoothScanSupported) {
@@ -417,7 +361,9 @@ Future<BluetoothReadResult> readBluetoothBeaconIdentifier({
     return const BluetoothReadResult.failure(BluetoothReadFailure.disabled);
   }
 
+  final filterIds = remoteIds ?? _companyBeaconRemoteIds();
   final bestById = <String, _BeaconCandidate>{};
+  final discoveredDevices = <ScanResult>[];
   StreamSubscription<List<ScanResult>>? resultsSub;
   StreamSubscription<bool>? scanningSub;
   final sessionDone = Completer<void>();
@@ -427,14 +373,24 @@ Future<BluetoothReadResult> readBluetoothBeaconIdentifier({
   BluetoothReadResult? earlyResult;
 
   void absorbResults(List<ScanResult> results) {
-    for (final result in results) {
+    for (final r in results) {
+      // Chỉ xử lý thiết bị mới hoặc có thay đổi quan trọng (RSSI mạnh hơn).
+      final existingIndex = discoveredDevices.indexWhere(
+        (d) => d.device.remoteId == r.device.remoteId,
+      );
+      final isNew = existingIndex < 0;
+      if (isNew) {
+        discoveredDevices.add(r);
+      } else if (r.rssi <= discoveredDevices[existingIndex].rssi) {
+        continue;
+      } else {
+        discoveredDevices[existingIndex] = r;
+      }
       _trackNearestCandidate(
         bestById,
-        result,
-        mode: mode,
+        r,
         minRssi: minRssi,
-        namePrefix: mode == BluetoothScanMode.generic ? namePrefix : null,
-        remoteIds: remoteIds,
+        remoteIds: filterIds,
       );
     }
   }
@@ -466,32 +422,15 @@ Future<BluetoothReadResult> readBluetoothBeaconIdentifier({
       }
     });
 
-    if (mode == BluetoothScanMode.iBeacon) {
-      // MSD: Apple iBeacon + optional proximity UUID from [remoteIds].
-      // MAC entries use [withRemoteIds] (OR with MSD per flutter_blue_plus).
-      await FlutterBluePlus.startScan(
-        timeout: timeout,
-        androidUsesFineLocation: true,
-        withMsd: _iBeaconScanMsdFilters(remoteIds),
-        withRemoteIds: _hardwareScanMacRemoteIds(remoteIds),
-      );
-    } else {
-      // Hardware filters (OS stack). Software filters in [_trackNearestCandidate]
-      // still apply for name prefix and identifiers not supported by the platform.
-      final hardwareRemoteIds = _hardwareScanMacRemoteIds(remoteIds);
-      final nameKeyword = namePrefix?.trim();
-      // [withKeywords] cannot combine with other filters on Android.
-      final useNameKeyword = hardwareRemoteIds.isEmpty &&
-          nameKeyword != null &&
-          nameKeyword.isNotEmpty;
-
-      await FlutterBluePlus.startScan(
-        timeout: timeout,
-        androidUsesFineLocation: true,
-        withRemoteIds: hardwareRemoteIds,
-        withKeywords: useNameKeyword ? [nameKeyword] : const [],
-      );
-    }
+    // Hardware filters (OR): MSD iBeacon, MAC.
+    await FlutterBluePlus.startScan(
+      timeout: timeout,
+      androidScanMode: AndroidScanMode.lowLatency,
+      continuousUpdates: true,
+      androidUsesFineLocation: true,
+      withMsd: _iBeaconScanMsdFilters(filterIds),
+      withRemoteIds: _hardwareScanMacRemoteIds(filterIds),
+    );
 
     try {
       await sessionDone.future.timeout(

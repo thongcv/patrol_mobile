@@ -8,7 +8,9 @@ import '../models/account_me.dart';
 import '../models/menu.dart';
 import '../models/user_info.dart';
 import '../navigation/patrol_menu_router.dart';
+import '../navigation/patrol_session.dart';
 import '../services/account_service.dart';
+import '../services/account_session_store.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
 
@@ -58,17 +60,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final r = await AccountService.instance.fetchMe();
     if (!mounted) return;
 
-    if (r.failure?.kind == ApiFailureKind.unauthorized) {
-      await AuthService.instance.clearToken();
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(
-          builder: (_) => LoginScreen(
-            locale: widget.locale,
-            onLocaleChanged: widget.onLocaleChanged,
-          ),
-        ),
-      );
+    if (PatrolSession.isUnauthorized(r.failure)) {
+      await PatrolSession.endSessionAndNavigateToLogin();
       return;
     }
 
@@ -132,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         return;
       }
-      await AuthService.instance.clearToken();
+      await AccountSessionStore.instance.clearToken();
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(

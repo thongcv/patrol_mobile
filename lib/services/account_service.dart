@@ -7,6 +7,7 @@ import '../http/api_result.dart';
 import '../http/patrol_api_endpoints.dart';
 import '../http/patrol_dio.dart';
 import '../models/account_me.dart';
+import 'account_session_store.dart';
 
 class AccountService {
   AccountService._();
@@ -39,6 +40,7 @@ class AccountService {
 
       try {
         final me = AccountMe.fromJson(map);
+        await AccountSessionStore.instance.applyFromAccountMe(me);
         return ApiResult.success(me);
       } catch (_) {
         return ApiResult.failure(ApiFailure.badResponse(res));

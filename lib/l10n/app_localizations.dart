@@ -542,6 +542,36 @@ abstract class AppLocalizations {
   /// **'Schedule'**
   String get patrolRoundScheduleHeading;
 
+  /// No description provided for @patrolRoundMap.
+  ///
+  /// In en, this message translates to:
+  /// **'Route map'**
+  String get patrolRoundMap;
+
+  /// No description provided for @patrolRoundMapYou.
+  ///
+  /// In en, this message translates to:
+  /// **'You'**
+  String get patrolRoundMapYou;
+
+  /// No description provided for @patrolRoundMapSwipeDismiss.
+  ///
+  /// In en, this message translates to:
+  /// **'Swipe up or down to close'**
+  String get patrolRoundMapSwipeDismiss;
+
+  /// No description provided for @patrolRoundMapCheckpointScanned.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanned checkpoint'**
+  String get patrolRoundMapCheckpointScanned;
+
+  /// No description provided for @patrolRoundMapCheckpointPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending checkpoint'**
+  String get patrolRoundMapCheckpointPending;
+
   /// No description provided for @patrolRoundRoundHeading.
   ///
   /// In en, this message translates to:
@@ -1182,6 +1212,12 @@ abstract class AppLocalizations {
   /// **'Current position: {lat}, {lng} · altitude {alt} m'**
   String patrolPointServerCoordsWithAlt(String lat, String lng, String alt);
 
+  /// No description provided for @patrolPointCheckpointCoordsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Coordinates'**
+  String get patrolPointCheckpointCoordsLabel;
+
   /// No description provided for @patrolPointInactive.
   ///
   /// In en, this message translates to:
@@ -1217,6 +1253,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Address'**
   String get patrolPointSiteAddressLabel;
+
+  /// No description provided for @patrolPointSiteIdLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Site ID'**
+  String get patrolPointSiteIdLabel;
+
+  /// No description provided for @patrolPointBeaconUuidLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Beacon UUID'**
+  String get patrolPointBeaconUuidLabel;
+
+  /// No description provided for @patrolPointCopyUuidTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy UUID'**
+  String get patrolPointCopyUuidTooltip;
 
   /// No description provided for @patrolPointUpdateNfcTooltip.
   ///

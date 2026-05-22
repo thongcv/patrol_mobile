@@ -234,6 +234,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get patrolRoundScheduleHeading => 'Schedule';
 
   @override
+  String get patrolRoundMap => 'Route map';
+
+  @override
+  String get patrolRoundMapYou => 'You';
+
+  @override
+  String get patrolRoundMapSwipeDismiss => 'Swipe up or down to close';
+
+  @override
+  String get patrolRoundMapCheckpointScanned => 'Scanned checkpoint';
+
+  @override
+  String get patrolRoundMapCheckpointPending => 'Pending checkpoint';
+
+  @override
   String get patrolRoundRoundHeading => 'Patrol round';
 
   @override
@@ -620,6 +635,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get patrolPointCheckpointCoordsLabel => 'Coordinates';
+
+  @override
   String get patrolPointInactive => 'Inactive';
 
   @override
@@ -637,6 +655,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get patrolPointSiteAddressLabel => 'Address';
+
+  @override
+  String get patrolPointSiteIdLabel => 'Site ID';
+
+  @override
+  String get patrolPointBeaconUuidLabel => 'Beacon UUID';
+
+  @override
+  String get patrolPointCopyUuidTooltip => 'Copy UUID';
 
   @override
   String get patrolPointUpdateNfcTooltip => 'Assign NFC tag ID to this point';

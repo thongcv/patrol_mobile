@@ -15,6 +15,8 @@ class UserInfo {
     this.status,
     this.branchName,
     this.merchantName,
+    this.beaconUuid,
+    this.merchantId,
   });
 
   final int id;
@@ -30,6 +32,8 @@ class UserInfo {
   final bool? status;
   final String? branchName;
   final String? merchantName;
+  final String? beaconUuid;
+  final int? merchantId;
 
   factory UserInfo.empty() => UserInfo(id: 0);
 
@@ -48,6 +52,8 @@ class UserInfo {
       status: jsonBool(json['status']),
       branchName: jsonStr(json['branchName']),
       merchantName: jsonStr(json['merchantName']),
+      beaconUuid: jsonStr(json['beaconUuid']),
+      merchantId: jsonInt(json['merchantId']),
     );
   }
 }

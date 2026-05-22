@@ -1,12 +1,9 @@
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/access_token_payload.dart';
 import '../config/app_config.dart';
-import '../config/storage_keys.dart';
 import '../navigation/patrol_session.dart';
+import '../services/account_session_store.dart';
 import 'api_request_headers.dart';
 import 'api_response.dart';
 import 'patrol_api_endpoints.dart';
@@ -73,8 +70,9 @@ class _PatrolInterceptors extends Interceptor {
     PatrolDio.syncBaseUrls();
     final headers = options.headers;
 
-    SharedPreferences.getInstance()
-        .then((p) {
+    AccountSessionStore.instance
+        .getStoredAccessToken()
+        .then((bearer) {
           headers.putIfAbsent(
             'Accept-Language',
             () => ApiRequestHeaders.defaultAcceptLanguage,
@@ -88,8 +86,6 @@ class _PatrolInterceptors extends Interceptor {
             () => ApiRequestHeaders.getClientOffset(),
           );
 
-          final raw = p.getString(StorageKeys.accessToken);
-          final bearer = AccessTokenPayload.getAccessTokenStored(raw);
           if (!headers.containsKey('Authorization') &&
               bearer != null &&
               bearer.isNotEmpty) {
@@ -121,17 +117,19 @@ class _PatrolInterceptors extends Interceptor {
 
     final refreshed = await PatrolDio.refreshTokensShared();
     if (!refreshed) {
-      await AccessTokenPayload.clearStored();
+      await AccountSessionStore.instance.clearToken();
       PatrolSession.navigateToLoginReplaceAll();
-      return handler.next(err);
+      return handler.reject(
+        DioException(
+          requestOptions: ro,
+          response: err.response,
+          type: DioExceptionType.cancel,
+          error: 'session_expired',
+        ),
+      );
     }
 
-    PatrolSession.notifyAuthStored();
-
-    final prefs = await SharedPreferences.getInstance();
-    final bearer = AccessTokenPayload.getAccessTokenStored(
-      prefs.getString(StorageKeys.accessToken),
-    );
+    final bearer = await AccountSessionStore.instance.getStoredAccessToken();
     try {
       ro.extra[_extraRetry] = true;
       if (bearer != null && bearer.isNotEmpty) {
@@ -161,10 +159,8 @@ Future<bool> _performRefreshOnce() async {
   final base = AppConfig.effectiveBaseUrl.trim();
   if (base.isEmpty) return false;
 
-  final prefs = await SharedPreferences.getInstance();
-  final tokenField = AccessTokenPayload.refreshTokenForRequestBody(
-    prefs.getString(StorageKeys.accessToken),
-  );
+  final tokenField =
+      await AccountSessionStore.instance.refreshTokenForRequestBody();
   if (tokenField == null) return false;
 
   PatrolDio.refreshClient.options.baseUrl = base;
@@ -188,6 +184,6 @@ Future<bool> _performRefreshOnce() async {
   final toStore = AccessTokenPayload.persistableBlobAfterRefreshRoot(root);
   if (toStore == null) return false;
 
-  await prefs.setString(StorageKeys.accessToken, jsonEncode(toStore));
+  await AccountSessionStore.instance.storeAccessToken(toStore);
   return true;
 }

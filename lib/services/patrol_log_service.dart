@@ -9,6 +9,7 @@ class PatrolLogSubmit {
   PatrolLogSubmit({
     required this.roundId,
     required this.checkpointId,
+    this.siteId,
     this.accountId,
     required this.scanTime,
     required this.latitude,
@@ -22,6 +23,7 @@ class PatrolLogSubmit {
 
   final int roundId;
   final int checkpointId;
+  final int? siteId;
   final String? accountId;
   final DateTime scanTime;
   final double latitude;
@@ -47,6 +49,7 @@ class PatrolLogService {
     final fields = <String, dynamic>{
       'roundId': body.roundId,
       'checkpointId': body.checkpointId,
+      'siteId': body.siteId,
       'scanTime': body.scanTime.toUtc().toIso8601String(),
       'latitude': body.latitude,
       'longitude': body.longitude,

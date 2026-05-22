@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../screens/login_screen.dart';
+import '../services/account_session_store.dart';
+import '../http/api_failure.dart';
 
 /// Định hướng “về đăng nhập” và thông báo token mới — tương đương `location`/CustomEvent Web.
 abstract final class PatrolSession {
@@ -15,7 +17,13 @@ abstract final class PatrolSession {
   static final StreamController<void> _authStored =
       StreamController<void>.broadcast();
 
+  static final StreamController<void> _sessionEnded =
+      StreamController<void>.broadcast();
+
   static Stream<void> get authStoredChanges => _authStored.stream;
+
+  /// Token hết hạn / refresh thất bại — [LocationGateScreen] lắng nghe để hiện lại login.
+  static Stream<void> get sessionEnded => _sessionEnded.stream;
 
   static void attach({
     required GlobalKey<NavigatorState> navigatorKey,
@@ -37,20 +45,38 @@ abstract final class PatrolSession {
     if (!_authStored.isClosed) _authStored.add(null);
   }
 
+  /// Phiên không hợp lệ (401/403): xóa token và đưa về đăng nhập.
+  static Future<void> endSessionAndNavigateToLogin() async {
+    await AccountSessionStore.instance.clearToken();
+    navigateToLoginReplaceAll();
+  }
+
+  static bool isUnauthorized(ApiFailure? failure) =>
+      failure?.kind == ApiFailureKind.unauthorized;
+
   /// Xóa stack và đưa người dùng về [LoginScreen] (ví dụ refresh token thất bại).
   static void navigateToLoginReplaceAll() {
+    if (!_sessionEnded.isClosed) _sessionEnded.add(null);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _pushLoginRoute());
+  }
+
+  static void _pushLoginRoute() {
     final nav = _navigatorKey?.currentState;
     final locale = _currentLocale?.call();
     final onLoc = _onLocaleChanged;
     if (nav == null || locale == null || onLoc == null) return;
-    nav.pushAndRemoveUntil<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => LoginScreen(
-          locale: locale,
-          onLocaleChanged: onLoc,
-        ),
+
+    final login = MaterialPageRoute<void>(
+      builder: (_) => LoginScreen(
+        locale: locale,
+        onLocaleChanged: onLoc,
       ),
-      (_) => false,
     );
+
+    if (nav.canPop()) {
+      nav.pushAndRemoveUntil<void>(login, (_) => false);
+    } else {
+      nav.pushReplacement(login);
+    }
   }
 }

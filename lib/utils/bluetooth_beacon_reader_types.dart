@@ -6,31 +6,10 @@ const int kBluetoothDiscoveryMinRssi = -90;
 const int kBluetoothDiscoverySuccessRssi = -78;
 const int kBluetoothDiscoveryStableHits = 2;
 
-/// BLE scan strategy for [readBluetoothBeaconIdentifier].
-enum BluetoothScanMode {
-  /// Only Apple iBeacon advertisements (hardware MSD filter when supported).
-  iBeacon,
-
-  /// Any BLE advertiser; identifier from MAC, then service UUID, then name.
-  generic,
-}
-
 /// `true` when [raw] looks like an iBeacon proximity UUID (not a BLE MAC).
 bool isBluetoothUuidIdentifier(String raw) {
   final hex = raw.trim().toUpperCase().replaceAll('-', '');
   return hex.length == 32 && RegExp(r'^[0-9A-F]+$').hasMatch(hex);
-}
-
-/// Picks scan mode from a stored checkpoint Bluetooth / beacon id.
-BluetoothScanMode bluetoothScanModeForIdentifier(String raw) =>
-    bluetoothScanModeForIdentifiers([raw]);
-
-/// iBeacon when any id is a proximity UUID; otherwise generic (MAC / name).
-BluetoothScanMode bluetoothScanModeForIdentifiers(Iterable<String> ids) {
-  for (final raw in ids) {
-    if (isBluetoothUuidIdentifier(raw)) return BluetoothScanMode.iBeacon;
-  }
-  return BluetoothScanMode.generic;
 }
 
 /// Whether two stored / scanned BLE ids refer to the same beacon.
@@ -54,7 +33,7 @@ enum BluetoothReadFailure {
   failed,
 }
 
-/// Extra data from a scan hit (for non-iBeacon, [distanceMeters] is null — RSSI only).
+/// Extra data from an iBeacon scan hit.
 class BluetoothBeaconDetails {
   const BluetoothBeaconDetails({
     required this.rssi,

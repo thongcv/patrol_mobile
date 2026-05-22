@@ -234,6 +234,21 @@ class AppLocalizationsVi extends AppLocalizations {
   String get patrolRoundScheduleHeading => 'Lịch ca';
 
   @override
+  String get patrolRoundMap => 'Bản đồ tuyến';
+
+  @override
+  String get patrolRoundMapYou => 'Bạn';
+
+  @override
+  String get patrolRoundMapSwipeDismiss => 'Vuốt lên hoặc xuống để đóng';
+
+  @override
+  String get patrolRoundMapCheckpointScanned => 'Điểm đã quét';
+
+  @override
+  String get patrolRoundMapCheckpointPending => 'Điểm chưa quét';
+
+  @override
   String get patrolRoundRoundHeading => 'Vòng tuần tra';
 
   @override
@@ -616,6 +631,9 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get patrolPointCheckpointCoordsLabel => 'Tọa độ';
+
+  @override
   String get patrolPointInactive => 'Ngưng dùng';
 
   @override
@@ -634,6 +652,15 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get patrolPointSiteAddressLabel => 'Địa chỉ';
+
+  @override
+  String get patrolPointSiteIdLabel => 'Mã site';
+
+  @override
+  String get patrolPointBeaconUuidLabel => 'Beacon UUID';
+
+  @override
+  String get patrolPointCopyUuidTooltip => 'Sao chép UUID';
 
   @override
   String get patrolPointUpdateNfcTooltip => 'Gán mã NFC cho điểm này';

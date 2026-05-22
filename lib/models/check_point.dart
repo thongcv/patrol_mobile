@@ -16,13 +16,14 @@ class CheckPoint {
     this.accuracy,
     this.altitudeAccuracy,
     this.radius,
-    this.bluetoothRssi,
+    this.rssi,
+    this.major,
+    this.minor,
     this.description,
     this.createdBy,
     this.updatedBy,
     this.createdDate,
     this.updatedDate,
-    /// Đã quét trong vòng tuần tra hiện tại — chỉ có trên GET `/api/patrol-rounds/me/active`.
     this.verified,
   });
 
@@ -42,7 +43,9 @@ class CheckPoint {
   final double? accuracy;
   final double? altitudeAccuracy;
   final double? radius;
-  final int? bluetoothRssi;
+  final double? rssi;
+  final int? major;
+  final int? minor;
   final String? description;
   final String? createdBy;
   final String? updatedBy;
@@ -50,8 +53,17 @@ class CheckPoint {
   final String? updatedDate;
   final bool? verified;
 
-  bool get hasCoordinates =>
-      latitude != null && longitude != null;
+  bool get hasCoordinates {
+    final lat = latitude;
+    final lng = longitude;
+    if (lat == null || lng == null) return false;
+    return lat.isFinite &&
+        lng.isFinite &&
+        lat >= -90 &&
+        lat <= 90 &&
+        lng >= -180 &&
+        lng <= 180;
+  }
 
   /// Ghép metadata từ GET `/api/check-points/me/site` vào mốc active.
   ///
@@ -111,7 +123,9 @@ class CheckPoint {
       accuracy: pickOptDouble(accuracy, site.accuracy),
       altitudeAccuracy: pickOptDouble(altitudeAccuracy, site.altitudeAccuracy),
       radius: pickOptDouble(radius, site.radius),
-      bluetoothRssi: pickOptInt(bluetoothRssi, site.bluetoothRssi),
+      rssi: pickOptDouble(rssi, site.rssi),
+      major: pickOptInt(major, site.major),
+      minor: pickOptInt(minor, site.minor),
       description: pickOptStr(description, site.description),
       createdBy: preferActive ? (createdBy ?? site.createdBy) : (site.createdBy ?? createdBy),
       updatedBy: preferActive ? (updatedBy ?? site.updatedBy) : (site.updatedBy ?? updatedBy),
@@ -140,7 +154,9 @@ class CheckPoint {
     double? accuracy,
     double? altitudeAccuracy,
     double? radius,
-    int? bluetoothRssi,
+    double? rssi,
+    int? major,
+    int? minor,
     String? description,
     String? createdBy,
     String? updatedBy,
@@ -165,7 +181,9 @@ class CheckPoint {
       accuracy: accuracy ?? this.accuracy,
       altitudeAccuracy: altitudeAccuracy ?? this.altitudeAccuracy,
       radius: radius ?? this.radius,
-      bluetoothRssi: bluetoothRssi ?? this.bluetoothRssi,
+      rssi: rssi ?? this.rssi,
+      major: major ?? this.major,
+      minor: minor ?? this.minor,
       description: description ?? this.description,
       createdBy: createdBy ?? this.createdBy,
       updatedBy: updatedBy ?? this.updatedBy,
@@ -193,7 +211,9 @@ class CheckPoint {
       'accuracy': accuracy,
       'altitudeAccuracy': altitudeAccuracy,
       'radius': radius,
-      'bluetoothRssi': bluetoothRssi,
+      'rssi': rssi,
+      'major': major,
+      'minor': minor,
       'description': description,
       'createdBy': createdBy,
       'updatedBy': updatedBy,
@@ -222,7 +242,9 @@ class CheckPoint {
       accuracy: (json['accuracy'] as num?)?.toDouble(),
       altitudeAccuracy: (json['altitudeAccuracy'] as num?)?.toDouble(),
       radius: (json['radius'] as num?)?.toDouble(),
-      bluetoothRssi: (json['bluetoothRssi'] as num?)?.toInt(),
+      rssi: (json['rssi'] as num?)?.toDouble(),
+      major: (json['major'] as num?)?.toInt(),
+      minor: (json['minor'] as num?)?.toInt(),
       description: json['description'] as String?,
       createdBy: json['createdBy'] as String?,
       updatedBy: json['updatedBy'] as String?,

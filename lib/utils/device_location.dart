@@ -110,6 +110,40 @@ readDeviceGpsOnce({
   }
 }
 
+/// Stream GPS native cho marker bản đồ (không dùng Google Location layer).
+///
+/// Trả `null` nếu không hỗ trợ native (web/desktop). Caller [cancel] khi dispose.
+StreamSubscription<NativeGpsEvent>? listenDeviceGpsForMap({
+  required void Function(Position position) onPosition,
+  double minMoveM = 1.0,
+  GpsNativeStreamOptions streamOptions = const GpsNativeStreamOptions(
+    updateIntervalMs: 1000,
+    minUpdateIntervalMs: 800,
+    minUpdateDistanceMeters: 2,
+    enableBarometer: false,
+  ),
+}) {
+  if (!GpsNativeService.isSupported) return null;
+
+  Position? anchor;
+  return _deviceLocationEventStream(nativeStreamOptions: streamOptions).listen(
+    (event) {
+      final pos = event.position;
+      if (anchor != null) {
+        final moved = Geolocator.distanceBetween(
+          anchor!.latitude,
+          anchor!.longitude,
+          pos.latitude,
+          pos.longitude,
+        );
+        if (moved < minMoveM) return;
+      }
+      anchor = pos;
+      onPosition(pos);
+    },
+  );
+}
+
 /// Chờ fix qua stream; giữ mẫu có accuracy ngang tốt nhất.
 Future<NativeGpsEvent?> _readDeviceGpsEventFromNativeStream({
   Duration timeout = _kNativeGpsCurrentTimeout,
