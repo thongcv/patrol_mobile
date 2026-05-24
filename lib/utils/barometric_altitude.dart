@@ -1,22 +1,22 @@
 import 'dart:math';
 
-import 'gps_native_service.dart';
+import 'super_gps_service.dart';
 
-/// Quy đổi áp suất (hPa) sang độ cao gần đúng so với mực nước biển chuẩn ISA
-/// (1013.25 hPa). Sai số phụ thuộc áp suất thực tế tại mực nước biển khu vực.
+/// Converts pressure (hPa) to approximate altitude vs standard ISA sea level
+/// (1013.25 hPa). Error depends on actual regional sea-level pressure.
 double altitudeMetersFromPressureHpa(double pressureHpa) {
   if (!pressureHpa.isFinite || pressureHpa <= 0) return double.nan;
   const p0 = 1013.25;
   return 44330.0 * (1.0 - pow(pressureHpa / p0, 0.1902632));
 }
 
-/// `true` nếu thiết bị có cảm biến áp suất (barometer).
+/// `true` if the device has a pressure sensor (barometer).
 Future<bool> isBarometerSupported() async {
-  if (!GpsNativeService.isSupported) return false;
-  return GpsNativeService.isBarometerHardwareSupported();
+  if (!SuperGpsService.isSupported) return false;
+  return SuperGpsService.isBarometerHardwareSupported();
 }
 
-/// Barometer (nếu có) → GPS → [fallback].
+/// Barometer (if any) → GPS → [fallback].
 double? resolveAltitudeMeters({
   double? barometricMeters,
   required double gpsMeters,

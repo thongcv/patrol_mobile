@@ -4,7 +4,7 @@ import '../l10n/app_localizations.dart';
 import '../screens/patrol/patrol_point_screen.dart';
 import '../screens/patrol/patrol_round_screen.dart';
 
-/// Chuẩn hóa `link` từ DB: `patrol-point`, `/patrol-point`, URL đầy đủ → `patrol-point`.
+/// Normalizes DB `link`: `patrol-point`, `/patrol-point`, full URL → `patrol-point`.
 String normalizePatrolMenuLink(String? raw) {
   if (raw == null) return '';
   var s = raw.trim();
@@ -44,7 +44,7 @@ IconData? _materialIconByName(String name) {
   }
 }
 
-/// Hỗ trợ `Icons.shield_outlined` từ DB, icon Font Awesome cũ (`fa-*`), hoặc tên ngắn.
+/// Supports DB `Icons.shield_outlined`, legacy Font Awesome (`fa-*`), or short names.
 IconData patrolMenuIcon(String? iconKey) {
   if (iconKey == null || iconKey.trim().isEmpty) {
     return Icons.touch_app_rounded;
@@ -67,7 +67,7 @@ IconData patrolMenuIcon(String? iconKey) {
   }
 }
 
-/// Màu vòng icon trên thẻ menu (theo design: xanh tuần tra, tím điểm).
+/// Icon circle colors on menu cards (design: patrol blue, point purple).
 class PatrolMenuCardStyle {
   const PatrolMenuCardStyle({required this.circleBg, required this.iconColor});
 
@@ -98,7 +98,7 @@ PatrolMenuCardStyle patrolMenuCardStyleForLink(String? link) {
 abstract final class PatrolMenuRouter {
   PatrolMenuRouter._();
 
-  /// Nội dung menu tuần tra nhúng trong Home (không [Navigator.push]).
+  /// Patrol menu content embedded in Home (no [Navigator.push]).
   static Widget embeddedPatrolBody({
     required String? link,
     required String menuTitle,

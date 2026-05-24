@@ -1479,6 +1479,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Request sent. Check your email.'**
   String get forgotRequestSent;
+
+  /// No description provided for @patrolTrackMockGpsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'FAKE GPS ALERT'**
+  String get patrolTrackMockGpsTitle;
+
+  /// No description provided for @patrolTrackMockGpsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Mock location detected. Disable fake GPS apps and continue a valid patrol.'**
+  String get patrolTrackMockGpsBody;
+
+  /// No description provided for @patrolBackgroundNotificationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SPS Patrol'**
+  String get patrolBackgroundNotificationTitle;
+
+  /// No description provided for @patrolBackgroundNotificationInitialContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Patrol in progress — realtime location'**
+  String get patrolBackgroundNotificationInitialContent;
+
+  /// No description provided for @patrolBackgroundNotificationContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending realtime patrol location'**
+  String get patrolBackgroundNotificationContent;
+
+  /// No description provided for @patrolBackgroundCheckpointScanned.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanned: {name}'**
+  String patrolBackgroundCheckpointScanned(String name);
 }
 
 class _AppLocalizationsDelegate

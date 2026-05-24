@@ -47,5 +47,3 @@ pubspec.lock
 pubspec.lock
 windows/flutter/generated_plugins.cmake
 windows/flutter/generated_plugin_registrant.cc
-.vscode/*
-.vscode/launch.json

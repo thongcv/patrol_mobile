@@ -13,7 +13,7 @@ LatLng? finitePatrolMapLatLng(double? lat, double? lng) {
   return LatLng(lat, lng);
 }
 
-/// Vòng tròn bán kính checkpoint trên map (Maps SDK `Circle`, không Geocoding).
+/// Checkpoint radius circles on map (Maps SDK `Circle`, not Geocoding).
 Set<Circle> buildCheckpointRadiusCircles({
   required Iterable<CheckPoint> checkPoints,
   required bool Function(CheckPoint) isScanned,
@@ -41,7 +41,7 @@ Set<Circle> buildCheckpointRadiusCircles({
   return circles;
 }
 
-/// Đa giác xấp xỉ hình tròn (Maps SDK `Polygon`) khi cần polygon thay vì Circle.
+/// Circle-approximating polygon (Maps SDK `Polygon`) when polygon is needed instead of Circle.
 Set<Polygon> buildCheckpointRadiusPolygons({
   required Iterable<CheckPoint> checkPoints,
   required bool Function(CheckPoint) isScanned,

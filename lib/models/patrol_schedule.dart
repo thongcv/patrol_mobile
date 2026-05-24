@@ -1,4 +1,4 @@
-/// Lịch tuần tra (`schedule` trong GET active round).
+/// Patrol schedule (`schedule` in GET active round).
 class PatrolSchedule {
   PatrolSchedule({
     required this.id,

@@ -14,7 +14,10 @@ import 'login_screen.dart';
 
 enum _GatePhase { checking, blocked, ready }
 
-/// Chặn màn hình đăng nhập cho đến khi GPS bật và quyền vị trí được cấp.
+/// Per-step cap so Geolocator cannot spin forever on some devices.
+const Duration _kGateStepTimeout = Duration(seconds: 12);
+
+/// Blocks login until GPS is on and location permission is granted.
 class LocationGateScreen extends StatefulWidget {
   const LocationGateScreen({
     super.key,
@@ -57,7 +60,15 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
       _detail = null;
     });
 
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    bool serviceEnabled;
+    try {
+      serviceEnabled = await Geolocator.isLocationServiceEnabled().timeout(
+        _kGateStepTimeout,
+        onTimeout: () => false,
+      );
+    } catch (_) {
+      serviceEnabled = false;
+    }
     if (!mounted) return;
     final l10n = AppLocalizations.of(context)!;
     if (!serviceEnabled) {
@@ -68,9 +79,20 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
       return;
     }
 
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
+    LocationPermission permission;
+    try {
+      permission = await Geolocator.checkPermission().timeout(
+        _kGateStepTimeout,
+        onTimeout: () => LocationPermission.denied,
+      );
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission().timeout(
+          _kGateStepTimeout,
+          onTimeout: () => LocationPermission.denied,
+        );
+      }
+    } catch (_) {
+      permission = LocationPermission.denied;
     }
 
     if (!mounted) return;
@@ -91,7 +113,14 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
       return;
     }
 
-    final hasSession = await AccountSessionStore.instance.hasStoredSession();
+    bool hasSession;
+    try {
+      hasSession = await AccountSessionStore.instance
+          .hasStoredSession()
+          .timeout(_kGateStepTimeout, onTimeout: () => false);
+    } catch (_) {
+      hasSession = false;
+    }
     if (!mounted) return;
     setState(() {
       _hasStoredSession = hasSession;

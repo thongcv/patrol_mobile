@@ -1,6 +1,6 @@
 part of '../patrol_round_screen.dart';
 
-/// Bản đồ toàn màn hình: GPS thiết bị + điểm tuyến (Maps SDK only — [GoogleMapsConfig]).
+/// Full-screen map: device GPS + route points (Maps SDK only — [GoogleMapsConfig]).
 class _RouteMapOverlay extends StatefulWidget {
   const _RouteMapOverlay({
     required this.routeRevision,
@@ -26,7 +26,7 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
   bool _loadingLocation = true;
   bool _syncingMarkers = false;
   bool _didFitCamera = false;
-  StreamSubscription<NativeGpsEvent>? _gpsSub;
+  StreamSubscription<SuperGpsEvent>? _gpsSub;
   final Map<String, BitmapDescriptor> _pinIconCache = {};
 
   static final _defaultCenter = LatLng(10.8231, 106.6297);
@@ -296,9 +296,9 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
                             child: Padding(
                               padding: const EdgeInsets.all(24),
                               child: Text(
-                                'Chưa cấu hình Google Maps: đặt GOOGLE_MAPS_API_KEY '
-                                '(--dart-define) hoặc GoogleMapsConfig.devFallbackApiKey. '
-                                'Trên iOS cần thêm key vào Info.plist.',
+                                'Google Maps is not configured: set GOOGLE_MAPS_API_KEY '
+                                '(--dart-define) or GoogleMapsConfig.devFallbackApiKey. '
+                                'On iOS, add the key to Info.plist as well.',
                                 textAlign: TextAlign.center,
                                 style: Theme.of(context)
                                     .textTheme

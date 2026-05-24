@@ -1,6 +1,6 @@
 part of '../patrol_round_screen.dart';
 
-/// Thanh kéo: vuốt nhẹ (hoặc flick nhỏ) lên/xuống là đóng sheet.
+/// Drag handle: light swipe (or small flick) up/down dismisses the sheet.
 class _SheetVerticalDismissHandle extends StatefulWidget {
   const _SheetVerticalDismissHandle({required this.onDismiss});
 

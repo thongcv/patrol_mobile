@@ -374,7 +374,7 @@ Future<BluetoothReadResult> readBluetoothBeaconIdentifier({
 
   void absorbResults(List<ScanResult> results) {
     for (final r in results) {
-      // Chỉ xử lý thiết bị mới hoặc có thay đổi quan trọng (RSSI mạnh hơn).
+      // Only handle new devices or meaningful updates (stronger RSSI).
       final existingIndex = discoveredDevices.indexWhere(
         (d) => d.device.remoteId == r.device.remoteId,
       );

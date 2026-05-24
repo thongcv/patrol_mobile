@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
-/// Nền full-screen giống FE: ảnh + gradient overlay.
+/// Full-screen background like FE: image + gradient overlay.
 class LoginBackground extends StatelessWidget {
   const LoginBackground({
     super.key,
@@ -44,9 +44,9 @@ class LoginBackground extends StatelessWidget {
   }
 }
 
-/// Card glass (backdrop blur) — giống `.glass-card` trên web.
-/// [ClipRRect] chỉ bọc lớp blur; nội dung (vd. logo `top: -41px`) được phép tràn ra ngoài
-/// như FE `overflow: visible`.
+/// Glass card (backdrop blur) — like web `.glass-card`.
+/// [ClipRRect] wraps only the blur layer; content (e.g. logo `top: -41px`) may overflow
+/// like FE `overflow: visible`.
 class GlassCard extends StatelessWidget {
   const GlassCard({
     super.key,

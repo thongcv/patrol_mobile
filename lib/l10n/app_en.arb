@@ -415,5 +415,18 @@
   "apiBaseMissing": "API not configured: set API_BASE_URL or AppConfig.devFallbackBaseUrl",
   "loginFailed": "Sign-in failed. Check credentials or server.",
   "networkError": "Network error. Check API URL and connectivity.",
-  "forgotRequestSent": "Request sent. Check your email."
+  "forgotRequestSent": "Request sent. Check your email.",
+  "patrolTrackMockGpsTitle": "FAKE GPS ALERT",
+  "patrolTrackMockGpsBody": "Mock location detected. Disable fake GPS apps and continue a valid patrol.",
+  "patrolBackgroundNotificationTitle": "SPS Patrol",
+  "patrolBackgroundNotificationInitialContent": "Patrol in progress — realtime location",
+  "patrolBackgroundNotificationContent": "Sending realtime patrol location",
+  "patrolBackgroundCheckpointScanned": "Scanned: {name}",
+  "@patrolBackgroundCheckpointScanned": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }

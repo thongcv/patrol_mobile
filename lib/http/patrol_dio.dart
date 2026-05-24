@@ -10,12 +10,12 @@ import 'patrol_api_endpoints.dart';
 
 const _extraRetry = '__patrol_retry';
 
-/// Dio dùng chung: interceptor gắn Bearer + locale/OS/offset và xử lý 401 → refresh + retry một lần.
-/// Response mặc định là JSON đã deserialize (`Map` / `List`).
+/// Shared Dio: interceptor attaches Bearer + locale/OS/offset and handles 401 → refresh + one retry.
+/// Default response is deserialized JSON (`Map` / `List`).
 abstract final class PatrolDio {
   PatrolDio._();
 
-  /// POST refresh không đi qua interceptor (tránh vòng 401).
+  /// POST refresh bypasses interceptor (avoids 401 loop).
   static final Dio refreshClient = Dio(
     BaseOptions(
       responseType: ResponseType.json,
@@ -51,7 +51,7 @@ abstract final class PatrolDio {
     return dio;
   }
 
-  /// Các request đồng thời 401 chỉ chạy một lần refresh.
+  /// Concurrent 401 requests share a single refresh run.
   static Future<bool> refreshTokensShared() {
     _refreshFut ??= () async {
       try {

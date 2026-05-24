@@ -1,4 +1,4 @@
-/// Ép JSON object (kể cả `Map<dynamic, dynamic>` từ Dio) sang [Map<String, dynamic>].
+/// Coerces a JSON object (including Dio `Map<dynamic, dynamic>`) to [Map<String, dynamic>].
 Map<String, dynamic>? jsonMapCoerce(dynamic value) {
   if (value == null) return null;
   if (value is Map<String, dynamic>) return value;
@@ -38,14 +38,14 @@ String? jsonStr(dynamic value) {
   return s.isEmpty ? null : s;
 }
 
-/// `data` từ envelope API (chuỗi JSON hoặc map đã parse).
+/// `data` from API envelope (JSON string or parsed map).
 Map<String, dynamic>? responseEnvelopeData(dynamic data) {
   final root = jsonMapCoerce(data);
   if (root == null) return null;
   return jsonObjectFromDecoded(root);
 }
 
-/// `data` từ envelope API (map root đã decode).
+/// `data` from API envelope (decoded root map).
 Map<String, dynamic>? jsonObjectFromDecoded(Map<String, dynamic> json) {
   return jsonMapCoerce(json['data'] ?? json);
 }

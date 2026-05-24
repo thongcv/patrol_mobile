@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../screens/login_screen.dart';
 import '../services/account_session_store.dart';
+import '../services/patrol_realtime_track_coordinator.dart';
 import '../http/api_failure.dart';
 
-/// Định hướng “về đăng nhập” và thông báo token mới — tương đương `location`/CustomEvent Web.
+/// Routes to login and notifies on new token — equivalent to Web `location`/CustomEvent.
 abstract final class PatrolSession {
   PatrolSession._();
 
@@ -22,7 +23,7 @@ abstract final class PatrolSession {
 
   static Stream<void> get authStoredChanges => _authStored.stream;
 
-  /// Token hết hạn / refresh thất bại — [LocationGateScreen] lắng nghe để hiện lại login.
+  /// Token expired / refresh failed — [LocationGateScreen] listens to show login again.
   static Stream<void> get sessionEnded => _sessionEnded.stream;
 
   static void attach({
@@ -45,8 +46,9 @@ abstract final class PatrolSession {
     if (!_authStored.isClosed) _authStored.add(null);
   }
 
-  /// Phiên không hợp lệ (401/403): xóa token và đưa về đăng nhập.
+  /// Invalid session (401/403): clears token and navigates to login.
   static Future<void> endSessionAndNavigateToLogin() async {
+    await PatrolRealtimeTrackCoordinator.onSessionEnded();
     await AccountSessionStore.instance.clearToken();
     navigateToLoginReplaceAll();
   }
@@ -54,7 +56,7 @@ abstract final class PatrolSession {
   static bool isUnauthorized(ApiFailure? failure) =>
       failure?.kind == ApiFailureKind.unauthorized;
 
-  /// Xóa stack và đưa người dùng về [LoginScreen] (ví dụ refresh token thất bại).
+  /// Clears stack and navigates to [LoginScreen] (e.g. refresh token failed).
   static void navigateToLoginReplaceAll() {
     if (!_sessionEnded.isClosed) _sessionEnded.add(null);
     WidgetsBinding.instance.addPostFrameCallback((_) => _pushLoginRoute());

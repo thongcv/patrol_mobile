@@ -17,11 +17,12 @@ import '../../models/patrol_round.dart';
 import '../../services/check_point_service.dart';
 import '../../services/patrol_log_service.dart';
 import '../../services/patrol_round_service.dart';
+import '../../services/patrol_realtime_track_coordinator.dart';
 import '../../utils/bluetooth_beacon_reader.dart';
 import '../../utils/check_point_proximity.dart';
 import '../../utils/api_image_preview.dart';
 import '../../utils/device_location.dart';
-import '../../utils/gps_native_service.dart';
+import '../../utils/super_gps_service.dart';
 import '../../utils/map_pin_image.dart';
 import '../../utils/patrol_map_overlays.dart';
 import '../../utils/nfc_tag_reader.dart';
@@ -40,7 +41,7 @@ part 'round/patrol_round_route_point_card.dart';
 part 'round/patrol_round_route_map_overlay.dart';
 part 'round/patrol_round_common_widgets.dart';
 
-/// Kích thước preview / nút QR trên thẻ điểm và thẻ vòng tuần tra.
+/// QR preview / button size on checkpoint and round cards.
 const double kPatrolQrPreviewSize = 64;
 
 class PatrolRoundScreen extends StatefulWidget {
@@ -54,7 +55,7 @@ class PatrolRoundScreen extends StatefulWidget {
   final Locale locale;
   final ValueChanged<Locale> onLocaleChanged;
 
-  /// `true` khi hiển thị trong tab Trang chủ (không push route mới).
+  /// `true` when shown in Home tab (no new route push).
   final bool embedded;
 
   @override
@@ -67,9 +68,9 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   bool _refreshing = false;
   ApiFailure? _failure;
   final Set<int> _scannedCheckpointIds = {};
-  /// Tăng sau mỗi lần GET active thành công — ép rebuild list / QR preview.
+  /// Incremented after each successful GET active — forces list / QR preview rebuild.
   int _reloadToken = 0;
-  /// Báo overlay bản đồ cập nhật trạng thái điểm (quét / reload active).
+  /// Notifies route map overlay to refresh checkpoint state (scan / reload active).
   final ValueNotifier<int> _routeMapRevision = ValueNotifier(0);
   int? _scanningCheckpointId;
   _RoundManualScanKind? _manualScanKind;
@@ -90,7 +91,17 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     TopToast.hide();
     _routeMapRevision.dispose();
     unawaited(_stopQrLocationWatch());
+    unawaited(PatrolRealtimeTrackCoordinator.setRoundScanBusy(false));
     super.dispose();
+  }
+
+  /// Pauses background auto-scan while any of the four scan buttons is active on the UI.
+  void _syncBackgroundAutoScanSuppression() {
+    final busy =
+        _scanningCheckpointId != null ||
+        _autoScanActive ||
+        _manualScanKind != null;
+    unawaited(PatrolRealtimeTrackCoordinator.setRoundScanBusy(busy));
   }
 
   void _notifyRouteMapRevision() {
@@ -117,6 +128,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _autoScanActive = false;
       _autoScanKind = null;
     });
+    _syncBackgroundAutoScanSuppression();
   }
 
   Future<void> _finishAutoScanSession({String? message}) async {
@@ -134,6 +146,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _autoScanActive = false;
       _autoScanKind = null;
     });
+    _syncBackgroundAutoScanSuppression();
     if (message != null && mounted) {
       context.showTopToast(message);
     }
@@ -209,7 +222,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   bool _isCheckpointScanned(CheckPoint p) =>
       p.verified == true || _scannedCheckpointIds.contains(p.id);
 
-  /// Gán [_active], đồng bộ `verified` từ server vào model + [_scannedCheckpointIds].
+  /// Sets [_active], syncs server `verified` into model + [_scannedCheckpointIds].
   void _applyLoadedActiveRound(
     ActivePatrolRound? active, {
     required bool fromRefresh,
@@ -222,7 +235,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       return;
     }
 
-    // Khi user bấm refresh: chỉ tin `verified` từ GET active, không giữ quét cục bộ.
+    // On user refresh: trust only GET active `verified`, drop local scan overrides.
     final pendingLocal = fromRefresh
         ? <int>{}
         : _scannedCheckpointIds
@@ -277,7 +290,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     _notifyRouteMapRevision();
   }
 
-  /// Bổ sung QR/metadata từ site. Khi [fullRefresh], không ghi đè field từ GET active.
+  /// Merges QR/metadata from site. When [fullRefresh], does not overwrite GET active fields.
   Future<ActivePatrolRound> _mergeActiveRoundCheckPoints(
     ActivePatrolRound active, {
     required bool fullRefresh,
@@ -349,7 +362,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     );
   }
 
-  /// `null` = hủy; `[]` = bỏ qua ảnh; không rỗng = danh sách đường dẫn ảnh.
+  /// `null` = cancel; `[]` = skip photos; non-empty = image path list.
   Future<List<String>?> _confirmPhotoDialog({
     required AppLocalizations l10n,
     required CheckPoint point,
@@ -436,6 +449,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
             _autoScanActive = false;
             _autoScanKind = null;
           });
+          _syncBackgroundAutoScanSuppression();
           await _stopQrLocationWatch();
         }
       }
@@ -656,6 +670,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       return;
     }
     setState(() => _scanningCheckpointId = point.id);
+    _syncBackgroundAutoScanSuppression();
 
     await _submitPatrolLogAfterProximity(
       point: point,
@@ -666,7 +681,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     );
   }
 
-  /// Chuẩn hóa payload QR và khớp `CheckPoint.qrCode` trên tuyến hiện tại.
+  /// Normalizes QR payload and matches `CheckPoint.qrCode` on the current route.
   CheckPoint? _findCheckPointByQrCode(List<CheckPoint> points, String raw) {
     var payload = raw.trim();
     if (payload.isEmpty) return null;
@@ -688,6 +703,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     }
 
     setState(() => _manualScanKind = _RoundManualScanKind.nfc);
+    _syncBackgroundAutoScanSuppression();
     try {
       final result = await readNfcTagIdentifier(
         iosAlertMessage: l10n.patrolPointNfcScanning,
@@ -721,6 +737,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     } finally {
       if (mounted && _scanningCheckpointId == null) {
         setState(() => _manualScanKind = null);
+        _syncBackgroundAutoScanSuppression();
       }
     }
   }
@@ -730,6 +747,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
     final l10n = AppLocalizations.of(context)!;
     setState(() => _manualScanKind = _RoundManualScanKind.qr);
+    _syncBackgroundAutoScanSuppression();
     try {
       final payload = await Navigator.of(context).push<String>(
         MaterialPageRoute(
@@ -756,6 +774,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     } finally {
       if (mounted && _scanningCheckpointId == null) {
         setState(() => _manualScanKind = null);
+        _syncBackgroundAutoScanSuppression();
       }
     }
   }
@@ -766,7 +785,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _autoScanActive ||
       _manualScanKind != null;
 
-  /// Sau khi quét QR khớp điểm: popup ảnh, đọc GPS một lần, gửi patrol log.
+  /// After QR match: photo popup, one-shot GPS read, submit patrol log.
   Future<void> _onQrScanCheckpoint(CheckPoint point, int roundId) async {
     if (_scanningCheckpointId != null || _autoScanActive) return;
     final l10n = AppLocalizations.of(context)!;
@@ -781,6 +800,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _scanningCheckpointId = point.id;
       _qrScanSubmitting = true;
     });
+    _syncBackgroundAutoScanSuppression();
     /*
     final needsBaro = point.baroAltitude != null;
     final gps = await readDeviceGpsOnce(
@@ -842,6 +862,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _autoScanKind = _RoundAutoScanKind.gps;
       _qrScanSubmitting = false;
     });
+    _syncBackgroundAutoScanSuppression();
 
     final statusNotifier = ValueNotifier<_QrScanProximityStatus>(
       _QrScanProximityStatus(headline: l10n.patrolRoundQrWaitingPosition),
@@ -1189,6 +1210,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _autoScanKind = _RoundAutoScanKind.bluetooth;
       _qrScanSubmitting = false;
     });
+    _syncBackgroundAutoScanSuppression();
 
     final statusNotifier = ValueNotifier<_QrScanProximityStatus>(
       _QrScanProximityStatus(headline: l10n.patrolRoundBluetoothWaiting),

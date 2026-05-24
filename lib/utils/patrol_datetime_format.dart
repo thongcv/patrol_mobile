@@ -1,7 +1,7 @@
-/// Định dạng ngày/giờ hiển thị cho màn tuần tra (ca, hiệu lực, vòng).
+/// Date/time display formatting for patrol screens (shift, effective range, round).
 library;
 
-/// Khung giờ ca: `HH:mm – HH:mm` hoặc `—` nếu trống.
+/// Shift window: `HH:mm – HH:mm` or `—` if empty.
 String formatShiftWindow(String? start, String? end) {
   final s = trimTimeToHourMinute(start);
   final e = trimTimeToHourMinute(end);
@@ -11,7 +11,7 @@ String formatShiftWindow(String? start, String? end) {
   return '$s – $e';
 }
 
-/// Rút chuỗi giờ về `HH:mm` (bỏ giây nếu có).
+/// Trims time string to `HH:mm` (drops seconds if present).
 String trimTimeToHourMinute(String? raw) {
   final t = raw?.trim();
   if (t == null || t.isEmpty) return '';
@@ -22,7 +22,7 @@ String trimTimeToHourMinute(String? raw) {
   return t;
 }
 
-/// Khoảng ngày hiệu lực: `dd/MM/yyyy – dd/MM/yyyy`.
+/// Effective date range: `dd/MM/yyyy – dd/MM/yyyy`.
 String formatEffectiveDateRange(String? start, String? end) {
   final s = formatPatrolDateOnly(start);
   final e = formatPatrolDateOnly(end);
@@ -32,7 +32,7 @@ String formatEffectiveDateRange(String? start, String? end) {
   return '$s – $e';
 }
 
-/// Ngày `yyyy-MM-dd` hoặc ISO → `dd/MM/yyyy`.
+/// Date `yyyy-MM-dd` or ISO → `dd/MM/yyyy`.
 String formatPatrolDateOnly(String? raw) {
   final t = raw?.trim();
   if (t == null || t.isEmpty) return '';

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Theme chung cho các màn tuần tra (slate + cyan accent).
+/// Shared theme for patrol screens (slate + cyan accent).
 abstract final class PatrolShellColors {
   PatrolShellColors._();
 
@@ -12,7 +12,7 @@ abstract final class PatrolShellColors {
   static const Color accentMuted = Color(0xFF93C5FD);
 }
 
-/// Khung AppBar + nền thống nhất cho màn feature patrol.
+/// Unified AppBar + background for patrol feature screens.
 class PatrolFeatureScaffold extends StatelessWidget {
   const PatrolFeatureScaffold({
     super.key,
@@ -22,15 +22,15 @@ class PatrolFeatureScaffold extends StatelessWidget {
     required this.locale,
     required this.child,
     this.subtitle,
-    /// Khi khác null, thay hàng phụ đề mặc định (ví dụ GPS + nút refresh).
+    /// When non-null, replaces default subtitle row (e.g. GPS + refresh).
     this.subtitleSlot,
-    /// Nút / icon bên phải hàng hero + phụ đề (ví dụ mở lịch ca).
+    /// Trailing control on hero + subtitle row (e.g. open shift calendar).
     this.heroRowTrailing,
-    /// `false` khi nhúng trong Home (tránh Scaffold lồng route mới).
+    /// `false` when embedded in Home (avoids nested Scaffold route).
     this.useOuterScaffold = true,
   });
 
-  /// Tiêu đề khi app bar thu gọn; `null` khi đã có tiêu đề ở shell ngoài (nhúng Home).
+  /// Title when app bar collapses; `null` if outer shell already has title (Home embed).
   final String? title;
   final IconData heroIcon;
   final Color heroColor;
@@ -53,8 +53,8 @@ class PatrolFeatureScaffold extends StatelessWidget {
     final theme = GoogleFonts.interTextTheme(Theme.of(context).textTheme);
     final canPop = Navigator.canPop(context);
 
-    /// Header nằm ngoài vùng scroll: tránh clip khi `SliverAppBar` thu còn toolbar
-    /// và tránh title/icon bị cuộn mất.
+    /// Header outside scroll area: avoids clip when `SliverAppBar` collapses to toolbar
+    /// and keeps title/icon visible.
     final header = DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(

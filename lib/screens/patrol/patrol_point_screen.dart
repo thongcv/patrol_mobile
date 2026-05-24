@@ -26,8 +26,8 @@ part 'point/patrol_point_meta_dialog.dart';
 part 'point/patrol_point_meta_icon.dart';
 part 'point/patrol_point_check_point_card.dart';
 
-/// Lấy vị trí point — `link`: `patrol-point`.
-/// GET `/api/check-points/me/site`, PUT `/api/check-points` để gán lat/lng/độ cao.
+/// Capture point location — `link`: `patrol-point`.
+/// GET `/api/check-points/me/site`, PUT `/api/check-points` to assign lat/lng/altitude.
 class PatrolPointScreen extends StatefulWidget {
   const PatrolPointScreen({
     super.key,
@@ -39,7 +39,7 @@ class PatrolPointScreen extends StatefulWidget {
   final Locale locale;
   final ValueChanged<Locale> onLocaleChanged;
 
-  /// `true` khi hiển thị trong tab Trang chủ (không push route mới).
+  /// `true` when shown in Home tab (no new route push).
   final bool embedded;
 
   @override

@@ -3,10 +3,26 @@ import org.gradle.api.JavaVersion
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
+val kotlinVersion: String =
+    providers.gradleProperty("kotlin.version").orElse("2.2.20").get()
+
 allprojects {
     repositories {
         google()
         mavenCentral()
+        maven {
+            url = uri("https://storage.googleapis.com/download.flutter.io")
+        }
+    }
+    configurations.configureEach {
+        resolutionStrategy {
+            eachDependency {
+                if (requested.group == "org.jetbrains.kotlin") {
+                    useVersion(kotlinVersion)
+                    because("Align Kotlin stdlib with fwcd.kotlin IDE analyzer (metadata <= 2.2)")
+                }
+            }
+        }
     }
 }
 

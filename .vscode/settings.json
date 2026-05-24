@@ -1,0 +1,11 @@
+{
+  "kotlin.languageServer.enabled": true,
+  "kotlin.languageServer.transport": "stdio",
+  "kotlin.languageServer.gradle.enabled": false,
+
+  "java.import.gradle.enabled": false,
+  "files.watcherExclude": {
+    "**/build/**": true,
+    "**/.gradle/**": true
+  }
+}

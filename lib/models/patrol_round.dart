@@ -1,4 +1,4 @@
-/// Vòng tuần tra đang chạy (`round`).
+/// Active patrol round (`round`).
 class PatrolRound {
   PatrolRound({
     required this.id,

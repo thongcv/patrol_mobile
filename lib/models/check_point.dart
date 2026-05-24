@@ -65,11 +65,11 @@ class CheckPoint {
         lng <= 180;
   }
 
-  /// Ghép metadata từ GET `/api/check-points/me/site` vào mốc active.
+  /// Merges metadata from GET `/api/check-points/me/site` into active checkpoint.
   ///
-  /// [preferActive] `true` khi refresh (GET `/api/patrol-rounds/me/active` là
-  /// nguồn đúng cho `verified`, GPS, accuracy, audit…). Chỉ lấy từ site khi
-  /// active thiếu. `false` khi load lần đầu — site bổ sung metadata đầy đủ hơn.
+  /// [preferActive] `true` on refresh (GET `/api/patrol-rounds/me/active` is
+  /// source of truth for `verified`, GPS, accuracy, audit…). Falls back to site only when
+  /// active is missing fields. `false` on first load — site adds richer metadata.
   CheckPoint mergeSiteMetadata(
     CheckPoint site, {
     required bool preferActive,
@@ -267,7 +267,7 @@ bool? _readBoolFromJson(dynamic value) {
   return null;
 }
 
-/// Payload `data` từ GET `/api/check-points/me/site` (object gồm site + danh sách).
+/// `data` payload from GET `/api/check-points/me/site` (site object + list).
 class MySiteCheckPointsDto {
   MySiteCheckPointsDto({
     required this.siteId,

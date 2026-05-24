@@ -17,9 +17,9 @@ class _PatrolPointMetaIcon extends StatelessWidget {
   final AppLocalizations l10n;
   final bool busy;
   final IconData icon;
-  /// Khi đã có dữ liệu — gợi ý khi nhấn giữ / hover.
+  /// When data exists — hint on long-press / hover.
   final String detailTooltip;
-  /// Khi chưa có — hành động gán (luôn dùng cho NFC / Bluetooth / GPS).
+  /// When missing — assign action (always used for NFC / Bluetooth / GPS).
   final String applyTooltip;
   final String dialogTitle;
   final String Function() dialogBody;

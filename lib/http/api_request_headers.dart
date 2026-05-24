@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 
 
 
-/// Giá trị header mặc định: locale, OS, timezone offset (Bearer và JSON do Dio interceptor / request gắn).
+/// Default header values: locale, OS, timezone offset (Bearer and JSON attached by Dio interceptor / request).
 
 class ApiRequestHeaders {
 
@@ -18,13 +18,13 @@ class ApiRequestHeaders {
 
 
 
-  /// Giống `x-off-set` phía frontend Web / Java backend.
+  /// Same as Web frontend / Java backend `x-off-set`.
 
   static const String xOffSet = 'x-off-set';
 
 
 
-  /// `Accept-Language` mặc định từ [ui.PlatformDispatcher] (chỉ có thể ghi đè trên Dio request).
+  /// Default `Accept-Language` from [ui.PlatformDispatcher] (overridable per Dio request only).
 
   static String get defaultAcceptLanguage => _acceptLanguage;
 
@@ -34,7 +34,7 @@ class ApiRequestHeaders {
 
 
 
-  /// Headers JSON cho POST refresh (không gắn Bearer từ prefs).
+  /// JSON headers for POST refresh (no Bearer from prefs).
 
   static Map<String, String> jsonOnlyHeaders() => {
 
@@ -50,7 +50,7 @@ class ApiRequestHeaders {
 
 
 
-  /// Offset máy client, ví dụ `+07:00` — khớp `ZoneOffset.of()` phía Java.
+  /// Client machine offset, e.g. `+07:00` — matches Java `ZoneOffset.of()`.
 
   static String getClientOffset() {
 

@@ -260,5 +260,18 @@
   "apiBaseMissing": "Chưa cấu hình API: đặt API_BASE_URL (--dart-define) hoặc AppConfig.devFallbackBaseUrl",
   "loginFailed": "Đăng nhập thất bại. Kiểm tra tài khoản hoặc máy chủ.",
   "networkError": "Lỗi mạng. Kiểm tra URL API và kết nối.",
-  "forgotRequestSent": "Đã gửi yêu cầu. Kiểm tra email."
+  "forgotRequestSent": "Đã gửi yêu cầu. Kiểm tra email.",
+  "patrolTrackMockGpsTitle": "CẢNH BÁO GPS GIẢ",
+  "patrolTrackMockGpsBody": "Phát hiện ứng dụng giả lập vị trí. Tắt Fake GPS và tiếp tục tuần tra hợp lệ.",
+  "patrolBackgroundNotificationTitle": "SPS Patrol",
+  "patrolBackgroundNotificationInitialContent": "Đang tuần tra — định vị realtime",
+  "patrolBackgroundNotificationContent": "Đang gửi vị trí tuần tra realtime",
+  "patrolBackgroundCheckpointScanned": "Đã quét: {name}",
+  "@patrolBackgroundCheckpointScanned": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }

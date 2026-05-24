@@ -788,4 +788,27 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get forgotRequestSent => 'Request sent. Check your email.';
+
+  @override
+  String get patrolTrackMockGpsTitle => 'FAKE GPS ALERT';
+
+  @override
+  String get patrolTrackMockGpsBody =>
+      'Mock location detected. Disable fake GPS apps and continue a valid patrol.';
+
+  @override
+  String get patrolBackgroundNotificationTitle => 'SPS Patrol';
+
+  @override
+  String get patrolBackgroundNotificationInitialContent =>
+      'Patrol in progress — realtime location';
+
+  @override
+  String get patrolBackgroundNotificationContent =>
+      'Sending realtime patrol location';
+
+  @override
+  String patrolBackgroundCheckpointScanned(String name) {
+    return 'Scanned: $name';
+  }
 }

@@ -6,7 +6,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../l10n/app_localizations.dart';
 import '../screens/patrol/patrol_shell.dart';
 
-/// Màn hình quét mã QR checkpoint; trả về chuỗi đọc được qua `Navigator.pop`.
+/// Checkpoint QR scan screen; returns the read string via `Navigator.pop`.
 class QrCodeScannerPage extends StatefulWidget {
   const QrCodeScannerPage({super.key, required this.l10n});
 

@@ -4,13 +4,13 @@ import 'package:geolocator/geolocator.dart';
 
 import '../models/check_point.dart';
 
-/// Bán kính mặc định (m) khi checkpoint chưa cấu hình `radius`.
+/// Default radius (m) when checkpoint has no configured `radius`.
 const double kDefaultCheckPointRadiusM = 3;
 
-/// Biên sai số “phần dư”: [deviceM] trừ sai số đã lưu tại mốc [checkpointM].
+/// Incremental accuracy margin: [deviceM] minus accuracy saved at checkpoint [checkpointM].
 ///
-/// Chỉ nới khi GPS hiện tại kém hơn lúc lưu mốc (`device > checkpoint`).
-/// Hiệu ≤ 0 → `null` (so khoảng cách chặt với [allowedRadiusM], không cộng ε).
+/// Widens only when current GPS is worse than at save (`device > checkpoint`).
+/// Delta ≤ 0 → `null` (strict distance vs [allowedRadiusM], no ε added).
 double? netIncrementalAccuracyM(double? deviceM, double? checkpointM) {
   if (deviceM == null || !deviceM.isFinite || deviceM <= 0) return null;
   final cp = checkpointM;
@@ -21,7 +21,7 @@ double? netIncrementalAccuracyM(double? deviceM, double? checkpointM) {
   return deviceM;
 }
 
-/// Độ lệch bắc–nam (m) dọc kinh tuyến; dương = mốc nằm phía bắc `from`.
+/// North–south offset (m) along meridian; positive = checkpoint north of `from`.
 double _signedGeodesicNorthM(
   double fromLat,
   double fromLng,
@@ -32,7 +32,7 @@ double _signedGeodesicNorthM(
   return toLat >= fromLat ? d : -d;
 }
 
-/// Độ lệch đông–tây (m) dọc vĩ tuyến; dương = mốc nằm phía đông `from`.
+/// East–west offset (m) along parallel; positive = checkpoint east of `from`.
 double _signedGeodesicEastM(
   double fromLat,
   double fromLng,
@@ -43,7 +43,7 @@ double _signedGeodesicEastM(
   return toLng >= fromLng ? d : -d;
 }
 
-/// Khoảng cách ngang (m) tới checkpoint; `null` nếu checkpoint chưa có tọa độ.
+/// Horizontal distance (m) to checkpoint; `null` if checkpoint has no coordinates.
 double? horizontalDistanceToCheckPoint(
   CheckPoint checkpoint,
   double latitude,
@@ -85,7 +85,7 @@ class CheckPointProximityResult {
   final double? allowedRadiusM;
 }
 
-/// Chi tiết so sánh vị trí thiết bị với checkpoint (popup điều hướng).
+/// Device vs checkpoint comparison details (navigation popup).
 class CheckPointProximitySnapshot {
   const CheckPointProximitySnapshot({
     required this.checkpointLat,
@@ -112,22 +112,22 @@ class CheckPointProximitySnapshot {
   final double deviceLng;
   final double? deviceAltitude;
 
-  /// Dương = cần đi về phía bắc (m) để tới mốc.
+  /// Positive = need to move north (m) to reach checkpoint.
   final double signedNorthToCheckpointM;
 
-  /// Dương = cần đi về phía đông (m) để tới mốc.
+  /// Positive = need to move east (m) to reach checkpoint.
   final double signedEastToCheckpointM;
 
-  /// Khoảng cách geodesic ngang (m) — đường thẳng trên mặt đất.
+  /// Geodesic horizontal distance (m) — ground line.
   final double horizontalM;
 
-  /// Khoảng cách không gian √(ngang² + độ cao²) khi có đủ độ cao.
+  /// Slant range √(horizontal² + altitude²) when altitude is available.
   final double? slantRangeM;
 
-  /// Sai số ngang từ GPS (`Position.accuracy`), nếu có.
+  /// Horizontal error from GPS (`Position.accuracy`), if any.
   final double? horizontalAccuracyM;
 
-  /// Sai số độ cao GPS (`Position.altitudeAccuracy`), nếu có.
+  /// GPS altitude error (`Position.altitudeAccuracy`), if any.
   final double? gpsAltitudeAccuracyM;
   final double? signedAltitudeDeltaM;
   final double allowedRadiusM;
@@ -141,20 +141,20 @@ class CheckPointProximityEvaluation {
   final CheckPointProximitySnapshot? snapshot;
 }
 
-/// Kiểm tra vị trí thiết bị so với checkpoint và trả về snapshot điều hướng.
+/// Checks device position against checkpoint and returns navigation snapshot.
 ///
-/// Khoảng cách ngang dùng geodesic ([Geolocator.distanceBetween]).
-/// Hướng bắc/đông: geodesic dọc kinh/vĩ tuyến (khớp [horizontalM] ở cự ly ngắn).
-/// Khi có độ cao mốc, kiểm tra theo khoảng cách 3D.
+/// Horizontal distance uses geodesic ([Geolocator.distanceBetween]).
+/// North/east: geodesic along meridian/parallel (matches [horizontalM] at short range).
+/// When checkpoint altitude exists, checks 3D distance.
 ///
-/// [horizontalAccuracyM]: biên sai số ngang ε (m), thường từ
-/// [netIncrementalAccuracyM] — chỉ cho khoảng cách ngang.
-/// [gpsAltitudeAccuracyM]: biên sai số độ cao GPS ε, cùng cách tính.
+/// [horizontalAccuracyM]: horizontal ε margin (m), usually from
+/// [netIncrementalAccuracyM] — horizontal distance only.
+/// [gpsAltitudeAccuracyM]: GPS altitude ε margin, same rules.
 ///
-/// Ngang (và độ cao GPS): so sánh có biên sai số ε —
-/// đo rõ trong vùng (`d < R`) → pass (tránh kẹt popup khi GPS đã báo đủ gần);
-/// đo ngoài vùng (`d > R`) nhưng `d − ε ≤ R` → pass (tránh fail khi GPS đẩy xa mốc).
-/// Độ cao barometer: so sánh chặt `≤ radius` (không dùng ε).
+/// Horizontal (and GPS altitude): compare with ε margin —
+/// clearly inside (`d < R`) → pass (avoid stuck popup when GPS already reports near);
+/// outside (`d > R`) but `d − ε ≤ R` → pass (avoid fail when GPS drifts away).
+/// Barometer altitude: strict `≤ radius` (no ε).
 CheckPointProximityEvaluation evaluateCheckPointProximity({
   required CheckPoint checkpoint,
   required double latitude,
@@ -266,7 +266,7 @@ double? _positiveAccuracy(double? accuracyM) {
   return accuracyM;
 }
 
-/// `null` nếu trong phạm vi; ngược lại kết quả lỗi với khoảng cách hiển thị.
+/// `null` if in range; otherwise failure with display distance.
 CheckPointProximityResult? _proximityFailure({
   required CheckPointProximitySnapshot snapshot,
   required double horizontalAccuracyMargin,
@@ -311,11 +311,11 @@ CheckPointProximityResult? _proximityFailure({
   return null;
 }
 
-/// Có nên coi là **ngoài** phạm vi khi biết sai số đo ε (m).
+/// Whether to treat as **out of** range when measurement error ε (m) is known.
 ///
-/// - Đo `d < R`: GPS đã báo trong vùng → pass.
-/// - Đo `d > R` nhưng `d − ε ≤ R`: có thể đứng đủ gần → pass.
-/// - Không có ε: fail khi `d > R`.
+/// - Measured `d < R`: GPS reports inside → pass.
+/// - Measured `d > R` but `d − ε ≤ R`: may be close enough → pass.
+/// - No ε: fail when `d > R`.
 bool _distanceFailsWithAccuracyMargin({
   required double distanceM,
   required double allowedRadiusM,

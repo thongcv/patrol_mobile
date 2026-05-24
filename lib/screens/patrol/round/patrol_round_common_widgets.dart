@@ -31,7 +31,7 @@ class _PatrolPanel extends StatelessWidget {
   }
 }
 
-/// Nút quét vuông: icon và nhãn trong cùng khung (giống QR/NFC).
+/// Square scan button: icon and label in one tile (like QR/NFC).
 class _PatrolScanActionTile extends StatelessWidget {
   const _PatrolScanActionTile({
     required this.onTap,

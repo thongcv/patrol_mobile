@@ -6,6 +6,15 @@
 	<string></string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>SPS Patrol cần quyền vị trí để xác nhận hoạt động tuần tra trên hiện trường.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>SPS Patrol cần định vị liên tục để gửi lộ trình tuần tra realtime khi màn hình tắt hoặc ứng dụng chạy nền.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>SPS Patrol cần định vị liên tục để gửi lộ trình tuần tra realtime khi màn hình tắt hoặc ứng dụng chạy nền.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+	</array>
 	<key>NSMotionUsageDescription</key>
 	<string>SPS Patrol cần quyền cảm biến chuyển động (theo yêu cầu iOS) để đọc barometer và ghi nhận độ cao khi cập nhật điểm tuần tra.</string>
 	<key>NSCameraUsageDescription</key>

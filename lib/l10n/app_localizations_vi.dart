@@ -785,4 +785,27 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get forgotRequestSent => 'Đã gửi yêu cầu. Kiểm tra email.';
+
+  @override
+  String get patrolTrackMockGpsTitle => 'CẢNH BÁO GPS GIẢ';
+
+  @override
+  String get patrolTrackMockGpsBody =>
+      'Phát hiện ứng dụng giả lập vị trí. Tắt Fake GPS và tiếp tục tuần tra hợp lệ.';
+
+  @override
+  String get patrolBackgroundNotificationTitle => 'SPS Patrol';
+
+  @override
+  String get patrolBackgroundNotificationInitialContent =>
+      'Đang tuần tra — định vị realtime';
+
+  @override
+  String get patrolBackgroundNotificationContent =>
+      'Đang gửi vị trí tuần tra realtime';
+
+  @override
+  String patrolBackgroundCheckpointScanned(String name) {
+    return 'Đã quét: $name';
+  }
 }

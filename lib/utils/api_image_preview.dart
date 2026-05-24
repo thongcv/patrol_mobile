@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import '../config/app_config.dart';
 import '../http/patrol_dio.dart';
 
-/// Chuẩn hóa nguồn ảnh từ API (URL tuyệt đối, path `/uploads/...`, base64).
+/// Normalizes image source from API (absolute URL, `/uploads/...` path, base64).
 String? resolveApiImageSource(String? imageSource) {
   final raw = imageSource?.trim();
   if (raw == null || raw.isEmpty) return null;
@@ -33,7 +33,7 @@ bool _isPatrolApiUrl(String url) {
   return url == base || url.startsWith('$base/');
 }
 
-/// `true` nếu có thể hiển thị preview (URL hoặc base64 hợp lệ).
+/// `true` if preview can be shown (valid URL or base64).
 bool canPreviewApiImageSource(String? imageSource) {
   final raw = resolveApiImageSource(imageSource);
   if (raw == null || raw.isEmpty) return false;
@@ -62,7 +62,7 @@ bool canPreviewApiImageSource(String? imageSource) {
   }
 }
 
-/// Ảnh từ API: URL `http(s)://`, path `/...`, `data:image/...;base64,...`, hoặc base64 thuần.
+/// API image: `http(s)://` URL, `/...` path, `data:image/...;base64,...`, or plain base64.
 Widget? apiImagePreview(String? imageSource, {double size = 88}) {
   final raw = resolveApiImageSource(imageSource);
   if (raw == null || raw.isEmpty) return null;

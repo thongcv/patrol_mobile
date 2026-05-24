@@ -2,7 +2,7 @@ import 'api_failure.dart';
 
 
 
-/// Giá trị “rỗng” cho API chỉ cần biết thành công / thất bại (logout, forgot, PUT không body).
+/// Empty value for APIs that only need success/failure (logout, forgot, PUT with no body).
 enum ApiUnit {
   instance,
 }
@@ -24,13 +24,13 @@ sealed class ApiResult<T> {
         ApiFailed<T>(:final failure) => failure,
       };
 
-  /// Có payload thành công (tương đương [isSuccess]).
+  /// Has successful payload (equivalent to [isSuccess]).
   bool get ok => isSuccess;
 
-  /// Lỗi khi thất bại; `null` khi thành công (alias [failureOrNull]).
+  /// Failure on error; `null` on success (alias [failureOrNull]).
   ApiFailure? get failure => failureOrNull;
 
-  /// Payload khi thành công; `null` khi lỗi (alias [dataOrNull]).
+  /// Payload on success; `null` on error (alias [dataOrNull]).
   T? get data => dataOrNull;
 
   factory ApiResult.success(T data) => ApiSuccess(data);

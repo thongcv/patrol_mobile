@@ -12,6 +12,7 @@ import '../navigation/patrol_session.dart';
 import '../services/account_service.dart';
 import '../services/account_session_store.dart';
 import '../services/auth_service.dart';
+import '../services/patrol_realtime_track_coordinator.dart';
 import 'login_screen.dart';
 
 abstract final class _PatrolUi {
@@ -20,7 +21,7 @@ abstract final class _PatrolUi {
   static const Color callGreen = Color(0xFF22C55E);
 }
 
-/// Dashboard sau đăng nhập — layout theo design: header xanh đậm, khối trắng, bottom nav.
+/// Post-login dashboard — design layout: dark blue header, white block, bottom nav.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
@@ -125,6 +126,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         return;
       }
+      await PatrolRealtimeTrackCoordinator.onSessionEnded();
       await AccountSessionStore.instance.clearToken();
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
@@ -186,7 +188,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return buf.toString();
   }
 
-  /// Số gọi khẩn cấp: ưu tiên quản lý, không có thì dùng số nhân viên.
+  /// Emergency call number: prefer manager, else employee number.
   String? _emergencyPhoneRaw(AccountMe me) {
     final m = me.managerInfo?.phone?.trim();
     if (m != null && m.isNotEmpty) return m;
@@ -362,7 +364,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// Menu tuần tra mở trong tab Trang chủ (không push route).
+/// Patrol menu opened in Home tab (no route push).
 class _HomeEmbeddedPatrolShell extends StatelessWidget {
   const _HomeEmbeddedPatrolShell({
     required this.theme,

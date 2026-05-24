@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../l10n/app_localizations.dart';
 
-/// Góc phải trên — giống FE login language switcher.
+/// Top-right corner — like FE login language switcher.
 class LanguageToggleBar extends StatelessWidget {
   const LanguageToggleBar({
     super.key,

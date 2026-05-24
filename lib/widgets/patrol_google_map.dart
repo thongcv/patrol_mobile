@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-/// Bản đồ patrol — style mặc định Google (sáng); chỉ Maps SDK (xem [GoogleMapsConfig]).
+/// Patrol map — default Google style (light); Maps SDK only (see [GoogleMapsConfig]).
 ///
-/// Không bật: myLocation layer Google, toolbar, compass mở app Maps, lite mode, v.v.
+/// Disabled: Google myLocation layer, toolbar, compass opening Maps app, lite mode, etc.
 class PatrolGoogleMap extends StatelessWidget {
   const PatrolGoogleMap({
     super.key,

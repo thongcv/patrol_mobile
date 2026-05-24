@@ -1,10 +1,10 @@
 ﻿part of '../patrol_round_screen.dart';
 
 enum CheckPointMatchOrder {
-  /// Chỉ mốc [points.first] (đã sort `sequenceOrder`); khớp mới trả về.
+  /// Only [points.first] (sorted by `sequenceOrder`); returns on match.
   sequenceOrder,
 
-  /// Trong các mốc khớp, chọn khoảng cách ngang nhỏ nhất.
+  /// Among matches, pick smallest horizontal distance.
   nearest,
 }
 
@@ -12,7 +12,7 @@ enum _RoundAutoScanKind { gps, bluetooth }
 
 enum _RoundManualScanKind { qr, nfc }
 
-/// Kết quả quét proximity: mốc khớp để gửi log và/hoặc feedback UI.
+/// Proximity scan result: matched checkpoint for log and/or UI feedback.
 class _CheckPointProximityScan {
   const _CheckPointProximityScan({this.matched, this.feedback});
 

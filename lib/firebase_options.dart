@@ -9,7 +9,7 @@ class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
       throw UnsupportedError(
-        'Chưa cấu hình Firebase cho web — chạy FlutterFire CLI.',
+        'Firebase is not configured for web — run FlutterFire CLI.',
       );
     }
     switch (defaultTargetPlatform) {
@@ -17,7 +17,7 @@ class DefaultFirebaseOptions {
         return android;
       default:
         throw UnsupportedError(
-          'Chỉ hỗ trợ Android trong bản build này — thêm iOS qua flutterfire configure.',
+          'Only Android is supported in this build — add iOS via flutterfire configure.',
         );
     }
   }

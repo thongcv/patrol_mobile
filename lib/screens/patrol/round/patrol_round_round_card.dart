@@ -245,4 +245,4 @@ class _RoundCard extends StatelessWidget {
   }
 }
 
-/// Popup chụp ảnh sau khi khớp điểm tuần tra (GPS / quét).
+/// Photo capture popup after checkpoint match (GPS / scan).

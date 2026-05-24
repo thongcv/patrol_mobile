@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
-/// Toast nổi phía trên màn hình — không đẩy layout (khác MaterialBanner / SnackBar).
+/// Floating toast at top of screen — does not push layout (unlike MaterialBanner / SnackBar).
 abstract final class TopToast {
   TopToast._();
 
   static OverlayEntry? _entry;
 
-  /// Hiển thị toast trên cùng. Chỉ một toast tại một thời điểm.
+  /// Shows toast at top. Only one toast at a time.
   static void show(
     BuildContext context,
     String message, {
@@ -71,7 +71,7 @@ abstract final class TopToast {
     });
   }
 
-  /// Ẩn toast đang hiển thị (nếu có).
+  /// Hides the visible toast (if any).
   static void hide() {
     _entry?.remove();
     _entry = null;
