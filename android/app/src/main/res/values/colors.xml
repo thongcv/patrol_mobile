@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#000000</color>
+    <!-- Match glass circle in foreground PNG (Samsung ignores fully transparent). -->
+    <color name="ic_launcher_background">#FF2C2C32</color>
 </resources>

@@ -7,12 +7,14 @@ import '../config/app_config.dart';
 import '../models/patrol_location_track_payload.dart';
 import 'account_session_store.dart';
 import 'patrol_track_offline_queue.dart';
+import 'patrol_tracking_config_store.dart';
 
 /// STOMP client over SockJS — matches Spring `addEndpoint("/notification").withSockJS()`.
 ///
 /// Contract (backend should mirror):
 /// - `@MessageMapping("/patrol/track-location")` ← `/app/patrol/track-location`
 /// - Push mock GPS → `/user/queue/patrol/mock-location-alert`
+/// - Active round changed → `/user/queue/patrol/active-round-changed`
 class PatrolTrackSocketClient {
   PatrolTrackSocketClient._();
 
@@ -28,15 +30,24 @@ class PatrolTrackSocketClient {
   final StreamController<void> _mockLocationAlert =
       StreamController<void>.broadcast();
 
+  final StreamController<void> _activeRoundChanged =
+      StreamController<void>.broadcast();
+
   Stream<bool> get connectionChanges => _connectionState.stream;
 
   /// Server-pushed mock GPS alert (STOMP).
   Stream<void> get mockLocationAlerts => _mockLocationAlert.stream;
 
+  /// Active patrol round changed — coordinator calls GET `/me/active`.
+  Stream<void> get activeRoundSignals => _activeRoundChanged.stream;
+
   bool get isConnected => _client?.connected ?? false;
 
+  /// Kết nối STOMP cho phiên đăng nhập (nhận vòng tuần tra + gửi vị trí khi emit bật).
   Future<void> connect() async {
     if (_connecting || isConnected) return;
+    if (!await PatrolTrackingConfigStore.socketEnabled()) return;
+
     final url = AppConfig.effectiveStompEndpointUrl;
     if (url.isEmpty) return;
 
@@ -89,6 +100,7 @@ class PatrolTrackSocketClient {
 
   Future<bool> sendTrackLocation(PatrolLocationTrackPayload payload) async {
     if (payload.isMocked) return false;
+    if (!await PatrolTrackingConfigStore.socketEnabled()) return false;
     if (!isConnected) {
       await PatrolTrackOfflineQueue.enqueue(payload);
       return false;
@@ -116,7 +128,16 @@ class PatrolTrackSocketClient {
       destination: AppConfig.stompMockLocationAlertDestination,
       callback: _onMockAlertFrame,
     );
+    _client?.subscribe(
+      destination: AppConfig.stompActiveRoundChangedDestination,
+      callback: _onActiveRoundChangedFrame,
+    );
     unawaited(_flushOfflineQueue());
+  }
+
+  void _onActiveRoundChangedFrame(StompFrame frame) {
+    if (_activeRoundChanged.isClosed) return;
+    _activeRoundChanged.add(null);
   }
 
   void _onMockAlertFrame(StompFrame frame) {
@@ -159,4 +180,5 @@ class PatrolTrackSocketClient {
       _connectionState.add(false);
     }
   }
+
 }

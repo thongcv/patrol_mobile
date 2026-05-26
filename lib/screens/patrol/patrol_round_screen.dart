@@ -17,6 +17,8 @@ import '../../models/patrol_round.dart';
 import '../../services/check_point_service.dart';
 import '../../services/patrol_log_service.dart';
 import '../../services/patrol_round_service.dart';
+import '../../services/patrol_active_round_cache.dart';
+import '../../services/patrol_active_round_coordinator.dart';
 import '../../services/patrol_realtime_track_coordinator.dart';
 import '../../utils/bluetooth_beacon_reader.dart';
 import '../../utils/check_point_proximity.dart';
@@ -79,16 +81,23 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   bool _autoScanActive = false;
   _RoundAutoScanKind? _autoScanKind;
   ValueNotifier<_QrScanProximityStatus>? _autoScanStatusNotifier;
+  StreamSubscription<ActivePatrolRound?>? _activeRoundSocketSub;
 
   @override
   void initState() {
     super.initState();
+    _activeRoundSocketSub =
+        PatrolActiveRoundCoordinator.activeRoundChanges.listen((_) {
+      if (!mounted) return;
+      unawaited(_load(silent: _active != null));
+    });
     _load();
   }
 
   @override
   void dispose() {
     TopToast.hide();
+    _activeRoundSocketSub?.cancel();
     _routeMapRevision.dispose();
     unawaited(_stopQrLocationWatch());
     unawaited(PatrolRealtimeTrackCoordinator.setRoundScanBusy(false));
@@ -175,8 +184,8 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     };
   }
 
-  Future<void> _load() async {
-    final isRefresh = _active != null;
+  Future<void> _load({bool silent = false}) async {
+    final isRefresh = silent || _active != null;
     setState(() {
       if (isRefresh) {
         _refreshing = true;
@@ -203,6 +212,10 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
         _refreshing = false;
         _failure = null;
       });
+      await PatrolActiveRoundCache.save(active);
+      unawaited(
+        PatrolRealtimeTrackCoordinator.applyActiveRound(active?.round.id),
+      );
     } else if (PatrolSession.isUnauthorized(r.failure)) {
       await PatrolSession.endSessionAndNavigateToLogin();
     } else {

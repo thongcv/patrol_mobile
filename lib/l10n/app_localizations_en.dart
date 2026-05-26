@@ -75,17 +75,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get locationChecking => 'Checking location...';
 
   @override
-  String get locationTitle => 'GPS & location required';
+  String get locationTitle => 'GPS & always-on location';
 
   @override
   String get locationBody =>
-      'Patrol requires location services on and location permission before sign-in.';
+      'Turn on location services and choose \"Always allow\" so patrol tracking works when the screen is off.';
 
   @override
   String get locationServiceOff => 'Location services (GPS) are turned off.';
 
   @override
   String get locationPermissionDenied => 'Location permission was not granted.';
+
+  @override
+  String get locationPermissionBackground =>
+      'Only \"While using the app\" was granted. Choose \"Always allow\" for background patrol.';
 
   @override
   String get locationPermissionForever =>
@@ -797,7 +801,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Mock location detected. Disable fake GPS apps and continue a valid patrol.';
 
   @override
-  String get patrolBackgroundNotificationTitle => 'SPS Patrol';
+  String get patrolBackgroundNotificationTitle => 'SPS Notification';
 
   @override
   String get patrolBackgroundNotificationInitialContent =>
@@ -811,4 +815,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String patrolBackgroundCheckpointScanned(String name) {
     return 'Scanned: $name';
   }
+
+  @override
+  String get patrolBackgroundLocationTitle => 'Background location required';
+
+  @override
+  String get patrolBackgroundLocationBody =>
+      'Allow \"Always\" location so patrol tracking and checkpoint auto-scan continue when the screen is off or the app is in the background.';
+
+  @override
+  String get patrolBackgroundLocationGrantAlways => 'Allow always';
 }

@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../utils/device_location.dart';
 import '../utils/super_gps_service.dart';
 import 'patrol_realtime_track_service.dart';
+import 'patrol_tracking_config_store.dart';
 
 typedef PatrolBackgroundGpsHandler = void Function(SuperGpsEvent event);
 
@@ -12,7 +14,7 @@ typedef PatrolBackgroundGpsHandler = void Function(SuperGpsEvent event);
 class PatrolBackgroundSocketEmitter {
   PatrolBackgroundSocketEmitter();
 
-  static const double _minMoveM = 0;
+  double _minMoveM = 5.0;
 
   StreamSubscription<SuperGpsEvent>? _gpsSub;
   Position? _anchor;
@@ -38,7 +40,7 @@ class PatrolBackgroundSocketEmitter {
     _stopped = false;
     await _cancelSubscription();
 
-    final denied = await _ensureBackgroundLocationReady();
+    final denied = await checkPatrolBackgroundLocationForTracking();
     if (denied != null) {
       if (kDebugMode) {
         debugPrint('PatrolBackgroundSocketEmitter: location not ready ($denied)');
@@ -48,11 +50,13 @@ class PatrolBackgroundSocketEmitter {
 
     if (!SuperGpsService.isSupported) return;
 
+    _minMoveM = await PatrolTrackingConfigStore.minMoveM();
+
     SuperGpsService.configureStream(
       SuperGpsStreamOptions(
         updateIntervalMs: 1000,
         minUpdateIntervalMs: 800,
-        minUpdateDistanceMeters: 0,
+        minUpdateDistanceMeters: _minMoveM.round(),
         enableBarometer: enableBarometer,
       ),
     );
@@ -108,18 +112,5 @@ class PatrolBackgroundSocketEmitter {
     }
     _anchor = pos;
     await PatrolRealtimeTrackService.instance.handlePositionFromBackground(pos);
-  }
-
-  static Future<String?> _ensureBackgroundLocationReady() async {
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) return 'service';
-
-    final permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      return 'denied';
-    }
-
-    return null;
   }
 }

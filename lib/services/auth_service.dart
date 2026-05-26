@@ -11,7 +11,9 @@ import '../http/api_response.dart';
 import '../http/api_result.dart';
 import '../http/patrol_api_endpoints.dart';
 import '../http/patrol_dio.dart';
+import '../models/patrol_tracking_config.dart';
 import 'account_session_store.dart';
+import 'patrol_tracking_config_store.dart';
 
 class AuthService {
   AuthService._();
@@ -53,6 +55,9 @@ class AuthService {
             ? AccessTokenPayload.bearerJwtFromAuthMap(accessToken)
             : null;
         if (accessToken != null && bearer != null && bearer.isNotEmpty) {
+          await PatrolTrackingConfigStore.save(
+            PatrolTrackingConfig.fromLoginEnvelope(data),
+          );
           await AccountSessionStore.instance.storeAccessToken(accessToken);
           return ApiResult.success(
             LoginSuccess(token: bearer, accessToken: accessToken),

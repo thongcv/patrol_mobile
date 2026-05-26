@@ -18,18 +18,32 @@ class PatrolBackgroundAutoScan {
   PatrolBackgroundAutoScan(this._socketEmitter);
 
   final PatrolBackgroundSocketEmitter _socketEmitter;
-  bool _submitting = false;
   var _autoScanPaused = false;
   var _autoScanActive = false;
   Future<void>? _ensureWatchRunningFuture;
+  /// Serializes GPS samples so only one submit runs at a time.
+  Future<void>? _sampleProcessingChain;
+  /// Checkpoint ids with an in-flight patrol-log POST.
+  final Set<int> _inFlightCheckpointIds = {};
+  /// Latest active-round snapshot for auto-scan (refreshed after verify).
+  ({int roundId, List<CheckPoint> checkPoints})? _activeRoundSnapshot;
 
   /// `true` when auto-scan is attached to the shared background GPS stream.
   bool get isAutoScanActive => _autoScanActive;
 
-  /// Stops auto-scan callbacks; keeps shared socket GPS when patrol emit is still on.
+  /// Stops auto-scan callbacks; keeps shared socket GPS only while patrol emit is on.
   Future<void> stop() async {
     _autoScanActive = false;
-    _submitting = false;
+    _sampleProcessingChain = null;
+    _inFlightCheckpointIds.clear();
+    _activeRoundSnapshot = null;
+
+    final prefs = await SharedPreferences.getInstance();
+    final emit = prefs.getBool(StorageKeys.patrolTrackEmitEnabled) ?? false;
+    if (!emit) {
+      await _socketEmitter.stop();
+      return;
+    }
     await _socketEmitter.start(enableBarometer: false);
   }
 
@@ -84,25 +98,24 @@ class PatrolBackgroundAutoScan {
 
     final cached = await PatrolActiveRoundCache.load();
     if (cached == null) return;
+    _activeRoundSnapshot = cached;
 
     final eligible = _eligibleCheckPoints(cached.checkPoints);
     if (eligible.isEmpty) return;
 
     final needsBaro = eligible.any((p) => p.baroAltitude != null);
-    final roundId = cached.roundId;
 
     await _socketEmitter.start(
       enableBarometer: needsBaro,
       onAutoScanEvent: (event) {
-        if (_autoScanPaused || _submitting) return;
-        unawaited(
-          _handleAutoScanSample(
-            roundId: roundId,
-            needsBaroValidation: needsBaro,
-            sample: _sampleFromEvent(event),
-            barometerListening:
-                needsBaro && event.barometerHardwareSupported,
-          ),
+        if (_autoScanPaused) return;
+        final snapshot = _activeRoundSnapshot;
+        if (snapshot == null) return;
+        _enqueueAutoScanSample(
+          cached: snapshot,
+          needsBaroValidation: needsBaro,
+          sample: _sampleFromEvent(event),
+          barometerListening: needsBaro && event.barometerHardwareSupported,
         );
       },
     );
@@ -114,38 +127,69 @@ class PatrolBackgroundAutoScan {
     }
   }
 
+  void _enqueueAutoScanSample({
+    required ({int roundId, List<CheckPoint> checkPoints}) cached,
+    required bool needsBaroValidation,
+    required DeviceLocationSample sample,
+    required bool barometerListening,
+  }) {
+    _sampleProcessingChain =
+        (_sampleProcessingChain ?? Future<void>.value()).then(
+      (_) => _handleAutoScanSample(
+        cached: cached,
+        needsBaroValidation: needsBaroValidation,
+        sample: sample,
+        barometerListening: barometerListening,
+      ),
+      onError: (Object error, StackTrace stack) {
+        if (kDebugMode) {
+          debugPrint('PatrolBackgroundAutoScan sample error: $error\n$stack');
+        }
+      },
+    );
+  }
+
   Future<void> _handleAutoScanSample({
-    required int roundId,
+    required ({int roundId, List<CheckPoint> checkPoints}) cached,
     required bool needsBaroValidation,
     required bool barometerListening,
     required DeviceLocationSample sample,
   }) async {
-    if (_autoScanPaused || _submitting) return;
+    if (_autoScanPaused) return;
     if (await _isForegroundScanBusy()) {
       pause();
       return;
     }
 
-    final cached = await PatrolActiveRoundCache.load();
-    if (cached == null || cached.roundId != roundId) return;
+    final active = _activeRoundSnapshot != null &&
+            _activeRoundSnapshot!.roundId == cached.roundId
+        ? _activeRoundSnapshot!
+        : cached;
 
-    final pending = _eligibleCheckPoints(cached.checkPoints);
-    if (pending.isEmpty) {
+    final unverified = _eligibleCheckPoints(active.checkPoints);
+    if (unverified.isEmpty) {
       await stop();
       return;
     }
+
+    final pending = unverified
+        .where((p) => !_inFlightCheckpointIds.contains(p.id))
+        .toList();
+    // All remaining checkpoints are in-flight — wait for API, keep auto-scan on.
+    if (pending.isEmpty) return;
 
     final validateBaro = needsBaroValidation && barometerListening;
     final matched = _matchFirstEligible(pending, sample, validateBaro);
     if (matched == null) return;
 
-    _submitting = true;
+    if (!_inFlightCheckpointIds.add(matched.id)) return;
+
     try {
       final pos = sample.position;
       final gpsAlt = pos.altitude.isFinite ? pos.altitude : null;
       final result = await PatrolLogService.instance.createPatrolLog(
         PatrolLogSubmit(
-          roundId: roundId,
+          roundId: active.roundId,
           checkpointId: matched.id,
           siteId: matched.siteId,
           scanTime: DateTime.now(),
@@ -157,13 +201,20 @@ class PatrolBackgroundAutoScan {
         ),
       );
       if (result.ok) {
+        await PatrolActiveRoundCache.markCheckpointVerified(matched.id);
+        _activeRoundSnapshot = await PatrolActiveRoundCache.load();
+        _inFlightCheckpointIds.remove(matched.id);
         await PatrolCheckpointSuccessFeedback.notify(
           checkpointName: matched.name,
         );
-        await PatrolActiveRoundCache.markCheckpointVerified(matched.id);
+      } else {
+        _inFlightCheckpointIds.remove(matched.id);
       }
-    } finally {
-      _submitting = false;
+    } catch (e, st) {
+      _inFlightCheckpointIds.remove(matched.id);
+      if (kDebugMode) {
+        debugPrint('PatrolBackgroundAutoScan submit error: $e\n$st');
+      }
     }
   }
 

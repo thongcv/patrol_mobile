@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'config/google_maps_config.dart';
 import 'l10n/app_localizations.dart';
@@ -10,19 +12,34 @@ import 'navigation/patrol_session.dart';
 import 'screens/location_gate_screen.dart';
 import 'services/account_session_store.dart';
 import 'services/app_locale_store.dart';
+import 'services/patrol_active_round_coordinator.dart';
 import 'services/patrol_background_service.dart';
 import 'services/patrol_realtime_track_coordinator.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await _initializeFirebase();
+}
+
+Future<void> _initializeFirebase() async {
+  if (kIsWeb) return;
+  try {
+    final options = await DefaultFirebaseOptions.resolveForInit();
+    if (options != null) {
+      await Firebase.initializeApp(options: options);
+      return;
+    }
+    if (!kIsWeb && Platform.isIOS) {
+      await Firebase.initializeApp();
+    }
+  } catch (e, st) {
+    debugPrint('Firebase init: $e\n$st');
+  }
 }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Google Maps API key: AndroidManifest (Gradle) + iOS AppDelegate/Info.plist.
+  // Google Maps API key: AndroidManifest (Gradle) + iOS Info.plist (--dart-define).
   assert(() {
     if (!GoogleMapsConfig.isConfigured) {
       debugPrint(
@@ -32,21 +49,19 @@ Future<void> main() async {
     return true;
   }());
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-    FirebaseMessaging.instance.onTokenRefresh.listen(
-      AccountSessionStore.instance.cacheDevicePushToken,
-    );
-    // Do not block first frame on FCM permission/token (FIS can be slow offline).
-    unawaited(_setupFirebaseMessaging());
+    await _initializeFirebase();
+    if (Firebase.apps.isNotEmpty) {
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+      FirebaseMessaging.instance.onTokenRefresh.listen(
+        AccountSessionStore.instance.cacheDevicePushToken,
+      );
+      unawaited(_setupFirebaseMessaging());
+    }
   } catch (e, st) {
     debugPrint('Firebase init: $e\n$st');
   }
   await AccountSessionStore.instance.loadFromPrefs();
   runApp(const PatrolMobileApp());
-  // After first frame — configure() is heavy and must not block Choreographer.
   unawaited(PatrolBackgroundService.ensureInitialized());
 }
 
@@ -78,6 +93,7 @@ class _PatrolMobileAppState extends State<PatrolMobileApp> {
       currentLocale: () => _locale,
       onLocaleChanged: _onLocaleChanged,
     );
+    PatrolActiveRoundCoordinator.attach();
     PatrolRealtimeTrackCoordinator.attach(
       navigatorKey: _navigatorKey,
       currentLocale: () => _locale,
@@ -97,6 +113,7 @@ class _PatrolMobileAppState extends State<PatrolMobileApp> {
 
   @override
   void dispose() {
+    PatrolActiveRoundCoordinator.detach();
     PatrolRealtimeTrackCoordinator.detach();
     PatrolSession.detach();
     super.dispose();
@@ -121,7 +138,6 @@ class _PatrolMobileAppState extends State<PatrolMobileApp> {
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       theme: baseTheme.copyWith(
-        // Do not call GoogleFonts.interTextTheme here — it blocks the UI thread at startup.
         scaffoldBackgroundColor: const Color(0xFF0F172A),
       ),
       home: LocationGateScreen(

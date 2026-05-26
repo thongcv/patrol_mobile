@@ -2,8 +2,9 @@
 /// `flutter run --dart-define=GOOGLE_MAPS_API_KEY=AIza...`
 ///
 /// Android: key is injected into AndroidManifest via Gradle (dart-defines).
-/// iOS: set the same key in `ios/Runner/Info.plist` → `GOOGLE_MAPS_API_KEY`,
-/// or call `GMSServices.provideAPIKey` in AppDelegate.
+/// iOS: pass the same `--dart-define=GOOGLE_MAPS_API_KEY=...` as Android
+/// (synced into Info.plist via `ios/scripts/sync_dart_defines.sh`), or copy
+/// `ios/Flutter/Secrets.xcconfig.example` → `Secrets.xcconfig` for Xcode-only builds.
 ///
 /// ## Cost policy — Maps SDK (mobile) only
 ///

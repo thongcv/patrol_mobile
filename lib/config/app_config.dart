@@ -30,6 +30,10 @@ class AppConfig {
   static const String stompMockLocationAlertDestination =
       '/user/queue/patrol/mock-location-alert';
 
+  /// Active patrol round changed — triggers GET `/api/patrol-rounds/me/active`.
+  static const String stompActiveRoundChangedDestination =
+      '/user/queue/patrol/active-round-changed';
+
   static String get effectiveBaseUrl {
     if (apiBaseUrl.isNotEmpty) return apiBaseUrl.replaceAll(RegExp(r'/$'), '');
     if (devFallbackBaseUrl.isNotEmpty) {

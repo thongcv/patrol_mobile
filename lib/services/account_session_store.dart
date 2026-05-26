@@ -8,6 +8,7 @@ import '../config/storage_keys.dart';
 import '../models/account_me.dart';
 import '../navigation/patrol_session.dart';
 import 'patrol_track_socket_client.dart';
+import 'patrol_tracking_config_store.dart';
 
 /// Login session + company beacon UUID: RAM (foreground) + SharedPreferences.
 class AccountSessionStore {
@@ -72,10 +73,12 @@ class AccountSessionStore {
   Future<void> clearAccessToken() async {
     final p = await _preferences;
     await p.remove(StorageKeys.accessToken);
+    PatrolSession.notifySessionEnded();
   }
 
   Future<void> clearToken() async {
     await clearAccessToken();
+    await PatrolTrackingConfigStore.clear();
     await clear();
   }
 

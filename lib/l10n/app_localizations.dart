@@ -233,13 +233,13 @@ abstract class AppLocalizations {
   /// No description provided for @locationTitle.
   ///
   /// In en, this message translates to:
-  /// **'GPS & location required'**
+  /// **'GPS & always-on location'**
   String get locationTitle;
 
   /// No description provided for @locationBody.
   ///
   /// In en, this message translates to:
-  /// **'Patrol requires location services on and location permission before sign-in.'**
+  /// **'Turn on location services and choose \"Always allow\" so patrol tracking works when the screen is off.'**
   String get locationBody;
 
   /// No description provided for @locationServiceOff.
@@ -253,6 +253,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Location permission was not granted.'**
   String get locationPermissionDenied;
+
+  /// No description provided for @locationPermissionBackground.
+  ///
+  /// In en, this message translates to:
+  /// **'Only \"While using the app\" was granted. Choose \"Always allow\" for background patrol.'**
+  String get locationPermissionBackground;
 
   /// No description provided for @locationPermissionForever.
   ///
@@ -1495,7 +1501,7 @@ abstract class AppLocalizations {
   /// No description provided for @patrolBackgroundNotificationTitle.
   ///
   /// In en, this message translates to:
-  /// **'SPS Patrol'**
+  /// **'SPS Notification'**
   String get patrolBackgroundNotificationTitle;
 
   /// No description provided for @patrolBackgroundNotificationInitialContent.
@@ -1515,6 +1521,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Scanned: {name}'**
   String patrolBackgroundCheckpointScanned(String name);
+
+  /// No description provided for @patrolBackgroundLocationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Background location required'**
+  String get patrolBackgroundLocationTitle;
+
+  /// No description provided for @patrolBackgroundLocationBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow \"Always\" location so patrol tracking and checkpoint auto-scan continue when the screen is off or the app is in the background.'**
+  String get patrolBackgroundLocationBody;
+
+  /// No description provided for @patrolBackgroundLocationGrantAlways.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow always'**
+  String get patrolBackgroundLocationGrantAlways;
 }
 
 class _AppLocalizationsDelegate

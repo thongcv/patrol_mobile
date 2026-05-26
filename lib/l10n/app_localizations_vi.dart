@@ -75,17 +75,21 @@ class AppLocalizationsVi extends AppLocalizations {
   String get locationChecking => 'Đang kiểm tra vị trí...';
 
   @override
-  String get locationTitle => 'Cần bật GPS & quyền vị trí';
+  String get locationTitle => 'Cần GPS & quyền Luôn cho phép';
 
   @override
   String get locationBody =>
-      'Ứng dụng tuần tra cần dịch vụ định vị bật và quyền truy cập vị trí trước khi đăng nhập.';
+      'Bật định vị và chọn \"Luôn cho phép\" để tuần tra vẫn chạy khi tắt màn hình hoặc chuyển app khác.';
 
   @override
   String get locationServiceOff => 'Dịch vụ định vị (GPS) đang tắt.';
 
   @override
   String get locationPermissionDenied => 'Chưa cấp quyền vị trí cho ứng dụng.';
+
+  @override
+  String get locationPermissionBackground =>
+      'Mới chỉ \"Cho phép khi dùng ứng dụng\". Chọn \"Luôn cho phép\" để tuần tra nền.';
 
   @override
   String get locationPermissionForever =>
@@ -794,7 +798,7 @@ class AppLocalizationsVi extends AppLocalizations {
       'Phát hiện ứng dụng giả lập vị trí. Tắt Fake GPS và tiếp tục tuần tra hợp lệ.';
 
   @override
-  String get patrolBackgroundNotificationTitle => 'SPS Patrol';
+  String get patrolBackgroundNotificationTitle => 'SPS Thông báo';
 
   @override
   String get patrolBackgroundNotificationInitialContent =>
@@ -808,4 +812,14 @@ class AppLocalizationsVi extends AppLocalizations {
   String patrolBackgroundCheckpointScanned(String name) {
     return 'Đã quét: $name';
   }
+
+  @override
+  String get patrolBackgroundLocationTitle => 'Cần quyền vị trí nền';
+
+  @override
+  String get patrolBackgroundLocationBody =>
+      'Chọn \"Luôn luôn\" để tuần tra, gửi vị trí realtime và tự quét điểm vẫn chạy khi tắt màn hình hoặc ứng dụng ở nền.';
+
+  @override
+  String get patrolBackgroundLocationGrantAlways => 'Cho phép luôn luôn';
 }

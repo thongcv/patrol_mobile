@@ -46,6 +46,10 @@ abstract final class PatrolSession {
     if (!_authStored.isClosed) _authStored.add(null);
   }
 
+  static void notifySessionEnded() {
+    if (!_sessionEnded.isClosed) _sessionEnded.add(null);
+  }
+
   /// Invalid session (401/403): clears token and navigates to login.
   static Future<void> endSessionAndNavigateToLogin() async {
     await PatrolRealtimeTrackCoordinator.onSessionEnded();
@@ -58,7 +62,7 @@ abstract final class PatrolSession {
 
   /// Clears stack and navigates to [LoginScreen] (e.g. refresh token failed).
   static void navigateToLoginReplaceAll() {
-    if (!_sessionEnded.isClosed) _sessionEnded.add(null);
+    notifySessionEnded();
     WidgetsBinding.instance.addPostFrameCallback((_) => _pushLoginRoute());
   }
 

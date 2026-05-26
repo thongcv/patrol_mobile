@@ -2,12 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/storage_keys.dart';
 import 'barometric_altitude.dart';
 import 'super_gps_service.dart';
 
 /// Location: Geolocator + Super GPS filters (Kalman, quality gate).
 const Duration _kSuperGpsCurrentTimeout = Duration(seconds: 4);
+
+/// OEM [Geolocator.isLocationServiceEnabled] can stall even when GPS is on.
+const Duration kLocationServiceProbeTimeout = Duration(seconds: 4);
 
 /// Stream wait time when saving checkpoint (best-of-stream).
 const Duration kCheckpointGpsRefineTimeout = Duration(seconds: 8);
@@ -181,6 +187,183 @@ Future<SuperGpsEvent?> _readDeviceGpsEventFromStream({
   );
 
   return completer.future;
+}
+
+/// Native location-settings query with timeout + permission fallback.
+Future<bool> probeLocationServiceEnabled() async {
+  try {
+    return await Geolocator.isLocationServiceEnabled().timeout(
+      kLocationServiceProbeTimeout,
+    );
+  } on TimeoutException {
+    return inferLocationServiceFromPermission();
+  } catch (_) {
+    return false;
+  }
+}
+
+/// When [isLocationServiceEnabled] times out, granted permission usually means GPS is usable.
+Future<bool> inferLocationServiceFromPermission() async {
+  try {
+    final permission = await _patrolLocationPermissionQuick();
+    return permission == LocationPermission.whileInUse ||
+        permission == LocationPermission.always;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Set after [LocationGateScreen] or successful [ensurePatrolBackgroundLocationReady].
+///
+/// Lets tracking / background GPS skip the 4s OEM [probeLocationServiceEnabled] stall.
+abstract final class PatrolBackgroundLocationReadiness {
+  PatrolBackgroundLocationReadiness._();
+
+  static const Duration _cacheTtl = Duration(minutes: 30);
+
+  static DateTime? _verifiedAt;
+
+  static void markReady() {
+    final at = DateTime.now();
+    _verifiedAt = at;
+    unawaited(_persistReadyAt(at));
+  }
+
+  static void invalidate() {
+    _verifiedAt = null;
+    unawaited(_clearPersistedReadyAt());
+  }
+
+  static bool get isRecentlyVerified {
+    final at = _verifiedAt;
+    if (at == null) return false;
+    return DateTime.now().difference(at) < _cacheTtl;
+  }
+
+  /// Gate passed on UI isolate — readable from [FlutterBackgroundService] isolate.
+  static Future<bool> isRecentlyVerifiedAcrossIsolates() async {
+    if (isRecentlyVerified) return true;
+    final p = await SharedPreferences.getInstance();
+    final ms = p.getInt(StorageKeys.patrolBackgroundLocationReadyAt);
+    if (ms == null) return false;
+    final at = DateTime.fromMillisecondsSinceEpoch(ms);
+    return DateTime.now().difference(at) < _cacheTtl;
+  }
+
+  static Future<void> _persistReadyAt(DateTime at) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt(
+      StorageKeys.patrolBackgroundLocationReadyAt,
+      at.millisecondsSinceEpoch,
+    );
+  }
+
+  static Future<void> _clearPersistedReadyAt() async {
+    final p = await SharedPreferences.getInstance();
+    await p.remove(StorageKeys.patrolBackgroundLocationReadyAt);
+  }
+}
+
+Future<LocationPermission> _patrolLocationPermissionQuick() async {
+  try {
+    return await Geolocator.checkPermission().timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => LocationPermission.denied,
+    );
+  } catch (_) {
+    return LocationPermission.denied;
+  }
+}
+
+/// Fast check for patrol tracking — no dialogs, no 4s service probe when gate recently passed.
+///
+/// `null` if ready; otherwise `service` | `denied` | `background`.
+Future<String?> checkPatrolBackgroundLocationForTracking() async {
+  // Background isolate: Geolocator.checkPermission() often times out → false "denied".
+  // Trust prefs when the user already passed [LocationGateScreen] on the UI isolate.
+  if (await PatrolBackgroundLocationReadiness.isRecentlyVerifiedAcrossIsolates()) {
+    return null;
+  }
+
+  final permission = await _patrolLocationPermissionQuick();
+  if (permission == LocationPermission.denied ||
+      permission == LocationPermission.deniedForever) {
+    return 'denied';
+  }
+  if (permission == LocationPermission.whileInUse) {
+    return 'background';
+  }
+
+  final serviceOk = await inferLocationServiceFromPermission();
+  return serviceOk ? null : 'service';
+}
+
+/// Check-only for [LocationGateScreen] on cold start — no permission dialogs.
+///
+/// `null` if ready; otherwise `service` | `denied` | `background`.
+Future<String?> checkPatrolBackgroundLocationForGate() async {
+  final serviceEnabled = await probeLocationServiceEnabled();
+  if (!serviceEnabled) return 'service';
+
+  final permission = await _patrolLocationPermissionQuick();
+  if (permission == LocationPermission.denied ||
+      permission == LocationPermission.deniedForever) {
+    return 'denied';
+  }
+  if (permission == LocationPermission.whileInUse) {
+    return 'background';
+  }
+  return null;
+}
+
+/// `null` if ready; otherwise `service` | `denied` | `background`.
+///
+/// Upgrades [LocationPermission.whileInUse] to always/background when possible
+/// (iOS second prompt; Android [Permission.locationAlways] on API 29+).
+Future<String?> ensurePatrolBackgroundLocationReady() async {
+  final serviceEnabled = await probeLocationServiceEnabled();
+  if (!serviceEnabled) return 'service';
+
+  var permission = await _patrolLocationPermissionQuick();
+  if (permission == LocationPermission.denied) {
+    permission = await Geolocator.requestPermission();
+  }
+  if (permission == LocationPermission.denied ||
+      permission == LocationPermission.deniedForever) {
+    return 'denied';
+  }
+
+  if (permission == LocationPermission.whileInUse) {
+    final upgraded = await Geolocator.requestPermission();
+    if (upgraded != LocationPermission.denied &&
+        upgraded != LocationPermission.deniedForever) {
+      permission = upgraded;
+    }
+    if (permission == LocationPermission.whileInUse) {
+      final bg = await Permission.locationAlways.request();
+      if (bg.isGranted) {
+        permission = await _patrolLocationPermissionQuick();
+      }
+    }
+  }
+
+  if (permission == LocationPermission.denied ||
+      permission == LocationPermission.deniedForever) {
+    return 'denied';
+  }
+
+  if (permission == LocationPermission.whileInUse) {
+    return 'background';
+  }
+
+  PatrolBackgroundLocationReadiness.markReady();
+  return null;
+}
+
+/// `true` when patrol needs "Always" / background location but only has while-in-use.
+Future<bool> patrolNeedsBackgroundLocationUpgrade() async {
+  final permission = await _patrolLocationPermissionQuick();
+  return permission == LocationPermission.whileInUse;
 }
 
 /// `null` if ready; otherwise error code `service` | `denied` | `error`.

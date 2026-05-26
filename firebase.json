@@ -1,1 +1,30 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"sps-patrol","appId":"1:788041630665:android:a0fb990067738a0442de18","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"sps-patrol","configurations":{"android":"1:788041630665:android:a0fb990067738a0442de18"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "sps-patrol",
+          "appId": "1:788041630665:android:a0fb990067738a0442de18",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "sps-patrol",
+          "appId": "1:788041630665:ios:REPLACE_WITH_FLUTTERFIRE_CONFIGURE",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "sps-patrol",
+          "configurations": {
+            "android": "1:788041630665:android:a0fb990067738a0442de18",
+            "ios": "1:788041630665:ios:REPLACE_WITH_FLUTTERFIRE_CONFIGURE"
+          }
+        }
+      }
+    }
+  }
+}

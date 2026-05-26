@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>GOOGLE_MAPS_API_KEY</key>
-	<string></string>
+	<string>$(GOOGLE_MAPS_API_KEY)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>SPS Patrol cần quyền vị trí để xác nhận hoạt động tuần tra trên hiện trường.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
@@ -14,6 +14,7 @@
 	<array>
 		<string>location</string>
 		<string>fetch</string>
+		<string>remote-notification</string>
 	</array>
 	<key>NSMotionUsageDescription</key>
 	<string>SPS Patrol cần quyền cảm biến chuyển động (theo yêu cầu iOS) để đọc barometer và ghi nhận độ cao khi cập nhật điểm tuần tra.</string>
@@ -28,7 +29,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Patrol Mobile</string>
+	<string>SPS Patrol</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

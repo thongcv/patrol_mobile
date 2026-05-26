@@ -22,10 +22,11 @@
   "submit": "SIGN IN",
   "submitLoading": "VERIFYING...",
   "locationChecking": "Checking location...",
-  "locationTitle": "GPS & location required",
-  "locationBody": "Patrol requires location services on and location permission before sign-in.",
+  "locationTitle": "GPS & always-on location",
+  "locationBody": "Turn on location services and choose \"Always allow\" so patrol tracking works when the screen is off.",
   "locationServiceOff": "Location services (GPS) are turned off.",
   "locationPermissionDenied": "Location permission was not granted.",
+  "locationPermissionBackground": "Only \"While using the app\" was granted. Choose \"Always allow\" for background patrol.",
   "locationPermissionForever": "Location permission permanently denied. Open app settings to enable.",
   "openLocationSettings": "Open location settings",
   "openAppSettings": "Open app settings",
@@ -418,7 +419,7 @@
   "forgotRequestSent": "Request sent. Check your email.",
   "patrolTrackMockGpsTitle": "FAKE GPS ALERT",
   "patrolTrackMockGpsBody": "Mock location detected. Disable fake GPS apps and continue a valid patrol.",
-  "patrolBackgroundNotificationTitle": "SPS Patrol",
+  "patrolBackgroundNotificationTitle": "SPS Notification",
   "patrolBackgroundNotificationInitialContent": "Patrol in progress — realtime location",
   "patrolBackgroundNotificationContent": "Sending realtime patrol location",
   "patrolBackgroundCheckpointScanned": "Scanned: {name}",
@@ -428,5 +429,8 @@
         "type": "String"
       }
     }
-  }
+  },
+  "patrolBackgroundLocationTitle": "Background location required",
+  "patrolBackgroundLocationBody": "Allow \"Always\" location so patrol tracking and checkpoint auto-scan continue when the screen is off or the app is in the background.",
+  "patrolBackgroundLocationGrantAlways": "Allow always"
 }

@@ -7,6 +7,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../l10n/app_localizations.dart';
 import '../navigation/patrol_session.dart';
 import '../services/account_session_store.dart';
+import '../services/patrol_realtime_track_coordinator.dart';
+import '../utils/device_location.dart';
 import '../widgets/language_toggle_bar.dart';
 import '../widgets/login_background.dart';
 import 'home_screen.dart';
@@ -14,10 +16,10 @@ import 'login_screen.dart';
 
 enum _GatePhase { checking, blocked, ready }
 
-/// Per-step cap so Geolocator cannot spin forever on some devices.
+/// Cap for permission / session steps (may show a system dialog).
 const Duration _kGateStepTimeout = Duration(seconds: 12);
 
-/// Blocks login until GPS is on and location permission is granted.
+/// Blocks login until GPS is on and "Always" location permission is granted.
 class LocationGateScreen extends StatefulWidget {
   const LocationGateScreen({
     super.key,
@@ -35,6 +37,7 @@ class LocationGateScreen extends StatefulWidget {
 class _LocationGateScreenState extends State<LocationGateScreen> {
   _GatePhase _phase = _GatePhase.checking;
   String? _detail;
+  bool _needsAlwaysUpgrade = false;
   bool _hasStoredSession = false;
   StreamSubscription<void>? _sessionEndedSub;
 
@@ -45,7 +48,7 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
       if (!mounted) return;
       setState(() => _hasStoredSession = false);
     });
-    _verify();
+    _verify(requestPermissions: false);
   }
 
   @override
@@ -54,24 +57,54 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
     super.dispose();
   }
 
-  Future<void> _verify() async {
+  Future<void> _requestAlwaysLocation() async {
+    await _runEnsureWithTimeout();
+    await _verify(requestPermissions: false);
+  }
+
+  Future<String?> _runEnsureWithTimeout() async {
+    try {
+      return await ensurePatrolBackgroundLocationReady().timeout(
+        _kGateStepTimeout,
+        onTimeout: () => 'denied',
+      );
+    } catch (_) {
+      return 'denied';
+    }
+  }
+
+  Future<void> _verify({required bool requestPermissions}) async {
     setState(() {
       _phase = _GatePhase.checking;
       _detail = null;
+      _needsAlwaysUpgrade = false;
     });
 
-    bool serviceEnabled;
+    final sessionFuture = AccountSessionStore.instance.hasStoredSession();
+
+    LocationPermission permission;
     try {
-      serviceEnabled = await Geolocator.isLocationServiceEnabled().timeout(
-        _kGateStepTimeout,
-        onTimeout: () => false,
+      permission = await Geolocator.checkPermission().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => LocationPermission.denied,
       );
     } catch (_) {
-      serviceEnabled = false;
+      permission = LocationPermission.denied;
     }
+
+    String? accessIssue;
+    if (permission == LocationPermission.always) {
+      final serviceEnabled = await probeLocationServiceEnabled();
+      if (!serviceEnabled) accessIssue = 'service';
+    } else if (requestPermissions) {
+      accessIssue = await _runEnsureWithTimeout();
+    } else {
+      accessIssue = await checkPatrolBackgroundLocationForGate();
+    }
+
     if (!mounted) return;
     final l10n = AppLocalizations.of(context)!;
-    if (!serviceEnabled) {
+    if (accessIssue == 'service') {
       setState(() {
         _phase = _GatePhase.blocked;
         _detail = l10n.locationServiceOff;
@@ -79,65 +112,66 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
       return;
     }
 
-    LocationPermission permission;
-    try {
-      permission = await Geolocator.checkPermission().timeout(
-        _kGateStepTimeout,
-        onTimeout: () => LocationPermission.denied,
-      );
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission().timeout(
-          _kGateStepTimeout,
-          onTimeout: () => LocationPermission.denied,
-        );
-      }
-    } catch (_) {
-      permission = LocationPermission.denied;
-    }
-
     if (!mounted) return;
     final l10n2 = AppLocalizations.of(context)!;
-    if (permission == LocationPermission.denied) {
+    if (accessIssue == 'background') {
       setState(() {
         _phase = _GatePhase.blocked;
-        _detail = l10n2.locationPermissionDenied;
+        _detail = l10n2.locationPermissionBackground;
+        _needsAlwaysUpgrade = true;
       });
       return;
     }
 
-    if (permission == LocationPermission.deniedForever) {
+    if (accessIssue == 'denied') {
+      LocationPermission permission;
+      try {
+        permission = await Geolocator.checkPermission().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => LocationPermission.denied,
+        );
+      } catch (_) {
+        permission = LocationPermission.denied;
+      }
       setState(() {
         _phase = _GatePhase.blocked;
-        _detail = l10n2.locationPermissionForever;
+        _detail = permission == LocationPermission.deniedForever
+            ? l10n2.locationPermissionForever
+            : l10n2.locationPermissionDenied;
       });
       return;
     }
 
     bool hasSession;
     try {
-      hasSession = await AccountSessionStore.instance
-          .hasStoredSession()
-          .timeout(_kGateStepTimeout, onTimeout: () => false);
+      hasSession = await sessionFuture.timeout(
+        _kGateStepTimeout,
+        onTimeout: () => false,
+      );
     } catch (_) {
       hasSession = false;
     }
     if (!mounted) return;
+    PatrolBackgroundLocationReadiness.markReady();
     setState(() {
       _hasStoredSession = hasSession;
       _phase = _GatePhase.ready;
     });
+    if (hasSession) {
+      unawaited(PatrolRealtimeTrackCoordinator.refreshTracking());
+    }
   }
 
   Future<void> _openLocationSettings() async {
     await Geolocator.openLocationSettings();
     await Future<void>.delayed(const Duration(milliseconds: 500));
-    await _verify();
+    await _verify(requestPermissions: false);
   }
 
   Future<void> _openAppSettings() async {
     await Geolocator.openAppSettings();
     await Future<void>.delayed(const Duration(milliseconds: 500));
-    await _verify();
+    await _verify(requestPermissions: false);
   }
 
   @override
@@ -233,8 +267,32 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
+                              if (_needsAlwaysUpgrade) ...[
+                                FilledButton(
+                                  onPressed: _requestAlwaysLocation,
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: const Color(0xFF2563EB),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(24),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    l10n.patrolBackgroundLocationGrantAlways,
+                                    style: theme.labelLarge?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.15,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                              ],
                               FilledButton(
-                                onPressed: _verify,
+                                onPressed: () =>
+                                    _verify(requestPermissions: true),
                                 style: FilledButton.styleFrom(
                                   backgroundColor: const Color(0xFF2563EB),
                                   padding: const EdgeInsets.symmetric(vertical: 14),

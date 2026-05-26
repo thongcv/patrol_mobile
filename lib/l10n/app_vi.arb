@@ -22,10 +22,11 @@
   "submit": "ĐĂNG NHẬP",
   "submitLoading": "ĐANG XÁC THỰC...",
   "locationChecking": "Đang kiểm tra vị trí...",
-  "locationTitle": "Cần bật GPS & quyền vị trí",
-  "locationBody": "Ứng dụng tuần tra cần dịch vụ định vị bật và quyền truy cập vị trí trước khi đăng nhập.",
+  "locationTitle": "Cần GPS & quyền Luôn cho phép",
+  "locationBody": "Bật định vị và chọn \"Luôn cho phép\" để tuần tra vẫn chạy khi tắt màn hình hoặc chuyển app khác.",
   "locationServiceOff": "Dịch vụ định vị (GPS) đang tắt.",
   "locationPermissionDenied": "Chưa cấp quyền vị trí cho ứng dụng.",
+  "locationPermissionBackground": "Mới chỉ \"Cho phép khi dùng ứng dụng\". Chọn \"Luôn cho phép\" để tuần tra nền.",
   "locationPermissionForever": "Quyền vị trí bị từ chối vĩnh viễn. Mở Cài đặt ứng dụng để bật lại.",
   "openLocationSettings": "Mở cài đặt vị trí",
   "openAppSettings": "Mở cài đặt ứng dụng",
@@ -263,7 +264,7 @@
   "forgotRequestSent": "Đã gửi yêu cầu. Kiểm tra email.",
   "patrolTrackMockGpsTitle": "CẢNH BÁO GPS GIẢ",
   "patrolTrackMockGpsBody": "Phát hiện ứng dụng giả lập vị trí. Tắt Fake GPS và tiếp tục tuần tra hợp lệ.",
-  "patrolBackgroundNotificationTitle": "SPS Patrol",
+  "patrolBackgroundNotificationTitle": "SPS Thông báo",
   "patrolBackgroundNotificationInitialContent": "Đang tuần tra — định vị realtime",
   "patrolBackgroundNotificationContent": "Đang gửi vị trí tuần tra realtime",
   "patrolBackgroundCheckpointScanned": "Đã quét: {name}",
@@ -273,5 +274,8 @@
         "type": "String"
       }
     }
-  }
+  },
+  "patrolBackgroundLocationTitle": "Cần quyền vị trí nền",
+  "patrolBackgroundLocationBody": "Chọn \"Luôn luôn\" để tuần tra, gửi vị trí realtime và tự quét điểm vẫn chạy khi tắt màn hình hoặc ứng dụng ở nền.",
+  "patrolBackgroundLocationGrantAlways": "Cho phép luôn luôn"
 }
