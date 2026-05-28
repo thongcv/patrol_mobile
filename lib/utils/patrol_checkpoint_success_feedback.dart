@@ -1,10 +1,12 @@
+import 'dart:developer' as developer;
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:vibration/vibration.dart';
 
+import '../services/app_locale_store.dart';
 import '../services/patrol_background_service.dart';
+import 'patrol_checkpoint_tts.dart';
 
 /// Vibration + notification when a checkpoint scan succeeds in background.
 abstract final class PatrolCheckpointSuccessFeedback {
@@ -14,21 +16,31 @@ abstract final class PatrolCheckpointSuccessFeedback {
 
   /// Two short pulses and a notification with [checkpointName].
   static Future<void> notify({required String checkpointName}) async {
+    final name = checkpointName.trim();
+    if (name.isEmpty) return;
+
+    developer.log(
+      'Checkpoint scanned successfully: $name',
+      name: 'PatrolCheckpointSuccessFeedback',
+    );
     try {
       await PatrolBackgroundService.showCheckpointScannedNotification(
-        checkpointName,
+        name,
       );
-    } catch (e, st) {
-      if (kDebugMode) {
-        debugPrint('PatrolCheckpointSuccessFeedback notify: $e\n$st');
-      }
+    } catch (_) {
     }
 
-    if (await vibrate()) return;
+    await vibrate();
 
-    // UI isolate may be suspended when the app is backgrounded; still try.
-    if (PatrolBackgroundService.isBackgroundIsolate) {
-      PatrolBackgroundService.relayCheckpointSuccessToUi(checkpointName);
+    final locale = await AppLocaleStore.readLocale();
+    final spoke = await PatrolCheckpointTts.speakCheckpoint(
+      checkpointName: name,
+      locale: locale,
+    );
+
+    // FGS fallback: native/flutter TTS may be unavailable in background engine.
+    if (!spoke && PatrolBackgroundService.isBackgroundIsolate) {
+      PatrolBackgroundService.relayCheckpointSuccessToUi(name);
     }
   }
 
@@ -55,10 +67,7 @@ abstract final class PatrolCheckpointSuccessFeedback {
       await Future<void>.delayed(const Duration(milliseconds: 80));
       await HapticFeedback.mediumImpact();
       return true;
-    } catch (e, st) {
-      if (kDebugMode) {
-        debugPrint('PatrolCheckpointSuccessFeedback haptic: $e\n$st');
-      }
+    } catch (_) {
       return false;
     }
   }
@@ -86,15 +95,9 @@ abstract final class PatrolCheckpointSuccessFeedback {
       await Future<void>.delayed(const Duration(milliseconds: 80));
       await Vibration.vibrate(duration: 120);
       return true;
-    } on MissingPluginException catch (e, st) {
-      if (kDebugMode) {
-        debugPrint('PatrolCheckpointSuccessFeedback: $e\n$st');
-      }
+    } on MissingPluginException {
       return false;
-    } catch (e, st) {
-      if (kDebugMode) {
-        debugPrint('PatrolCheckpointSuccessFeedback: $e\n$st');
-      }
+    } catch (_) {
       return false;
     }
   }
@@ -110,10 +113,7 @@ abstract final class PatrolCheckpointSuccessFeedback {
         'amplitude': -1,
       });
       return true;
-    } catch (e, st) {
-      if (kDebugMode) {
-        debugPrint('PatrolCheckpointSuccessFeedback channel: $e\n$st');
-      }
+    } catch (_) {
       return false;
     }
   }

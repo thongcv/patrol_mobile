@@ -86,10 +86,21 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   @override
   void initState() {
     super.initState();
+    // Clear stale busy flag if the app was killed mid-scan while FGS kept running.
+    unawaited(PatrolRealtimeTrackCoordinator.setRoundScanBusy(false));
     _activeRoundSocketSub =
-        PatrolActiveRoundCoordinator.activeRoundChanges.listen((_) {
+        PatrolActiveRoundCoordinator.activeRoundChanges.listen((round) {
       if (!mounted) return;
-      unawaited(_load(silent: _active != null));
+      if (round != null) {
+        setState(() {
+          _applyLoadedActiveRound(round, fromRefresh: false);
+          _loading = false;
+          _refreshing = false;
+          _failure = null;
+        });
+        return;
+      }
+      unawaited(_load(silent: true));
     });
     _load();
   }
@@ -185,11 +196,11 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   }
 
   Future<void> _load({bool silent = false}) async {
-    final isRefresh = silent || _active != null;
+    final showRefreshUi = silent && _active != null;
     setState(() {
-      if (isRefresh) {
+      if (showRefreshUi) {
         _refreshing = true;
-      } else {
+      } else if (!silent) {
         _loading = true;
       }
       _failure = null;
@@ -198,29 +209,27 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     final r = await PatrolRoundService.instance.fetchMyActivePatrolRound();
     ActivePatrolRound? active = r.ok ? r.data : null;
     if (active != null) {
+      active = await PatrolActiveRoundCache.preservingLocalVerified(active);
       active = await _mergeActiveRoundCheckPoints(
         active,
-        fullRefresh: isRefresh,
+        fullRefresh: false,
       );
     }
 
     if (!mounted) return;
     if (r.ok) {
       setState(() {
-        _applyLoadedActiveRound(active, fromRefresh: isRefresh);
+        _applyLoadedActiveRound(active, fromRefresh: false);
         _loading = false;
         _refreshing = false;
         _failure = null;
       });
       await PatrolActiveRoundCache.save(active);
-      unawaited(
-        PatrolRealtimeTrackCoordinator.applyActiveRound(active?.round.id),
-      );
     } else if (PatrolSession.isUnauthorized(r.failure)) {
       await PatrolSession.endSessionAndNavigateToLogin();
     } else {
       setState(() {
-        _applyLoadedActiveRound(null, fromRefresh: isRefresh);
+        _applyLoadedActiveRound(null, fromRefresh: false);
         _loading = false;
         _refreshing = false;
         _failure = r.failure;
@@ -301,6 +310,8 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       );
     });
     _notifyRouteMapRevision();
+    // Keep FGS auto-scan snapshot in sync so background does not POST again.
+    unawaited(PatrolActiveRoundCache.markCheckpointVerified(checkpointId));
   }
 
   /// Merges QR/metadata from site. When [fullRefresh], does not overwrite GET active fields.
@@ -397,6 +408,29 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     if (!mounted) return;
 
     final l10n = AppLocalizations.of(context)!;
+
+    if (await PatrolActiveRoundCache.isCheckpointVerified(point.id)) {
+      _markCheckpointVerified(point.id);
+      if (!mounted) return;
+      context.showTopToast(
+        l10n.patrolRoundQrScanSuccess,
+        duration: const Duration(milliseconds: 400),
+      );
+      if (resumeAutoScan) {
+        _resumeAutoScanAfterCheckpoint();
+      } else {
+        setState(() {
+          _scanningCheckpointId = null;
+          _manualScanKind = null;
+          _qrScanSubmitting = false;
+          _autoScanActive = false;
+          _autoScanKind = null;
+        });
+        _syncBackgroundAutoScanSuppression();
+        await _stopQrLocationWatch();
+      }
+      return;
+    }
 
     final submit = PatrolLogSubmit(
       roundId: roundId,

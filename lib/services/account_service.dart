@@ -18,8 +18,6 @@ class AccountService {
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
     }
-    PatrolDio.syncBaseUrls();
-
     try {
       final meUri = AppConfig.resolveApiUri(PatrolApiEndpoints.accountsMePath);
       final res = await PatrolDio.instance.getUri<dynamic>(meUri);

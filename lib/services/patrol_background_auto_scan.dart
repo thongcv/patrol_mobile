@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/storage_keys.dart';
@@ -10,6 +9,8 @@ import '../utils/device_location.dart';
 import '../utils/super_gps_service.dart';
 import '../utils/patrol_checkpoint_success_feedback.dart';
 import 'patrol_active_round_cache.dart';
+import 'patrol_background_isolate_flags.dart';
+import 'patrol_background_service.dart';
 import 'patrol_background_socket_emitter.dart';
 import 'patrol_log_service.dart';
 
@@ -21,8 +22,11 @@ class PatrolBackgroundAutoScan {
   var _autoScanPaused = false;
   var _autoScanActive = false;
   Future<void>? _ensureWatchRunningFuture;
+  /// Serializes stop / pause / resume / refresh (avoids GPS start-stop races).
+  Future<void>? _lifecycleChain;
   /// Serializes GPS samples so only one submit runs at a time.
   Future<void>? _sampleProcessingChain;
+  static const Duration _patrolLogSubmitTimeout = Duration(seconds: 20);
   /// Checkpoint ids with an in-flight patrol-log POST.
   final Set<int> _inFlightCheckpointIds = {};
   /// Latest active-round snapshot for auto-scan (refreshed after verify).
@@ -32,7 +36,35 @@ class PatrolBackgroundAutoScan {
   bool get isAutoScanActive => _autoScanActive;
 
   /// Stops auto-scan callbacks; keeps shared socket GPS only while patrol emit is on.
-  Future<void> stop() async {
+  Future<void> stop() => _enqueueLifecycle(_stopImpl);
+
+  Future<void> pause() => _enqueueLifecycle(() async {
+    _autoScanPaused = true;
+    await _stopImpl();
+  });
+
+  Future<void> resume() => _enqueueLifecycle(() async {
+    _autoScanPaused = false;
+    await _ensureWatchRunning();
+  });
+
+  Future<void> refresh() => _enqueueLifecycle(_refreshImpl);
+
+  Future<void> _refreshImpl() async {
+    if (_autoScanPaused || await _isForegroundScanBusy()) {
+      await _stopImpl();
+      return;
+    }
+    await _ensureWatchRunning();
+  }
+
+  Future<void> _enqueueLifecycle(Future<void> Function() action) {
+    _lifecycleChain =
+        (_lifecycleChain ?? Future<void>.value()).then((_) => action());
+    return _lifecycleChain!;
+  }
+
+  Future<void> _stopImpl() async {
     _autoScanActive = false;
     _sampleProcessingChain = null;
     _inFlightCheckpointIds.clear();
@@ -45,24 +77,6 @@ class PatrolBackgroundAutoScan {
       return;
     }
     await _socketEmitter.start(enableBarometer: false);
-  }
-
-  void pause() {
-    _autoScanPaused = true;
-    unawaited(stop());
-  }
-
-  Future<void> resume() async {
-    _autoScanPaused = false;
-    await _ensureWatchRunning();
-  }
-
-  Future<void> refresh() async {
-    if (_autoScanPaused || await _isForegroundScanBusy()) {
-      await stop();
-      return;
-    }
-    await _ensureWatchRunning();
   }
 
   Future<void> _ensureWatchRunning() async {
@@ -87,11 +101,11 @@ class PatrolBackgroundAutoScan {
         prefs.getBool(StorageKeys.patrolTrackBackgroundAutoScanEnabled) ??
             false;
     if (!emit || !autoScan || _autoScanPaused) {
-      if (_autoScanActive) await stop();
+      if (_autoScanActive) await _stopImpl();
       return;
     }
     if (await _isForegroundScanBusy()) {
-      if (_autoScanActive) await stop();
+      if (_autoScanActive) await _stopImpl();
       return;
     }
     if (_autoScanActive) return;
@@ -103,7 +117,9 @@ class PatrolBackgroundAutoScan {
     final eligible = _eligibleCheckPoints(cached.checkPoints);
     if (eligible.isEmpty) return;
 
-    final needsBaro = eligible.any((p) => p.baroAltitude != null);
+    // sensors_plus is not registered in the FGS isolate — GPS-only auto-scan there.
+    final needsBaro = !PatrolBackgroundIsolateFlags.active &&
+        eligible.any((p) => p.baroAltitude != null);
 
     await _socketEmitter.start(
       enableBarometer: needsBaro,
@@ -122,9 +138,6 @@ class PatrolBackgroundAutoScan {
 
     _autoScanActive =
         _socketEmitter.hasAutoScanHandler && _socketEmitter.isListening;
-    if (!_autoScanActive && kDebugMode) {
-      debugPrint('PatrolBackgroundAutoScan: failed to attach to GPS stream');
-    }
   }
 
   void _enqueueAutoScanSample({
@@ -141,11 +154,7 @@ class PatrolBackgroundAutoScan {
         sample: sample,
         barometerListening: barometerListening,
       ),
-      onError: (Object error, StackTrace stack) {
-        if (kDebugMode) {
-          debugPrint('PatrolBackgroundAutoScan sample error: $error\n$stack');
-        }
-      },
+      onError: (Object error, StackTrace stack) {},
     );
   }
 
@@ -156,10 +165,7 @@ class PatrolBackgroundAutoScan {
     required DeviceLocationSample sample,
   }) async {
     if (_autoScanPaused) return;
-    if (await _isForegroundScanBusy()) {
-      pause();
-      return;
-    }
+    if (await _isForegroundScanBusy()) return;
 
     final active = _activeRoundSnapshot != null &&
             _activeRoundSnapshot!.roundId == cached.roundId
@@ -187,34 +193,36 @@ class PatrolBackgroundAutoScan {
     try {
       final pos = sample.position;
       final gpsAlt = pos.altitude.isFinite ? pos.altitude : null;
-      final result = await PatrolLogService.instance.createPatrolLog(
-        PatrolLogSubmit(
-          roundId: active.roundId,
-          checkpointId: matched.id,
-          siteId: matched.siteId,
-          scanTime: DateTime.now(),
-          latitude: sample.latitude,
-          longitude: sample.longitude,
-          gpsAltitude: gpsAlt,
-          baroAltitude: sample.baroAltitude,
-          verified: true,
-        ),
-      );
+      final result = await PatrolLogService.instance
+          .createPatrolLog(
+            PatrolLogSubmit(
+              roundId: active.roundId,
+              checkpointId: matched.id,
+              siteId: matched.siteId,
+              scanTime: DateTime.now(),
+              latitude: sample.latitude,
+              longitude: sample.longitude,
+              gpsAltitude: gpsAlt,
+              baroAltitude: sample.baroAltitude,
+              verified: true,
+            ),
+          )
+          .timeout(_patrolLogSubmitTimeout);
       if (result.ok) {
         await PatrolActiveRoundCache.markCheckpointVerified(matched.id);
         _activeRoundSnapshot = await PatrolActiveRoundCache.load();
         _inFlightCheckpointIds.remove(matched.id);
+        PatrolBackgroundService.notifyActiveRoundChangedFromFgs();
         await PatrolCheckpointSuccessFeedback.notify(
           checkpointName: matched.name,
         );
       } else {
         _inFlightCheckpointIds.remove(matched.id);
       }
-    } catch (e, st) {
+    } on TimeoutException {
       _inFlightCheckpointIds.remove(matched.id);
-      if (kDebugMode) {
-        debugPrint('PatrolBackgroundAutoScan submit error: $e\n$st');
-      }
+    } catch (_) {
+      _inFlightCheckpointIds.remove(matched.id);
     }
   }
 
@@ -249,6 +257,8 @@ class PatrolBackgroundAutoScan {
     if (points.isEmpty) return null;
     final point = points.first;
     final pos = sample.position;
+    // Barometer altitude is optional: validate it only when the checkpoint
+    // requires baroAltitude and the device is actually listening to barometer.
     final validateBaro = point.baroAltitude != null && baroListening;
     final gpsAlt = pos.altitude.isFinite ? pos.altitude : null;
     final evaluation = evaluateCheckPointProximity(

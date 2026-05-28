@@ -20,11 +20,10 @@ class CheckPointService {
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
     }
-    PatrolDio.syncBaseUrls();
+    final uri = AppConfig.resolveApiUri('/api/check-points/me/site');
 
     try {
-      final res =
-          await PatrolDio.instance.get<dynamic>('/api/check-points/me/site');
+      final res = await PatrolDio.instance.getUri<dynamic>(uri);
       final status = res.statusCode ?? 0;
 
       if (status == 401 || status == 403) {
@@ -59,11 +58,11 @@ class CheckPointService {
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
     }
-    PatrolDio.syncBaseUrls();
+    final uri = AppConfig.resolveApiUri('/api/check-points');
 
     try {
-      final res = await PatrolDio.instance.put<dynamic>(
-        '/api/check-points',
+      final res = await PatrolDio.instance.putUri<dynamic>(
+        uri,
         data: body.toJson(),
       );
 

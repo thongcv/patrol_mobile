@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../l10n/app_localizations.dart';
 import '../navigation/patrol_session.dart';
 import '../services/account_session_store.dart';
+import '../services/patrol_active_round_coordinator.dart';
 import '../services/patrol_realtime_track_coordinator.dart';
 import '../utils/device_location.dart';
 import '../widgets/language_toggle_bar.dart';
@@ -158,7 +159,8 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
       _phase = _GatePhase.ready;
     });
     if (hasSession) {
-      unawaited(PatrolRealtimeTrackCoordinator.refreshTracking());
+      unawaited(PatrolActiveRoundCoordinator.resumeIfSession());
+      unawaited(PatrolRealtimeTrackCoordinator.resumeIfSession());
     }
   }
 

@@ -28,7 +28,6 @@ class AuthService {
       return ApiResult.failure(ApiFailure.configMissing);
     }
 
-    PatrolDio.syncBaseUrls();
     final fcmToken = await _fcmTokenForLogin();
     final loginUri = AppConfig.resolveApiUri(PatrolApiEndpoints.accountsLoginPath);
 
@@ -83,10 +82,10 @@ class AuthService {
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
     }
-    PatrolDio.syncBaseUrls();
+    final uri = AppConfig.resolveApiUri('/api/accounts/forget-password');
     try {
-      final res = await PatrolDio.instance.post<dynamic>(
-        '/api/accounts/forget-password',
+      final res = await PatrolDio.instance.postUri<dynamic>(
+        uri,
         data: <String, dynamic>{
           'email': email.trim(),
           'username': usernameOrPhone.trim(),
@@ -113,9 +112,9 @@ class AuthService {
       return ApiResult.failure(ApiFailure.configMissing);
     }
 
-    PatrolDio.syncBaseUrls();
+    final uri = AppConfig.resolveApiUri('/api/accounts/logout');
     try {
-      final res = await PatrolDio.instance.get<dynamic>('/api/accounts/logout');
+      final res = await PatrolDio.instance.getUri<dynamic>(uri);
       final status = res.statusCode ?? 0;
       
       if (status == 200 || status == 204) {

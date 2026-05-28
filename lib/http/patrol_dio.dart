@@ -31,10 +31,17 @@ abstract final class PatrolDio {
 
   static Dio get instance => _api ??= _createApi();
 
-  static void syncBaseUrls() {
+  static void syncBaseUrls({Dio? dio}) {
     final b = AppConfig.effectiveBaseUrl;
     refreshClient.options.baseUrl = b;
-    if (_api != null) _api!.options.baseUrl = b;
+    // Important: during _createApi(), `_api` is still null, so we must set
+    // the baseUrl on the local `dio` instance to avoid requests like `/api/...`
+    // (no host) on first launch / after restart.
+    if (dio != null) {
+      dio.options.baseUrl = b;
+    } else if (_api != null) {
+      _api!.options.baseUrl = b;
+    }
   }
 
   static Dio _createApi() {
@@ -47,7 +54,7 @@ abstract final class PatrolDio {
       ),
     );
     dio.interceptors.add(_PatrolInterceptors());
-    syncBaseUrls();
+    syncBaseUrls(dio: dio);
     return dio;
   }
 
@@ -67,7 +74,8 @@ abstract final class PatrolDio {
 class _PatrolInterceptors extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    PatrolDio.syncBaseUrls();
+    // Services use absolute `Uri`s (`getUri`/`postUri`/...) so we don't rely
+    // on `baseUrl` resolution timing here.
     final headers = options.headers;
 
     AccountSessionStore.instance

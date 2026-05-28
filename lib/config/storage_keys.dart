@@ -28,4 +28,8 @@ abstract final class StorageKeys {
   /// Epoch ms — [LocationGateScreen] / ensure background location passed (all isolates).
   static const patrolBackgroundLocationReadyAt =
       'patrol_background_location_ready_at';
+
+  /// Cross-isolate TTS dedupe for checkpoint success feedback.
+  static const patrolCheckpointTtsLastName = 'patrol_checkpoint_tts_last_name';
+  static const patrolCheckpointTtsLastAtMs = 'patrol_checkpoint_tts_last_at_ms';
 }

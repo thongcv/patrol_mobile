@@ -44,7 +44,7 @@ class PatrolLogService {
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
     }
-    PatrolDio.syncBaseUrls();
+    final uri = AppConfig.resolveApiUri('/api/patrol-logs');
 
     final fields = <String, dynamic>{
       'roundId': body.roundId,
@@ -88,8 +88,8 @@ class PatrolLogService {
     });
 
     try {
-      final res = await PatrolDio.instance.post<dynamic>(
-        '/api/patrol-logs',
+      final res = await PatrolDio.instance.postUri<dynamic>(
+        uri,
         data: form,
       );
       final status = res.statusCode ?? 0;

@@ -16,11 +16,12 @@ class PatrolRoundService {
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
     }
-    PatrolDio.syncBaseUrls();
 
     try {
-      final res =
-          await PatrolDio.instance.get<dynamic>('/api/patrol-rounds/me/active');
+      // Use absolute Uri to avoid any Dio baseUrl timing/resolution issues
+      // (can happen right after app restart).
+      final uri = AppConfig.resolveApiUri('/api/patrol-rounds/me/active');
+      final res = await PatrolDio.instance.getUri<dynamic>(uri);
       final status = res.statusCode ?? 0;
       if (status == 401 || status == 403) {
         return ApiResult.failure(ApiFailure.unauthorized(res));

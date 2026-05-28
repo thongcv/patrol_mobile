@@ -1,64 +1,186 @@
 import 'dart:async';
+
 import 'dart:convert';
+
+import 'package:flutter_background_service/flutter_background_service.dart';
 
 import 'package:stomp_dart_client/stomp_dart_client.dart';
 
 import '../config/app_config.dart';
+
 import '../models/patrol_location_track_payload.dart';
+
 import 'account_session_store.dart';
+
+import 'patrol_active_round_sync.dart';
+
+import 'patrol_background_isolate_flags.dart';
+
+import 'patrol_fgs_invoke_events.dart';
+
 import 'patrol_track_offline_queue.dart';
+
+import 'patrol_track_socket_dispatch.dart';
+
 import 'patrol_tracking_config_store.dart';
 
-/// STOMP client over SockJS — matches Spring `addEndpoint("/notification").withSockJS()`.
+/// STOMP/SockJS — one implementation for main and FGS isolates.
+
 ///
-/// Contract (backend should mirror):
-/// - `@MessageMapping("/patrol/track-location")` ← `/app/patrol/track-location`
-/// - Push mock GPS → `/user/queue/patrol/mock-location-alert`
-/// - Active round changed → `/user/queue/patrol/active-round-changed`
+
+/// Each isolate has its own [instance] (Dart isolates do not share memory).
+
+/// Configure [configureFgsBridge] only in the background-service entrypoint.
+
 class PatrolTrackSocketClient {
   PatrolTrackSocketClient._();
 
   static final PatrolTrackSocketClient instance = PatrolTrackSocketClient._();
 
   StompClient? _client;
+
   bool _connecting = false;
+
   bool _manualClose = false;
 
-  final StreamController<bool> _connectionState =
-      StreamController<bool>.broadcast();
+  Future<void>? _connectFuture;
 
-  final StreamController<void> _mockLocationAlert =
-      StreamController<void>.broadcast();
+  ServiceInstance? _fgsService;
 
-  final StreamController<void> _activeRoundChanged =
-      StreamController<void>.broadcast();
-
-  Stream<bool> get connectionChanges => _connectionState.stream;
-
-  /// Server-pushed mock GPS alert (STOMP).
-  Stream<void> get mockLocationAlerts => _mockLocationAlert.stream;
-
-  /// Active patrol round changed — coordinator calls GET `/me/active`.
-  Stream<void> get activeRoundSignals => _activeRoundChanged.stream;
+  Future<void> Function()? _onFgsRoundSynced;
 
   bool get isConnected => _client?.connected ?? false;
 
-  /// Kết nối STOMP cho phiên đăng nhập (nhận vòng tuần tra + gửi vị trí khi emit bật).
+  bool get _runsInFgs =>
+      PatrolBackgroundIsolateFlags.active || _fgsService != null;
+
+
+  /// Main isolate — mock GPS alert từ STOMP (không dùng khi FGS owns socket).
+
+  void Function()? onMockLocationAlert;
+
+  /// Call once from [patrolBackgroundOnStart] before [connect].
+
+  void configureFgsBridge({
+    required ServiceInstance service,
+
+    required Future<void> Function() onRoundSynced,
+  }) {
+    _fgsService = service;
+
+    _onFgsRoundSynced = onRoundSynced;
+  }
+
   Future<void> connect() async {
+    final inFlight = _connectFuture;
+
+    if (inFlight != null) {
+      await inFlight;
+
+      return;
+    }
+
+    final future = _connectImpl();
+
+    _connectFuture = future;
+
+    try {
+      await future;
+    } finally {
+      if (identical(_connectFuture, future)) {
+        _connectFuture = null;
+      }
+    }
+  }
+
+  Future<void> disconnect() async {
+    _manualClose = true;
+
+    await _tearDownClient();
+  }
+
+  Future<void> reconnectAfterTokenRefresh() async {
+    await disconnect();
+
+    _manualClose = false;
+
+    await connect();
+  }
+
+  Future<bool> sendTrackLocation(
+    PatrolLocationTrackPayload payload, {
+    bool reconnectOnFailure = true,
+  }) async {
+    if (payload.isMocked) return false;
+
+    if (!await PatrolTrackingConfigStore.socketEnabled()) return false;
+
+    if (!isConnected) {
+      if (!_runsInFgs && await PatrolTrackingConfigStore.backgroundEnabled()) {
+        return false;
+      }
+
+      await PatrolTrackOfflineQueue.enqueue(payload);
+
+      if (reconnectOnFailure && !_manualClose) {
+        unawaited(connect());
+      }
+
+      return false;
+    }
+
+    try {
+      _client!.send(
+        destination: AppConfig.stompTrackLocationDestination,
+
+        body: jsonEncode(payload.toJson()),
+
+        headers: <String, String>{'content-type': 'application/json'},
+      );
+
+      return true;
+    } catch (e) {
+      await PatrolTrackOfflineQueue.enqueue(payload);
+
+      if (reconnectOnFailure && !_manualClose) {
+        await _tearDownClient();
+
+        if (!_manualClose) unawaited(connect());
+      }
+
+      return false;
+    }
+  }
+
+  Future<void> flushPendingLocations() => _flushOfflineQueue();
+
+  Future<void> _connectImpl() async {
     if (_connecting || isConnected) return;
+
     if (!await PatrolTrackingConfigStore.socketEnabled()) return;
 
+    if (!_runsInFgs && await PatrolTrackingConfigStore.backgroundEnabled()) {
+      return;
+    }
+
     final url = AppConfig.effectiveStompEndpointUrl;
+
     if (url.isEmpty) return;
 
     final bearer = await AccountSessionStore.instance.getStoredAccessToken();
+
     if (bearer == null || bearer.isEmpty) return;
 
     _connecting = true;
+
     _manualClose = false;
+
     try {
-      await _tearDownClient(notifyDisconnected: false);
-      _client = StompClient(
+      await _tearDownClient();
+
+      late final StompClient client;
+
+      client = StompClient(
         config: StompConfig.sockJS(
           url: url,
           reconnectDelay: const Duration(seconds: 5),
@@ -67,118 +189,158 @@ class PatrolTrackSocketClient {
           },
           stompConnectHeaders: <String, String>{
             'Authorization': 'Bearer $bearer',
+
             'accept-version': '1.1,1.2',
+
             'heart-beat': '0,0',
           },
-          onConnect: _onStompConnect,
+
+          onConnect: (frame) => _onStompConnect(client, frame),
+
           onWebSocketDone: _onTransportClosed,
+
           onWebSocketError: (_) => _onTransportClosed(),
+
           onStompError: (_) => _onTransportClosed(),
-          onDisconnect: (_) {
-            if (!_connectionState.isClosed) _connectionState.add(false);
-          },
+
+          onDisconnect: (_) {},
         ),
       );
-      _client!.activate();
+
+      _client = client;
+
+      client.activate();
     } catch (_) {
-      if (!_connectionState.isClosed) _connectionState.add(false);
+      //
     } finally {
       _connecting = false;
     }
   }
 
-  Future<void> disconnect() async {
-    _manualClose = true;
-    await _tearDownClient();
-  }
+  void _onStompConnect(StompClient connectedClient, StompFrame frame) {
+    if (!identical(_client, connectedClient)) return;
 
-  Future<void> reconnectAfterTokenRefresh() async {
-    await disconnect();
-    _manualClose = false;
-    await connect();
-  }
+    if (_runsInFgs) {
+      _invokeMain(PatrolFgsInvokeEvents.socketConnected);
 
-  Future<bool> sendTrackLocation(PatrolLocationTrackPayload payload) async {
-    if (payload.isMocked) return false;
-    if (!await PatrolTrackingConfigStore.socketEnabled()) return false;
-    if (!isConnected) {
-      await PatrolTrackOfflineQueue.enqueue(payload);
-      return false;
-    }
-    try {
-      _client!.send(
-        destination: AppConfig.stompTrackLocationDestination,
-        body: jsonEncode(payload.toJson()),
-        headers: <String, String>{'content-type': 'application/json'},
+      connectedClient.subscribe(
+        destination: AppConfig.stompMockLocationAlertDestination,
+
+        callback: (_) => _invokeMain(PatrolFgsInvokeEvents.mockLocationAlert),
       );
-      return true;
-    } catch (_) {
-      await PatrolTrackOfflineQueue.enqueue(payload);
-      if (!_manualClose) {
-        await _tearDownClient();
-        if (!_manualClose) unawaited(connect());
-      }
-      return false;
-    }
-  }
 
-  void _onStompConnect(StompFrame frame) {
-    if (!_connectionState.isClosed) _connectionState.add(true);
-    _client?.subscribe(
+      connectedClient.subscribe(
+        destination: AppConfig.stompActiveRoundChangedDestination,
+
+        callback: _onActiveRoundChangedFrame,
+      );
+
+      unawaited(_flushOfflineQueue());
+
+      return;
+    }
+
+    PatrolTrackSocketDispatch.onSocketConnected?.call();
+
+    connectedClient.subscribe(
       destination: AppConfig.stompMockLocationAlertDestination,
+
       callback: _onMockAlertFrame,
     );
-    _client?.subscribe(
+
+    connectedClient.subscribe(
       destination: AppConfig.stompActiveRoundChangedDestination,
+
       callback: _onActiveRoundChangedFrame,
     );
-    unawaited(_flushOfflineQueue());
   }
 
   void _onActiveRoundChangedFrame(StompFrame frame) {
-    if (_activeRoundChanged.isClosed) return;
-    _activeRoundChanged.add(null);
+    if (_runsInFgs) {
+      unawaited(_syncActiveRoundInFgs());
+
+      return;
+    }
+
+    PatrolTrackSocketDispatch.onActiveRoundChanged?.call();
+  }
+
+  Future<void> _syncActiveRoundInFgs() async {
+    try {
+      await PatrolActiveRoundSync.fetchAndPersist();
+
+      await _onFgsRoundSynced?.call();
+
+      _invokeMain(PatrolFgsInvokeEvents.activeRoundChanged);
+    } catch (_) {
+    }
+  }
+
+  void _invokeMain(String event) {
+    final service = _fgsService;
+
+    if (service == null) return;
+
+    try {
+      service.invoke(event);
+    } catch (_) {
+      //
+    }
   }
 
   void _onMockAlertFrame(StompFrame frame) {
+    if (!_isMockLocationAlertFrame(frame)) return;
+
+    onMockLocationAlert?.call();
+  }
+
+  bool _isMockLocationAlertFrame(StompFrame frame) {
     final body = frame.body?.trim();
-    if (body != null && body.isNotEmpty) {
-      try {
-        final decoded = jsonDecode(body);
-        if (decoded is Map &&
-            decoded['event'] != null &&
-            decoded['event'] != 'mock_location_alert') {
-          return;
-        }
-      } catch (_) {
-        //
+
+    if (body == null || body.isEmpty) return true;
+
+    try {
+      final decoded = jsonDecode(body);
+
+      if (decoded is Map &&
+          decoded['event'] != null &&
+          decoded['event'] != 'mock_location_alert') {
+        return false;
       }
+    } catch (_) {
+      //
     }
-    if (!_mockLocationAlert.isClosed) _mockLocationAlert.add(null);
+
+    return true;
   }
 
   void _onTransportClosed() {
-    if (!_connectionState.isClosed) _connectionState.add(false);
     if (_manualClose) return;
-    // stomp_dart_client reconnects on its own when _isActive; do not call connect() again.
   }
 
   Future<void> _flushOfflineQueue() async {
+    if (!isConnected) return;
+
     final pending = await PatrolTrackOfflineQueue.drainAll();
+
     for (final item in pending) {
       if (item.isMocked) continue;
-      final ok = await sendTrackLocation(item);
-      if (!ok) break;
+
+      final ok = await sendTrackLocation(item, reconnectOnFailure: false);
+
+      if (!ok) {
+        await PatrolTrackOfflineQueue.enqueue(item);
+
+        break;
+      }
     }
   }
 
-  Future<void> _tearDownClient({bool notifyDisconnected = true}) async {
+  Future<void> _tearDownClient() async {
     final client = _client;
-    _client = null;
-    client?.deactivate();
-    if (notifyDisconnected && !_connectionState.isClosed) {
-      _connectionState.add(false);
-    }
-  }
 
+    _client = null;
+
+    client?.deactivate();
+  }
 }

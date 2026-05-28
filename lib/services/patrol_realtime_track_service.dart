@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,7 +8,6 @@ import '../config/storage_keys.dart';
 import '../models/patrol_location_track_payload.dart';
 import '../utils/device_location.dart';
 import '../utils/super_gps_service.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
 
 import 'patrol_background_service.dart';
 import 'patrol_track_offline_queue.dart';
@@ -23,100 +21,124 @@ class PatrolRealtimeTrackService {
 
   StreamSubscription<SuperGpsEvent>? _gpsSub;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
-  StreamSubscription<void>? _serverMockAlertSub;
 
   int? _roundId;
-  bool _emitEnabled = false;
+  bool _sessionTrackingActive = false;
+  bool _socketEnabled = true;
+  bool _backgroundEnabled = false;
 
   final StreamController<bool> _mockViolation = StreamController<bool>.broadcast();
 
   /// `true` when mock GPS is detected — UI shows a red warning.
   Stream<bool> get mockViolationAlerts => _mockViolation.stream;
 
-  bool get isTrackingRound => _emitEnabled && _roundId != null;
+  bool get isSessionTracking => _sessionTrackingActive;
+
+  /// `true` when GPS emit is on and an active patrol round id is set (socket sync).
+  bool get isTrackingRound => _sessionTrackingActive && _roundId != null;
 
   /// Re-attach GPS after location permission / background service is ready.
   Future<void> refreshActiveTracking() async {
-    if (!_emitEnabled || _roundId == null) return;
+    if (!_sessionTrackingActive) return;
+    await _refreshTrackingConfigCache();
 
-    if (await PatrolTrackingConfigStore.socketEnabled()) {
-      await PatrolTrackSocketClient.instance.connect();
+    if (_socketEnabled) {
+      unawaited(_connectTrackingSocket());
     }
 
-    final background = await PatrolTrackingConfigStore.backgroundEnabled();
-    if (background) {
-      final flutterBg = FlutterBackgroundService();
-      if (await flutterBg.isRunning()) {
-        await PatrolBackgroundService.refreshPatrolTracking();
-        await _gpsSub?.cancel();
-        _gpsSub = null;
-        return;
-      }
-      await PatrolBackgroundService.startPatrolTracking();
-    }
+    if (await _handOffToBackgroundIfEnabled()) return;
     await _startForegroundGpsFanOut();
   }
 
   Future<void> onAuthenticated() async {
     _connectivitySub ??= Connectivity().onConnectivityChanged.listen((_) {
-      if (isTrackingRound) {
-        unawaited(PatrolTrackSocketClient.instance.connect());
+      if (_sessionTrackingActive) {
+        unawaited(_connectTrackingSocket());
       }
     });
 
-    _serverMockAlertSub ??=
-        PatrolTrackSocketClient.instance.mockLocationAlerts.listen((_) {
-      if (!_mockViolation.isClosed) _mockViolation.add(true);
-    });
+    PatrolTrackSocketClient.instance.onMockLocationAlert =
+        notifyServerMockLocationAlert;
   }
 
-  /// Enables location emit when an active patrol round exists (foreground + background service).
-  Future<void> startRoundTracking({required int roundId}) async {
-    _roundId = roundId;
-    _emitEnabled = true;
+  /// Server STOMP mock-GPS alert from the main socket.
+  void notifyServerMockLocationAlert() {
+    if (!_mockViolation.isClosed) _mockViolation.add(true);
+  }
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(StorageKeys.patrolTrackRoundId, roundId);
-    await prefs.setBool(StorageKeys.patrolTrackEmitEnabled, true);
-    await prefs.setBool(
-      StorageKeys.patrolTrackBackgroundAutoScanEnabled,
-      true,
-    );
-
-    if (await PatrolTrackingConfigStore.socketEnabled()) {
-      await PatrolTrackSocketClient.instance.connect();
+  /// Bật GPS + socket + FGS khi có phiên — không phụ thuộc vòng tuần tra.
+  Future<void> startSessionTracking() async {
+    if (_sessionTrackingActive) {
+      await refreshActiveTracking();
+      return;
     }
 
-    final background = await PatrolTrackingConfigStore.backgroundEnabled();
-    if (background) {
-      final flutterBg = FlutterBackgroundService();
-      if (await flutterBg.isRunning()) {
+    _sessionTrackingActive = true;
+    await _refreshTrackingConfigCache();
+    if (_backgroundEnabled) {
+      // Start FGS as early as possible so status-bar notification appears sooner.
+      unawaited(PatrolBackgroundService.startPatrolTracking());
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await Future.wait<void>([
+      prefs.setBool(StorageKeys.patrolTrackEmitEnabled, true),
+      prefs.setBool(StorageKeys.patrolTrackBackgroundAutoScanEnabled, false),
+      prefs.setBool(StorageKeys.patrolTrackForegroundScanBusy, false),
+    ]);
+    if (_roundId != null) {
+      await prefs.setInt(StorageKeys.patrolTrackRoundId, _roundId!);
+    }
+    await _refreshTrackingConfigCache();
+
+    if (_socketEnabled) {
+      unawaited(_connectTrackingSocket());
+    }
+
+    await _ensureGpsPipeline();
+  }
+
+  /// Main STOMP when not using FGS; FGS isolate STOMP when background mode is on.
+  Future<void> _connectTrackingSocket() async {
+    if (_backgroundEnabled) {
+      await PatrolTrackSocketClient.instance.disconnect();
+      if (await PatrolBackgroundService.isRunningSafe()) {
         await PatrolBackgroundService.refreshPatrolTracking();
       } else {
-        await PatrolBackgroundService.startPatrolTracking();
+        unawaited(PatrolBackgroundService.startPatrolTracking());
       }
+      return;
+    }
+    await PatrolTrackSocketClient.instance.connect();
+  }
 
-      var bgRunning = await flutterBg.isRunning();
-      if (!bgRunning) {
-        for (var i = 0; i < 30 && !bgRunning; i++) {
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-          bgRunning = await flutterBg.isRunning();
-        }
-      }
+  /// Đọc `roundId` / auto-scan từ prefs ([PatrolActiveRoundSync]) rồi bật GPS hoặc FGS.
+  Future<void> syncTrackingAfterRoundPersisted() async {
+    if (!_sessionTrackingActive) return;
 
-      if (!bgRunning) {
-        await _startForegroundGpsFanOut();
-      } else {
-        await _gpsSub?.cancel();
-        _gpsSub = null;
-      }
-    } else {
+    final prefs = await SharedPreferences.getInstance();
+    final roundId = prefs.getInt(StorageKeys.patrolTrackRoundId);
+    _roundId = (roundId != null && roundId > 0) ? roundId : null;
+
+    await _refreshTrackingConfigCache();
+    if (_backgroundEnabled) {
+      unawaited(_refreshBackgroundAfterRoundUpdate());
+      return;
+    }
+    await _startForegroundGpsFanOut();
+  }
+
+  Future<void> _refreshBackgroundAfterRoundUpdate() async {
+    await PatrolBackgroundService.refreshPatrolTracking(
+      startIfNotRunning: true,
+    );
+    if (!await PatrolBackgroundService.isRunningSafe()) {
       await _startForegroundGpsFanOut();
     }
   }
 
-  Future<void> stopRoundTracking() async {
-    _emitEnabled = false;
+  Future<void> stopSessionTracking() async {
+    _sessionTrackingActive = false;
     _roundId = null;
 
     await _gpsSub?.cancel();
@@ -128,12 +150,54 @@ class PatrolRealtimeTrackService {
     await prefs.setBool(StorageKeys.patrolTrackForegroundScanBusy, false);
     await prefs.remove(StorageKeys.patrolTrackRoundId);
 
-    if (await PatrolTrackingConfigStore.backgroundEnabled()) {
+    await _refreshTrackingConfigCache();
+    if (_backgroundEnabled) {
       // Re-read prefs in FGS (emit=false → stop GPS); full FGS stop on [onSessionEnded].
       await PatrolBackgroundService.refreshPatrolTracking();
     } else {
       await PatrolBackgroundService.stopPatrolTracking();
     }
+  }
+
+  Future<void> _ensureGpsPipeline() async {
+    await _refreshTrackingConfigCache();
+    if (!_backgroundEnabled) {
+      await _startForegroundGpsFanOut();
+      return;
+    }
+
+    // Start foreground GPS immediately for first fixes, then hand off to FGS.
+    await _startForegroundGpsFanOut();
+    unawaited(_handOffToBackgroundIfEnabled(waitForStart: true));
+  }
+
+  /// Returns `true` when GPS runs in FGS (foreground subscription cancelled).
+  Future<bool> _handOffToBackgroundIfEnabled({bool waitForStart = false}) async {
+    await _refreshTrackingConfigCache();
+    if (!_backgroundEnabled) return false;
+
+    try {
+      if (await PatrolBackgroundService.isRunningSafe()) {
+        await PatrolBackgroundService.refreshPatrolTracking();
+        await _gpsSub?.cancel();
+        _gpsSub = null;
+        return true;
+      }
+
+      unawaited(PatrolBackgroundService.startPatrolTracking());
+      if (!waitForStart) return false;
+
+      for (var i = 0; i < 15; i++) {
+        if (await PatrolBackgroundService.isRunningSafe()) {
+          await _gpsSub?.cancel();
+          _gpsSub = null;
+          return true;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      }
+    } catch (_) {
+    }
+    return false;
   }
 
   /// Pauses background auto-scan while the user uses the four scan buttons on the round screen.
@@ -143,7 +207,7 @@ class PatrolRealtimeTrackService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(StorageKeys.patrolTrackForegroundScanBusy, busy);
 
-    if (!_emitEnabled) return;
+    if (!_sessionTrackingActive) return;
 
     if (busy) {
       await PatrolBackgroundService.pauseBackgroundAutoScan();
@@ -153,13 +217,12 @@ class PatrolRealtimeTrackService {
   }
 
   Future<void> onSessionEnded() async {
-    await stopRoundTracking();
+    await stopSessionTracking();
 
     await _connectivitySub?.cancel();
     _connectivitySub = null;
 
-    await _serverMockAlertSub?.cancel();
-    _serverMockAlertSub = null;
+    PatrolTrackSocketClient.instance.onMockLocationAlert = null;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(StorageKeys.patrolTrackRoundId);
@@ -169,7 +232,7 @@ class PatrolRealtimeTrackService {
   Future<void> _startForegroundGpsFanOut() async {
     await _gpsSub?.cancel();
 
-    if (!_emitEnabled || _roundId == null) return;
+    if (!_sessionTrackingActive) return;
     if (!SuperGpsService.isSupported) return;
 
     final minMoveM = await PatrolTrackingConfigStore.minMoveM();
@@ -200,9 +263,12 @@ class PatrolRealtimeTrackService {
   }
 
   Future<void> _handlePosition(Position position) async {
-    if (!_emitEnabled) return;
+    if (!_sessionTrackingActive) return;
 
-    await _dispatchPosition(roundId: _roundId ?? 0, position: position);
+    final roundId = _roundId;
+    if (roundId == null) return;
+
+    await _dispatchPosition(roundId: roundId, position: position);
   }
 
   Future<void> _dispatchPosition({
@@ -214,16 +280,29 @@ class PatrolRealtimeTrackService {
       return;
     }
 
-    if (!await PatrolTrackingConfigStore.socketEnabled()) return;
+    if (!_socketEnabled) return;
 
     final payload = PatrolLocationTrackPayload.fromPosition(
       roundId: roundId,
       position: position,
     );
-    final sent = await PatrolTrackSocketClient.instance.sendTrackLocation(payload);
-    if (!sent && kDebugMode) {
-      final pending = await PatrolTrackOfflineQueue.pendingCount();
-      debugPrint('Patrol track queued (offline). pending=$pending');
+
+    // Background mode: FGS isolate owns GPS + STOMP — main must not enqueue here.
+    if (_backgroundEnabled) {
+      if (!PatrolBackgroundService.isBackgroundIsolate) return;
+      if (await PatrolTrackSocketClient.instance.sendTrackLocation(payload)) {
+        return;
+      }
+      await PatrolTrackOfflineQueue.enqueue(payload);
+      return;
     }
+
+    await PatrolTrackSocketClient.instance.sendTrackLocation(payload);
+  }
+
+  Future<void> _refreshTrackingConfigCache() async {
+    final config = await PatrolTrackingConfigStore.load();
+    _socketEnabled = config.socket;
+    _backgroundEnabled = config.background;
   }
 }

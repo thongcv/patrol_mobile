@@ -2,82 +2,89 @@ import 'dart:async';
 
 import '../models/active_patrol_round.dart';
 import '../navigation/patrol_session.dart';
-import 'account_session_store.dart';
 import 'patrol_active_round_cache.dart';
+import 'patrol_active_round_sync.dart';
 import 'patrol_realtime_track_coordinator.dart';
-import 'patrol_round_service.dart';
+import 'patrol_session_listen.dart';
 import 'patrol_track_socket_client.dart';
+import 'patrol_track_socket_dispatch.dart';
 import 'patrol_tracking_config_store.dart';
 
-/// Đồng bộ vòng tuần tra đang active — chỉ qua STOMP + GET khi socket báo / vừa kết nối.
+/// Đồng bộ vòng tuần tra đang active — GET khi STOMP push / socket connect.
 abstract final class PatrolActiveRoundCoordinator {
   PatrolActiveRoundCoordinator._();
 
-  static StreamSubscription<void>? _authSub;
-  static StreamSubscription<void>? _sessionEndedSub;
-  static StreamSubscription<void>? _activeRoundSub;
-  static StreamSubscription<bool>? _socketConnectedSub;
+  static final PatrolSessionListen _session = PatrolSessionListen(
+    onAuthenticated: _onAuthenticated,
+    onSessionEnded: onSessionEnded,
+  );
 
   static final StreamController<ActivePatrolRound?> _activeRoundChanges =
       StreamController<ActivePatrolRound?>.broadcast();
+
+  static ActivePatrolRound? _lastEmitted;
 
   /// Phát khi cache vòng tuần tra thay đổi (socket hoặc bootstrap sau đăng nhập).
   static Stream<ActivePatrolRound?> get activeRoundChanges =>
       _activeRoundChanges.stream;
 
-  static bool _sessionActive = false;
-
   static void attach() {
-    _authSub ??= PatrolSession.authStoredChanges.listen((_) {
-      unawaited(resumeIfSession());
-    });
+    _session.attach();
+    _bindSocketHandlers();
+  }
 
-    _sessionEndedSub ??= PatrolSession.sessionEnded.listen((_) {
-      unawaited(onSessionEnded());
-    });
-
-    _activeRoundSub ??=
-        PatrolTrackSocketClient.instance.activeRoundSignals.listen((_) {
-      unawaited(syncFromServer());
-    });
-
-    _socketConnectedSub ??=
-        PatrolTrackSocketClient.instance.connectionChanges.listen((connected) {
-      if (connected) unawaited(syncFromServer());
-    });
-
-    unawaited(_notifyIfRestoredSession());
+  static void _bindSocketHandlers() {
+    PatrolTrackSocketDispatch.onActiveRoundChanged = _requestSyncFromServer;
+    PatrolTrackSocketDispatch.onSocketConnected = _requestSyncFromServer;
   }
 
   static void detach() {
-    _authSub?.cancel();
-    _authSub = null;
-    _sessionEndedSub?.cancel();
-    _sessionEndedSub = null;
-    _activeRoundSub?.cancel();
-    _activeRoundSub = null;
-    _socketConnectedSub?.cancel();
-    _socketConnectedSub = null;
-    _sessionActive = false;
+    _session.detach();
+    PatrolTrackSocketDispatch.onActiveRoundChanged = null;
+    PatrolTrackSocketDispatch.onSocketConnected = null;
   }
 
-  static Future<void> _notifyIfRestoredSession() async {
-    if (!await AccountSessionStore.instance.hasStoredSession()) return;
-    PatrolSession.notifyAuthStored();
+  static void _requestSyncFromServer() {
+    unawaited(syncFromServer());
   }
 
-  static Future<void> resumeIfSession() async {
-    if (!await AccountSessionStore.instance.hasStoredSession()) return;
-    await onAuthenticated();
+  /// FGS đã cập nhật cache (auto-scan) — merge `verified` vào UI, không GET lại.
+  static Future<void> applyFgsRoundUpdate() async {
+    await PatrolRealtimeTrackCoordinator.syncTrackingAfterRoundPersisted();
+    final cached = await PatrolActiveRoundCache.load();
+    var last = _lastEmitted;
+    if (cached != null && last != null && cached.roundId == last.round.id) {
+      final verifiedIds = {
+        for (final p in cached.checkPoints)
+          if (p.verified == true) p.id,
+      };
+      if (verifiedIds.isNotEmpty) {
+        last = ActivePatrolRound(
+          schedule: last.schedule,
+          round: last.round,
+          checkPoints: [
+            for (final p in last.checkPoints)
+              verifiedIds.contains(p.id) ? p.copyWith(verified: true) : p,
+          ],
+        );
+        _lastEmitted = last;
+      }
+    }
+    if (!_activeRoundChanges.isClosed) {
+      _activeRoundChanges.add(_lastEmitted);
+    }
   }
 
-  static Future<void> onAuthenticated() async {
-    _sessionActive = true;
-    await _connectSessionSocket();
+  static Future<void> resumeIfSession() => _session.resumeIfSession();
+
+  static Future<void> _onAuthenticated() async {
+    _bindSocketHandlers();
+    await syncFromServer();
   }
 
   static Future<void> onSessionEnded() async {
-    _sessionActive = false;
+    _session.sessionActive = false;
+    _lastEmitted = null;
     await PatrolActiveRoundCache.save(null);
     if (!_activeRoundChanges.isClosed) {
       _activeRoundChanges.add(null);
@@ -87,30 +94,33 @@ abstract final class PatrolActiveRoundCoordinator {
     }
   }
 
-  /// GET `/me/active` — gọi từ STOMP `active-round-changed` hoặc sau khi socket connect.
+  /// GET `/me/active` — main STOMP hoặc sau khi FGS STOMP connect.
   static Future<void> syncFromServer() async {
-    if (!_sessionActive) return;
+    if (!_session.sessionActive) {
+      if (!await _session.ensureSessionActive()) return;
+      _bindSocketHandlers();
+    }
 
-    final r = await PatrolRoundService.instance.fetchMyActivePatrolRound();
+    final r = await PatrolActiveRoundSync.fetchAndPersist();
     if (PatrolSession.isUnauthorized(r.failure)) {
       await PatrolSession.endSessionAndNavigateToLogin();
       return;
     }
-
     if (!r.ok) return;
 
-    final active = r.data;
-    await PatrolActiveRoundCache.save(active);
+  final active = r.data == null
+        ? null
+        : await PatrolActiveRoundCache.preservingLocalVerified(r.data!);
+    _lastEmitted = active;
     if (!_activeRoundChanges.isClosed) {
       _activeRoundChanges.add(active);
     }
 
-    final roundId = active?.round.id;
-    await PatrolRealtimeTrackCoordinator.applyActiveRound(roundId);
-  }
+    await PatrolRealtimeTrackCoordinator.syncTrackingAfterRoundPersisted();
 
-  static Future<void> _connectSessionSocket() async {
-    if (!await PatrolTrackingConfigStore.socketEnabled()) return;
-    await PatrolTrackSocketClient.instance.connect();
+    if (await PatrolTrackingConfigStore.socketEnabled() &&
+        !await PatrolTrackingConfigStore.backgroundEnabled()) {
+      unawaited(PatrolTrackSocketClient.instance.flushPendingLocations());
+    }
   }
 }

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../utils/device_location.dart';
@@ -22,6 +21,8 @@ class PatrolBackgroundSocketEmitter {
   var _enableBarometer = false;
   var _listening = false;
   var _stopped = true;
+  var _emitInFlight = false;
+  Position? _pendingEmitPosition;
 
   bool get isListening => _listening;
   bool get hasAutoScanHandler => _autoScanHandler != null;
@@ -42,9 +43,6 @@ class PatrolBackgroundSocketEmitter {
 
     final denied = await checkPatrolBackgroundLocationForTracking();
     if (denied != null) {
-      if (kDebugMode) {
-        debugPrint('PatrolBackgroundSocketEmitter: location not ready ($denied)');
-      }
       return;
     }
 
@@ -63,24 +61,18 @@ class PatrolBackgroundSocketEmitter {
 
     _gpsSub = SuperGpsService.instance.locationEventStream.listen(
       (event) => unawaited(_dispatchEvent(event)),
-      onError: (Object error, StackTrace stack) {
-        if (kDebugMode) {
-          debugPrint('PatrolBackgroundSocketEmitter GPS error: $error');
-        }
-      },
+      onError: (Object error, StackTrace stack) {},
       cancelOnError: false,
     );
 
     _listening = true;
-    if (kDebugMode) {
-      debugPrint('PatrolBackgroundSocketEmitter: Super GPS stream active');
-    }
   }
 
   Future<void> stop() async {
     _stopped = true;
     _autoScanHandler = null;
     _enableBarometer = false;
+    _pendingEmitPosition = null;
     await _cancelSubscription();
     await SuperGpsService.shutdown();
   }
@@ -89,14 +81,38 @@ class PatrolBackgroundSocketEmitter {
     await _gpsSub?.cancel();
     _gpsSub = null;
     _anchor = null;
+    _emitInFlight = false;
+    _pendingEmitPosition = null;
     _listening = false;
   }
 
   Future<void> _dispatchEvent(SuperGpsEvent event) async {
     if (_stopped) return;
-    await emitPosition(event.position);
-    if (_stopped) return;
+    // Auto-scan only enqueues work; run before socket emit so a slow STOMP send
+    // does not stall proximity checks.
     _autoScanHandler?.call(event);
+    if (_stopped) return;
+    _pendingEmitPosition = event.position;
+    if (_emitInFlight) return;
+    _emitInFlight = true;
+    unawaited(_drainEmitQueue());
+  }
+
+  Future<void> _drainEmitQueue() async {
+    try {
+      while (!_stopped) {
+        final pos = _pendingEmitPosition;
+        _pendingEmitPosition = null;
+        if (pos == null) break;
+        await emitPosition(pos);
+      }
+    } finally {
+      _emitInFlight = false;
+      if (!_stopped && _pendingEmitPosition != null) {
+        _emitInFlight = true;
+        unawaited(_drainEmitQueue());
+      }
+    }
   }
 
   Future<void> emitPosition(Position pos) async {

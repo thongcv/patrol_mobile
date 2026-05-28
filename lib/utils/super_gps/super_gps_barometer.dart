@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 import '../barometric_altitude.dart';
@@ -37,6 +38,10 @@ class SuperGpsBarometer {
       });
       await firstReading.future.timeout(const Duration(milliseconds: 400));
       _hardwareSupported = true;
+    } on MissingPluginException {
+      _hardwareSupported = false;
+    } on PlatformException {
+      _hardwareSupported = false;
     } catch (_) {
       _hardwareSupported = false;
     } finally {
@@ -62,6 +67,14 @@ class SuperGpsBarometer {
       _active = true;
       _hardwareSupported = true;
       _hardwareChecked = true;
+    } on MissingPluginException {
+      _hardwareSupported = false;
+      _hardwareChecked = true;
+      _active = false;
+    } on PlatformException {
+      _hardwareSupported = false;
+      _hardwareChecked = true;
+      _active = false;
     } catch (_) {
       _hardwareSupported = false;
       _hardwareChecked = true;

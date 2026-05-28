@@ -212,11 +212,7 @@ class SuperGpsEngine {
       locationSettings: _streamOptions.toLocationSettings(),
     ).listen(
       (position) => _tryEmitLocation(position, SuperGpsFixSource.stream),
-      onError: (Object error, StackTrace stack) {
-        if (kDebugMode) {
-          debugPrint('SuperGpsEngine stream error: $error');
-        }
-      },
+      onError: (Object error, StackTrace stack) {},
       cancelOnError: false,
     );
 
@@ -265,7 +261,7 @@ class SuperGpsEngine {
       final current = await Geolocator.getCurrentPosition(
         locationSettings: LocationSettings(
           accuracy: LocationAccuracy.bestForNavigation,
-          timeLimit: const Duration(seconds: 30),
+          timeLimit: const Duration(seconds: 5),
         ),
       );
       _tryEmitLocation(current, SuperGpsFixSource.seedCache);

@@ -5,7 +5,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'config/google_maps_config.dart';
 import 'l10n/app_localizations.dart';
 import 'firebase_options.dart';
 import 'navigation/patrol_session.dart';
@@ -32,22 +31,12 @@ Future<void> _initializeFirebase() async {
     if (!kIsWeb && Platform.isIOS) {
       await Firebase.initializeApp();
     }
-  } catch (e, st) {
-    debugPrint('Firebase init: $e\n$st');
+  } catch (_) {
   }
 }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Google Maps API key: AndroidManifest (Gradle) + iOS Info.plist (--dart-define).
-  assert(() {
-    if (!GoogleMapsConfig.isConfigured) {
-      debugPrint(
-        'Google Maps: missing GOOGLE_MAPS_API_KEY (--dart-define).',
-      );
-    }
-    return true;
-  }());
   try {
     await _initializeFirebase();
     if (Firebase.apps.isNotEmpty) {
@@ -57,19 +46,16 @@ Future<void> main() async {
       );
       unawaited(_setupFirebaseMessaging());
     }
-  } catch (e, st) {
-    debugPrint('Firebase init: $e\n$st');
+  } catch (_) {
   }
   await AccountSessionStore.instance.loadFromPrefs();
   runApp(const PatrolMobileApp());
-  unawaited(PatrolBackgroundService.ensureInitialized());
 }
 
 Future<void> _setupFirebaseMessaging() async {
   try {
     await FirebaseMessaging.instance.requestPermission();
-  } catch (e, st) {
-    debugPrint('Firebase Messaging permission: $e\n$st');
+  } catch (_) {
   }
 }
 
@@ -87,6 +73,11 @@ class _PatrolMobileAppState extends State<PatrolMobileApp> {
   @override
   void initState() {
     super.initState();
+    // Configure FGS once after first frame (plugins ready; not on socket path).
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await PatrolBackgroundService.configureAtAppStart();
+      await PatrolBackgroundService.ensureCheckpointTtsRelayAttached();
+    });
     unawaited(_restoreLocale());
     PatrolSession.attach(
       navigatorKey: _navigatorKey,

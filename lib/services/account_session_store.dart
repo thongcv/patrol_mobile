@@ -7,7 +7,9 @@ import '../config/access_token_payload.dart';
 import '../config/storage_keys.dart';
 import '../models/account_me.dart';
 import '../navigation/patrol_session.dart';
-import 'patrol_track_socket_client.dart';
+import 'patrol_background_isolate_flags.dart';
+import 'patrol_background_service.dart';
+import 'patrol_track_token_sync.dart';
 import 'patrol_tracking_config_store.dart';
 
 /// Login session + company beacon UUID: RAM (foreground) + SharedPreferences.
@@ -65,9 +67,23 @@ class AccountSessionStore {
     final p = await _preferences;
     await p.setString(StorageKeys.accessToken, jsonEncode(accessToken));
     PatrolSession.notifyAuthStored();
-    if (PatrolTrackSocketClient.instance.isConnected) {
-      unawaited(PatrolTrackSocketClient.instance.reconnectAfterTokenRefresh());
+    unawaited(_reconnectStompAfterTokenStored());
+  }
+
+  Future<void> _reconnectStompAfterTokenStored() async {
+    if (!await PatrolTrackingConfigStore.socketEnabled()) return;
+
+    if (PatrolBackgroundIsolateFlags.active) {
+      await PatrolTrackTokenSync.reconnectAfterTokenStored();
+      return;
     }
+
+    if (await PatrolTrackingConfigStore.backgroundEnabled()) {
+      await PatrolBackgroundService.notifyTokenRefreshed();
+      return;
+    }
+
+    await PatrolTrackTokenSync.reconnectAfterTokenStored();
   }
 
   Future<void> clearAccessToken() async {

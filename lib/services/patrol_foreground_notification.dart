@@ -9,7 +9,11 @@ abstract final class PatrolForegroundNotification {
   PatrolForegroundNotification._();
 
   static const String _iosThreadId = 'sps_patrol_track';
+  static const String _iosCheckpointThreadId = 'sps_patrol_checkpoint_scan';
   static const String _logoAsset = 'assets/images/ic_notification_logo.png';
+  static const int checkpointAlertNotificationIdBase = 881300;
+  static const int _checkpointAlertIdSlots = 100;
+  static const int _maxCheckpointAlertsKept = 30;
 
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -20,6 +24,8 @@ abstract final class PatrolForegroundNotification {
   static String? _alertChannelId;
   static String? _alertChannelName;
   static String? _iosAttachmentPath;
+  static var _checkpointAlertSeq = 0;
+  static final List<int> _activeCheckpointAlertIds = <int>[];
 
   /// Two short pulses for checkpoint-scan feedback (Android channel vibration).
   static final Int64List checkpointScanVibrationPattern =
@@ -58,11 +64,12 @@ abstract final class PatrolForegroundNotification {
         AndroidNotificationChannel(
           _alertChannelId!,
           _alertChannelName!,
-          description: 'Vibration when a checkpoint is scanned',
-          importance: Importance.high,
+          description: 'Heads-up alert when a checkpoint is scanned',
+          importance: Importance.max,
           enableVibration: true,
           vibrationPattern: checkpointScanVibrationPattern,
-          playSound: false,
+          playSound: true,
+          showBadge: true,
         ),
       );
     } else if (Platform.isIOS) {
@@ -114,11 +121,12 @@ abstract final class PatrolForegroundNotification {
           pulse ? _alertChannelId! : _channelId!,
           pulse ? _alertChannelName! : _channelName!,
           icon: 'ic_bg_service_small',
-          ongoing: true,
+          ongoing: !pulse,
           importance: pulse ? Importance.high : Importance.low,
           priority: pulse ? Priority.high : Priority.low,
           showWhen: false,
           enableVibration: pulse,
+          playSound: pulse,
           vibrationPattern: pulse ? checkpointScanVibrationPattern : null,
           onlyAlertOnce: false,
         ),
@@ -151,7 +159,104 @@ abstract final class PatrolForegroundNotification {
     await _plugin.show(notificationId, title, body, details);
   }
 
+  /// Heads-up + status bar alert (Shopee-style): swipe to dismiss, newest on top.
+  static Future<void> showCheckpointScanAlert({
+    required String title,
+    required String body,
+  }) async {
+    if (!_ready || _alertChannelId == null || _alertChannelName == null) {
+      return;
+    }
+
+    final postedAt = DateTime.now();
+    final notificationId = _nextCheckpointAlertId();
+    _trackCheckpointAlertId(notificationId);
+
+    if (Platform.isAndroid) {
+      final details = NotificationDetails(
+        android: AndroidNotificationDetails(
+          _alertChannelId!,
+          _alertChannelName!,
+          channelDescription: 'Heads-up alert when a checkpoint is scanned',
+          icon: 'ic_bg_service_small',
+          importance: Importance.max,
+          priority: Priority.max,
+          visibility: NotificationVisibility.public,
+          category: AndroidNotificationCategory.status,
+          ticker: body,
+          ongoing: false,
+          autoCancel: true,
+          onlyAlertOnce: false,
+          showWhen: true,
+          when: postedAt.millisecondsSinceEpoch,
+          enableVibration: true,
+          playSound: true,
+          vibrationPattern: checkpointScanVibrationPattern,
+          styleInformation: BigTextStyleInformation(body),
+        ),
+      );
+      await _plugin.show(notificationId, title, body, details);
+      await _pruneOldCheckpointAlerts();
+      return;
+    }
+
+    if (Platform.isIOS) {
+      await _ensureIosAttachment();
+      final path = _iosAttachmentPath;
+      final sortKey = (9999999999999 - postedAt.millisecondsSinceEpoch)
+          .toString()
+          .padLeft(13, '0');
+      final details = NotificationDetails(
+        iOS: DarwinNotificationDetails(
+          presentBanner: true,
+          presentList: true,
+          presentSound: true,
+          presentBadge: false,
+          threadIdentifier: _iosCheckpointThreadId,
+          categoryIdentifier: 'sps_patrol_checkpoint_scan',
+          interruptionLevel: InterruptionLevel.timeSensitive,
+          attachments: path == null
+              ? null
+              : [DarwinNotificationAttachment(path)],
+        ),
+      );
+      await _plugin.show(
+        notificationId,
+        title,
+        body,
+        details,
+        payload: sortKey,
+      );
+      await _pruneOldCheckpointAlerts();
+    }
+  }
+
+  static int _nextCheckpointAlertId() {
+    _checkpointAlertSeq =
+        (_checkpointAlertSeq + 1) % _checkpointAlertIdSlots;
+    return checkpointAlertNotificationIdBase + _checkpointAlertSeq;
+  }
+
+  static void _trackCheckpointAlertId(int notificationId) {
+    _activeCheckpointAlertIds.add(notificationId);
+  }
+
+  static Future<void> _pruneOldCheckpointAlerts() async {
+    while (_activeCheckpointAlertIds.length > _maxCheckpointAlertsKept) {
+      final oldest = _activeCheckpointAlertIds.removeAt(0);
+      await _plugin.cancel(oldest);
+    }
+  }
+
   static Future<void> cancel(int notificationId) async {
     await _plugin.cancel(notificationId);
+  }
+
+  static Future<void> cancelAllCheckpointAlerts() async {
+    final ids = List<int>.from(_activeCheckpointAlertIds);
+    _activeCheckpointAlertIds.clear();
+    for (final id in ids) {
+      await _plugin.cancel(id);
+    }
   }
 }
