@@ -5,6 +5,7 @@ import '../navigation/patrol_session.dart';
 import 'patrol_active_round_cache.dart';
 import 'patrol_active_round_sync.dart';
 import 'patrol_realtime_track_coordinator.dart';
+import 'patrol_realtime_track_service.dart';
 import 'patrol_session_listen.dart';
 import 'patrol_track_socket_client.dart';
 import 'patrol_track_socket_dispatch.dart';
@@ -50,7 +51,7 @@ abstract final class PatrolActiveRoundCoordinator {
 
   /// FGS đã cập nhật cache (auto-scan) — merge `verified` vào UI, không GET lại.
   static Future<void> applyFgsRoundUpdate() async {
-    await PatrolRealtimeTrackCoordinator.syncTrackingAfterRoundPersisted();
+    await PatrolRealtimeTrackService.instance.reloadRoundIdFromPrefs();
     final cached = await PatrolActiveRoundCache.load();
     var last = _lastEmitted;
     if (cached != null && last != null && cached.roundId == last.round.id) {

@@ -15,6 +15,7 @@ import 'patrol_background_runner.dart';
 import '../utils/patrol_checkpoint_tts.dart';
 import 'patrol_fgs_invoke_events.dart';
 import 'patrol_foreground_notification.dart';
+import 'patrol_tracking_config_store.dart';
 
 /// iOS background entry from [flutter_background_service] — OS may wake the app briefly.
 ///
@@ -107,6 +108,7 @@ abstract final class PatrolBackgroundService {
   static Future<void>? _initFuture;
   static Future<void>? _startServiceFuture;
   static Future<void>? _startTrackingFuture;
+  static Future<void>? _refreshPatrolTrackingChain;
   static void Function(String checkpointName)? _relayCheckpointSuccessToUi;
   static void Function()? relayFgsMockLocationAlert;
   static Timer? _notificationRevertTimer;
@@ -370,27 +372,13 @@ abstract final class PatrolBackgroundService {
     return false;
   }
 
-  /// Starts FGS when needed, waits briefly, then pushes `refresh` to background isolate.
+  /// Starts FGS when needed, waits until running, then one `refresh` to background isolate.
   static Future<void> _syncTrackingWithBackground(
     FlutterBackgroundService service,
   ) async {
-    final wasRunning = await _isServiceRunning(service);
-    if (!wasRunning) {
+    if (!await _isServiceRunning(service)) {
       await _ensureServiceRunning(service);
-      // Fast path: fire refresh immediately after start request.
-      unawaited(_invoke(service, PatrolFgsInvokeEvents.refresh));
-      // Verify running state asynchronously and refresh again when fully up.
-      unawaited(_waitAndRefreshAfterStart(service));
-      return;
-    }
-    await _invoke(service, PatrolFgsInvokeEvents.refresh);
-  }
-
-  static Future<void> _waitAndRefreshAfterStart(
-    FlutterBackgroundService service,
-  ) async {
-    if (!await _waitForServiceRunning(service)) {
-      return;
+      if (!await _waitForServiceRunning(service)) return;
     }
     await _invoke(service, PatrolFgsInvokeEvents.refresh);
   }
@@ -492,7 +480,11 @@ abstract final class PatrolBackgroundService {
     );
     safeRelay(
       PatrolFgsInvokeEvents.socketConnected,
-      (_) => unawaited(PatrolActiveRoundCoordinator.syncFromServer()),
+      (_) async {
+        // FGS owns STOMP in background mode — syncing here re-triggers refresh loops.
+        if (await PatrolTrackingConfigStore.backgroundEnabled()) return;
+        unawaited(PatrolActiveRoundCoordinator.syncFromServer());
+      },
     );
     safeRelay(
       PatrolFgsInvokeEvents.mockLocationAlert,
@@ -527,6 +519,21 @@ abstract final class PatrolBackgroundService {
     bool startIfNotRunning = false,
   }) async {
     if (!await _awaitConfigured()) return;
+    _refreshPatrolTrackingChain =
+        (_refreshPatrolTrackingChain ?? Future<void>.value()).then(
+      (_) => _refreshPatrolTrackingImpl(startIfNotRunning: startIfNotRunning),
+    );
+    await _refreshPatrolTrackingChain!;
+  }
+
+  static Future<void> _refreshPatrolTrackingImpl({
+    required bool startIfNotRunning,
+  }) async {
+    final starting = _startTrackingFuture;
+    if (starting != null) {
+      await starting;
+      return;
+    }
     final service = _service;
     if (service == null) return;
     if (await _isServiceRunning(service)) {

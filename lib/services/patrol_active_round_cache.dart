@@ -10,8 +10,8 @@ import '../models/check_point.dart';
 abstract final class PatrolActiveRoundCache {
   PatrolActiveRoundCache._();
 
-  /// GET `/me/active` may omit `verified` while patrol logs already exist — keep
-  /// checkpoints marked verified in this cache when persisting a fresh snapshot.
+  /// GET `/me/active` may omit `verified` — only then keep local verified from cache.
+  /// When API sends `verified: false`, trust the server.
   static Future<ActivePatrolRound> preservingLocalVerified(
     ActivePatrolRound active,
   ) async {
@@ -29,7 +29,11 @@ abstract final class PatrolActiveRoundCache {
       round: active.round,
       checkPoints: [
         for (final p in active.checkPoints)
-          verifiedIds.contains(p.id) ? p.copyWith(verified: true) : p,
+          p.verified != null
+              ? p
+              : verifiedIds.contains(p.id)
+                  ? p.copyWith(verified: true)
+                  : p,
       ],
     );
   }
@@ -89,12 +93,25 @@ abstract final class PatrolActiveRoundCache {
       for (final p in cached.checkPoints)
         p.id == checkpointId ? p.copyWith(verified: true) : p,
     ];
+    await _writeSnapshot(roundId: cached.roundId, checkPoints: updated);
+  }
+
+  static Future<void> patchCheckPoints(List<CheckPoint> checkPoints) async {
+    final cached = await load();
+    if (cached == null) return;
+    await _writeSnapshot(roundId: cached.roundId, checkPoints: checkPoints);
+  }
+
+  static Future<void> _writeSnapshot({
+    required int roundId,
+    required List<CheckPoint> checkPoints,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       StorageKeys.patrolTrackActiveRoundSnapshot,
       jsonEncode(<String, dynamic>{
-        'roundId': cached.roundId,
-        'checkPoints': [for (final p in updated) p.toJson()],
+        'roundId': roundId,
+        'checkPoints': [for (final p in checkPoints) p.toJson()],
       }),
     );
   }

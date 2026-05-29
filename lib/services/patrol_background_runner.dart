@@ -40,8 +40,18 @@ final class PatrolBackgroundRunner {
 
     PatrolTrackSocketClient.instance.configureFgsBridge(
       service: _service,
-      onRoundSynced: refreshTracking,
+      onRoundSynced: _onActiveRoundSyncedFromStomp,
     );
+  }
+
+  /// STOMP pushed active-round change — [PatrolTrackSocketClient] already ran
+  /// [PatrolActiveRoundSync.fetchAndPersist]. Only reload auto-scan here; not
+  /// [refreshTracking] (socket/token reconnect would loop with STOMP connect).
+  Future<void> _onActiveRoundSyncedFromStomp() async {
+    if (_shuttingDown) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    await _autoScan.reloadAfterRoundPersist();
   }
 
   Future<void> startTracking() => refreshTracking();
@@ -102,6 +112,7 @@ final class PatrolBackgroundRunner {
       return;
     }
 
+    // Generic FGS refresh — may no-op reattach if auto-scan already running.
     await _autoScan.refresh();
     if (!_socketEmitter.isListening) {
       await _socketEmitter.start();

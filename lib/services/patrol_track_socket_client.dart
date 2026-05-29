@@ -267,12 +267,14 @@ class PatrolTrackSocketClient {
 
   Future<void> _syncActiveRoundInFgs() async {
     try {
-      await PatrolActiveRoundSync.fetchAndPersist();
+      final r = await PatrolActiveRoundSync.fetchAndPersist();
+      if (!r.ok) return;
 
       await _onFgsRoundSynced?.call();
 
       _invokeMain(PatrolFgsInvokeEvents.activeRoundChanged);
     } catch (_) {
+      //
     }
   }
 

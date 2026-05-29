@@ -21,6 +21,7 @@ class PatrolRealtimeTrackService {
 
   StreamSubscription<SuperGpsEvent>? _gpsSub;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+  Timer? _connectivityReconnectDebounce;
 
   int? _roundId;
   bool _sessionTrackingActive = false;
@@ -52,9 +53,12 @@ class PatrolRealtimeTrackService {
 
   Future<void> onAuthenticated() async {
     _connectivitySub ??= Connectivity().onConnectivityChanged.listen((_) {
-      if (_sessionTrackingActive) {
-        unawaited(_connectTrackingSocket());
-      }
+      if (!_sessionTrackingActive) return;
+      _connectivityReconnectDebounce?.cancel();
+      _connectivityReconnectDebounce = Timer(
+        const Duration(seconds: 2),
+        () => unawaited(_onConnectivityRestored()),
+      );
     });
 
     PatrolTrackSocketClient.instance.onMockLocationAlert =
@@ -98,6 +102,20 @@ class PatrolRealtimeTrackService {
     await _ensureGpsPipeline();
   }
 
+  Future<void> _onConnectivityRestored() async {
+    if (!_sessionTrackingActive) return;
+    await _refreshTrackingConfigCache();
+    if (_backgroundEnabled) {
+      // FGS STOMP auto-reconnects; only start FGS if it dropped entirely.
+      if (await PatrolBackgroundService.isRunningSafe()) return;
+      unawaited(PatrolBackgroundService.startPatrolTracking());
+      return;
+    }
+    if (_socketEnabled) {
+      await _connectTrackingSocket();
+    }
+  }
+
   /// Main STOMP when not using FGS; FGS isolate STOMP when background mode is on.
   Future<void> _connectTrackingSocket() async {
     if (_backgroundEnabled) {
@@ -110,6 +128,14 @@ class PatrolRealtimeTrackService {
       return;
     }
     await PatrolTrackSocketClient.instance.connect();
+  }
+
+  /// Cập nhật `_roundId` từ prefs — không invoke FGS refresh (tránh vòng lặp).
+  Future<void> reloadRoundIdFromPrefs() async {
+    if (!_sessionTrackingActive) return;
+    final prefs = await SharedPreferences.getInstance();
+    final roundId = prefs.getInt(StorageKeys.patrolTrackRoundId);
+    _roundId = (roundId != null && roundId > 0) ? roundId : null;
   }
 
   /// Đọc `roundId` / auto-scan từ prefs ([PatrolActiveRoundSync]) rồi bật GPS hoặc FGS.
@@ -219,6 +245,8 @@ class PatrolRealtimeTrackService {
   Future<void> onSessionEnded() async {
     await stopSessionTracking();
 
+    _connectivityReconnectDebounce?.cancel();
+    _connectivityReconnectDebounce = null;
     await _connectivitySub?.cancel();
     _connectivitySub = null;
 
