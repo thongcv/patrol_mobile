@@ -4,16 +4,13 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'package:geolocator/geolocator.dart';
 
-import 'package:shared_preferences/shared_preferences.dart';
-
-import '../config/storage_keys.dart';
-
 import '../models/patrol_location_track_payload.dart';
 
 import '../utils/device_location.dart';
 
 import '../utils/super_gps_service.dart';
 
+import 'patrol_active_round_cache.dart';
 import 'patrol_background_service.dart';
 
 import 'patrol_track_offline_queue.dart';
@@ -119,10 +116,9 @@ class PatrolRealtimeTrackService {
 
     await _refreshTrackingConfigCache();
 
-    final prefs = await SharedPreferences.getInstance();
     await Future.wait<void>([
-      prefs.setBool(StorageKeys.patrolTrackEmitEnabled, true),
-      prefs.setBool(StorageKeys.patrolTrackForegroundScanBusy, false),
+      PatrolActiveRoundCache.setTrackEmitEnabled(true),
+      PatrolActiveRoundCache.setForegroundScanBusy(false),
       PatrolActiveRoundSync.clearBackgroundAutoScanArmed(),
     ]);
     // Round cache from GET; auto-scan armed only via STOMP active-round-changed.
@@ -214,13 +210,11 @@ class PatrolRealtimeTrackService {
 
     _gpsSub = null;
 
-    final prefs = await SharedPreferences.getInstance();
-
-    await prefs.setBool(StorageKeys.patrolTrackEmitEnabled, false);
+    await PatrolActiveRoundCache.setTrackEmitEnabled(false);
 
     await PatrolActiveRoundSync.clearBackgroundAutoScanArmed();
 
-    await prefs.setBool(StorageKeys.patrolTrackForegroundScanBusy, false);
+    await PatrolActiveRoundCache.setForegroundScanBusy(false);
 
     await _refreshTrackingConfigCache();
 
@@ -306,11 +300,9 @@ class PatrolRealtimeTrackService {
   /// Socket tracking continues.
 
   Future<void> setForegroundRoundScanBusy(bool busy) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.reload();
-    final was = prefs.getBool(StorageKeys.patrolTrackForegroundScanBusy) ?? false;
+    final was = await PatrolActiveRoundCache.isForegroundScanBusy();
     if (was == busy) return;
-    await prefs.setBool(StorageKeys.patrolTrackForegroundScanBusy, busy);
+    await PatrolActiveRoundCache.setForegroundScanBusy(busy);
 
     if (!_sessionTrackingActive) return;
 
@@ -334,9 +326,7 @@ class PatrolRealtimeTrackService {
 
     PatrolTrackSocketClient.instance.onMockLocationAlert = null;
 
-    final prefs = await SharedPreferences.getInstance();
-
-    await prefs.remove(StorageKeys.patrolTrackEmitEnabled);
+    await PatrolActiveRoundCache.clearTrackEmitEnabled();
   }
 
   Future<void> _startForegroundGpsFanOut() async {
@@ -346,15 +336,15 @@ class PatrolRealtimeTrackService {
 
     if (!SuperGpsService.isSupported) return;
 
-    final minMoveM = await PatrolTrackingConfigStore.minMoveM();
+    final config = await PatrolTrackingConfigStore.load();
     final enableBarometer =
         await SuperGpsService.isBarometerHardwareSupported();
     _gpsSub = listenDeviceGpsForMap(
-      minMoveM: minMoveM,
+      minMoveM: config.minMoveM,
       streamOptions: SuperGpsStreamOptions(
-        updateIntervalMs: 1000,
-        minUpdateIntervalMs: 800,
-        minUpdateDistanceMeters: minMoveM.round(),
+        updateIntervalMs: config.updateIntervalMs,
+        minUpdateIntervalMs: config.minUpdateIntervalMs,
+        minUpdateDistanceMeters: config.minMoveM.round(),
         enableBarometer: enableBarometer,
       ),
       onPosition: (position) {
@@ -364,11 +354,7 @@ class PatrolRealtimeTrackService {
   }
 
   Future<void> handlePositionFromBackground(Position position) async {
-    final prefs = await SharedPreferences.getInstance();
-
-    final emit = prefs.getBool(StorageKeys.patrolTrackEmitEnabled) ?? false;
-
-    if (!emit) return;
+    if (!await PatrolActiveRoundCache.isTrackEmitEnabled()) return;
 
     await _dispatchPosition(position);
   }
@@ -430,7 +416,6 @@ class PatrolRealtimeTrackService {
       } else if (!_mockViolation.isClosed) {
         _mockViolation.add(true);
       }
-
       return;
     }
 

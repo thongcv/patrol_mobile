@@ -6,9 +6,67 @@ import '../config/storage_keys.dart';
 import '../models/active_patrol_round.dart';
 import '../models/check_point.dart';
 
-/// Caches active patrol round for background auto-scan (UI-independent).
+/// Active round snapshot + FGS coordination prefs (cross-isolate).
 abstract final class PatrolActiveRoundCache {
   PatrolActiveRoundCache._();
+
+  static Future<SharedPreferences> _prefs({bool reload = false}) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (reload) await prefs.reload();
+    return prefs;
+  }
+
+  // --- FGS coordination prefs ---
+
+  static Future<bool> isTrackEmitEnabled({bool reload = true}) async {
+    final prefs = await _prefs(reload: reload);
+    return prefs.getBool(StorageKeys.patrolTrackEmitEnabled) ?? false;
+  }
+
+  static Future<void> setTrackEmitEnabled(bool enabled) async {
+    final prefs = await _prefs();
+    await prefs.setBool(StorageKeys.patrolTrackEmitEnabled, enabled);
+  }
+
+  static Future<void> clearTrackEmitEnabled() async {
+    final prefs = await _prefs();
+    await prefs.remove(StorageKeys.patrolTrackEmitEnabled);
+  }
+
+  static Future<bool> isBackgroundAutoScanArmed({bool reload = true}) async {
+    final prefs = await _prefs(reload: reload);
+    return prefs.getBool(StorageKeys.patrolTrackBackgroundAutoScanEnabled) ??
+        false;
+  }
+
+  static Future<void> setBackgroundAutoScanArmed(bool armed) async {
+    final prefs = await _prefs();
+    await prefs.setBool(StorageKeys.patrolTrackBackgroundAutoScanEnabled, armed);
+  }
+
+  static Future<bool> isForegroundScanBusy({bool reload = true}) async {
+    final prefs = await _prefs(reload: reload);
+    return prefs.getBool(StorageKeys.patrolTrackForegroundScanBusy) ?? false;
+  }
+
+  static Future<void> setForegroundScanBusy(bool busy) async {
+    final prefs = await _prefs();
+    await prefs.setBool(StorageKeys.patrolTrackForegroundScanBusy, busy);
+  }
+
+  static Future<bool> isPendingFgsReloadAfterRound({bool reload = true}) async {
+    final prefs = await _prefs(reload: reload);
+    return prefs.getBool(StorageKeys.patrolTrackPendingFgsReloadAfterRound) ??
+        false;
+  }
+
+  static Future<void> setPendingFgsReloadAfterRound(bool pending) async {
+    final prefs = await _prefs();
+    await prefs.setBool(
+      StorageKeys.patrolTrackPendingFgsReloadAfterRound,
+      pending,
+    );
+  }
 
   /// GET `/me/active` may omit `verified` — only then keep local verified from cache.
   /// When API sends `verified: false`, trust the server.
@@ -80,7 +138,7 @@ abstract final class PatrolActiveRoundCache {
   }
 
   static Future<void> save(ActivePatrolRound? active) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _prefs();
     if (active == null) {
       await prefs.remove(StorageKeys.patrolTrackActiveRoundSnapshot);
       await prefs.remove(StorageKeys.patrolTrackActiveRoundRevision);
@@ -106,10 +164,11 @@ abstract final class PatrolActiveRoundCache {
       }),
     );
     await _bumpRevision(prefs);
+    await prefs.reload();
   }
 
   static Future<int> readRevision() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _prefs();
     return prefs.getInt(StorageKeys.patrolTrackActiveRoundRevision) ?? 0;
   }
 
@@ -133,8 +192,7 @@ abstract final class PatrolActiveRoundCache {
   }
 
   static Future<({int roundId, List<CheckPoint> checkPoints})?> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.reload();
+    final prefs = await _prefs(reload: true);
     final raw = prefs.getString(StorageKeys.patrolTrackActiveRoundSnapshot);
     if (raw == null || raw.isEmpty) return null;
     try {
@@ -181,7 +239,7 @@ abstract final class PatrolActiveRoundCache {
         snapshotFingerprint(existing) == snapshotFingerprint(next)) {
       return;
     }
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _prefs();
     await prefs.setString(
       StorageKeys.patrolTrackActiveRoundSnapshot,
       jsonEncode(<String, dynamic>{

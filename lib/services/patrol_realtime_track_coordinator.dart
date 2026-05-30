@@ -8,6 +8,7 @@ import '../utils/top_toast.dart';
 import 'patrol_background_service.dart';
 import 'patrol_realtime_track_service.dart';
 import 'patrol_session_listen.dart';
+import 'patrol_track_socket_dispatch.dart';
 
 /// GPS + emit vị trí + FGS — tách khỏi đồng bộ vòng tuần tra ([PatrolActiveRoundCoordinator]).
 abstract final class PatrolRealtimeTrackCoordinator {
@@ -37,12 +38,20 @@ abstract final class PatrolRealtimeTrackCoordinator {
 
     PatrolBackgroundService.relayFgsMockLocationAlert =
         PatrolRealtimeTrackService.instance.notifyServerMockLocationAlert;
+
+    PatrolTrackSocketDispatch.onTrackingConfigChanged =
+        _requestRefreshAfterConfigPush;
+  }
+
+  static void _requestRefreshAfterConfigPush() {
+    unawaited(refreshTracking());
   }
 
   static void detach() {
     _mockAlertSub?.cancel();
     _mockAlertSub = null;
     PatrolBackgroundService.relayFgsMockLocationAlert = null;
+    PatrolTrackSocketDispatch.onTrackingConfigChanged = null;
     _navigatorKey = null;
     _currentLocale = null;
   }

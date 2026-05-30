@@ -10,6 +10,7 @@ abstract final class PatrolFgsInvokeEvents {
 
   static const checkpointSuccess = 'checkpointSuccess';
   static const activeRoundChanged = 'activeRoundChanged';
+  static const trackingConfigChanged = 'trackingConfigChanged';
   static const mockLocationAlert = 'mockLocationAlert';
   static const socketConnected = 'socketConnected';
   static const positionUpdate = 'positionUpdate';

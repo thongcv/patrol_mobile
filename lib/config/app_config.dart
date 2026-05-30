@@ -34,6 +34,10 @@ class AppConfig {
   static const String stompActiveRoundChangedDestination =
       '/user/queue/patrol/active-round-changed';
 
+  /// Tracking config changed — `{ "backgroundAutoScan", ... }` partial or full config.
+  static const String stompTrackingConfigChangedDestination =
+      '/user/queue/patrol/tracking-config-changed';
+
   static String get effectiveBaseUrl {
     if (apiBaseUrl.isNotEmpty) return apiBaseUrl.replaceAll(RegExp(r'/$'), '');
     if (devFallbackBaseUrl.isNotEmpty) {

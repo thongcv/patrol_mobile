@@ -1,7 +1,5 @@
-import 'package:shared_preferences/shared_preferences.dart';
-
-import '../config/storage_keys.dart';
 import 'account_session_store.dart';
+import 'patrol_active_round_cache.dart';
 import 'patrol_active_round_coordinator.dart';
 import 'patrol_active_round_sync.dart';
 import 'patrol_realtime_track_coordinator.dart';
@@ -66,8 +64,7 @@ abstract final class PatrolStartupCoordinator {
     }
     // Main may have cleared this in [startSessionTracking]; FGS must not read a stale `true`
     // left from a killed mid-scan session (PatrolRoundScreen may not mount yet).
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(StorageKeys.patrolTrackForegroundScanBusy, false);
+    await PatrolActiveRoundCache.setForegroundScanBusy(false);
     await PatrolActiveRoundSync.clearBackgroundAutoScanArmed();
     await PatrolActiveRoundCoordinator.bootstrapAuthenticatedSession();
     // Round prefs first; tracking bootstrap ends with syncTrackingAfterRoundPersisted(force).

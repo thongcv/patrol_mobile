@@ -6,17 +6,17 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../config/storage_keys.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/patrol_background_plugin_registrant.dart';
 import 'app_locale_store.dart';
+import 'patrol_active_round_cache.dart';
 import 'patrol_active_round_coordinator.dart';
 import 'patrol_background_isolate_flags.dart';
 import 'patrol_background_runner.dart';
 import '../utils/patrol_checkpoint_tts.dart';
 import 'patrol_fgs_invoke_events.dart';
 import 'patrol_foreground_notification.dart';
+import 'patrol_realtime_track_coordinator.dart';
 import 'patrol_realtime_track_service.dart';
 import 'patrol_tracking_config_store.dart';
 
@@ -548,6 +548,10 @@ abstract final class PatrolBackgroundService {
       },
     );
     safeRelay(
+      PatrolFgsInvokeEvents.trackingConfigChanged,
+      (_) => unawaited(PatrolRealtimeTrackCoordinator.refreshTracking()),
+    );
+    safeRelay(
       PatrolFgsInvokeEvents.socketConnected,
       (_) async {
         // FGS owns STOMP in background mode — syncing here re-triggers refresh loops.
@@ -619,8 +623,7 @@ abstract final class PatrolBackgroundService {
       await _waitForServiceRunning(service);
     }
     if (afterRoundPersist) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(StorageKeys.patrolTrackPendingFgsReloadAfterRound, true);
+      await PatrolActiveRoundCache.setPendingFgsReloadAfterRound(true);
     }
     await _invokeBackgroundRefresh(
       service,

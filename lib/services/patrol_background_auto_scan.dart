@@ -1,8 +1,5 @@
 import 'dart:async';
 
-import 'package:shared_preferences/shared_preferences.dart';
-
-import '../config/storage_keys.dart';
 import '../models/check_point.dart';
 import '../utils/check_point_proximity.dart';
 import '../utils/device_location.dart';
@@ -83,9 +80,7 @@ class PatrolBackgroundAutoScan {
   }
 
   Future<void> _reloadAfterRoundPersistImpl() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.reload();
-    if (_autoScanPaused || await _isForegroundScanBusy()) {
+    if (_autoScanPaused || await PatrolActiveRoundCache.isForegroundScanBusy()) {
       await _detachScan();
       return;
     }
@@ -99,7 +94,7 @@ class PatrolBackgroundAutoScan {
   }
 
   Future<void> _refreshImpl() async {
-    if (_autoScanPaused || await _isForegroundScanBusy()) {
+    if (_autoScanPaused || await PatrolActiveRoundCache.isForegroundScanBusy()) {
       await _detachScan();
       return;
     }
@@ -156,22 +151,18 @@ class PatrolBackgroundAutoScan {
   }
 
   Future<void> _syncScanStateImpl() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.reload();
-    final emit = prefs.getBool(StorageKeys.patrolTrackEmitEnabled) ?? false;
+    final emit = await PatrolActiveRoundCache.isTrackEmitEnabled();
     if (!emit ||
         !await PatrolTrackingConfigStore.backgroundAutoScanEnabled()) {
       if (_autoScanActive) await _detachScan();
       return;
     }
-    final armed =
-        prefs.getBool(StorageKeys.patrolTrackBackgroundAutoScanEnabled) ??
-            false;
+    final armed = await PatrolActiveRoundCache.isBackgroundAutoScanArmed();
     if (!armed || _autoScanPaused) {
       if (_autoScanActive) await _detachScan();
       return;
     }
-    if (await _isForegroundScanBusy()) {
+    if (await PatrolActiveRoundCache.isForegroundScanBusy()) {
       if (_autoScanActive) await _detachScan();
       return;
     }
@@ -222,7 +213,7 @@ class PatrolBackgroundAutoScan {
     required DeviceLocationSample sample,
   }) async {
     if (_autoScanPaused) return;
-    if (await _isForegroundScanBusy()) return;
+    if (await PatrolActiveRoundCache.isForegroundScanBusy()) return;
 
     final active = await _currentActiveSnapshot();
     if (active == null) return;
@@ -449,11 +440,5 @@ class PatrolBackgroundAutoScan {
 
   void _relayCheckpointVerified(CheckPoint point) {
     _onCheckpointVerified?.call(point);
-  }
-
-  static Future<bool> _isForegroundScanBusy() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.reload();
-    return prefs.getBool(StorageKeys.patrolTrackForegroundScanBusy) ?? false;
   }
 }

@@ -6,12 +6,8 @@ import 'package:flutter/services.dart';
 
 import 'package:flutter_background_service/flutter_background_service.dart';
 
-import 'package:shared_preferences/shared_preferences.dart';
-
-
-
-import '../config/storage_keys.dart';
 import '../models/check_point.dart';
+import 'patrol_active_round_cache.dart';
 import 'patrol_background_auto_scan.dart';
 
 import 'patrol_background_gps_hub.dart';
@@ -91,6 +87,8 @@ final class PatrolBackgroundRunner {
 
       onRoundSynced: _onActiveRoundSyncedFromStomp,
 
+      onConfigUpdated: _onTrackingConfigUpdatedFromStomp,
+
     );
 
   }
@@ -106,10 +104,13 @@ final class PatrolBackgroundRunner {
   }
 
   Future<void> _handleActiveRoundSyncedFromStomp() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.reload();
-    await prefs.setBool(StorageKeys.patrolTrackPendingFgsReloadAfterRound, false);
+    await PatrolActiveRoundCache.setPendingFgsReloadAfterRound(false);
     unawaited(_autoScan.reloadAfterRoundPersist());
+  }
+
+  Future<void> _onTrackingConfigUpdatedFromStomp() async {
+    if (_shuttingDown) return;
+    unawaited(refreshTracking(reloadAutoScanAfterRound: true));
   }
 
 
@@ -118,13 +119,7 @@ final class PatrolBackgroundRunner {
 
   Future<void> startTracking() async {
 
-    final prefs = await SharedPreferences.getInstance();
-
-    await prefs.reload();
-
-    final pending = prefs.getBool(StorageKeys.patrolTrackPendingFgsReloadAfterRound) ??
-
-            false;
+    final pending = await PatrolActiveRoundCache.isPendingFgsReloadAfterRound();
 
     await refreshTracking(reloadAutoScanAfterRound: pending);
 
@@ -270,13 +265,7 @@ final class PatrolBackgroundRunner {
 
 
 
-    final prefs = await SharedPreferences.getInstance();
-
-    await prefs.reload();
-
-
-
-    final emit = prefs.getBool(StorageKeys.patrolTrackEmitEnabled) ?? false;
+    final emit = await PatrolActiveRoundCache.isTrackEmitEnabled();
 
     if (!emit) {
 
@@ -298,9 +287,7 @@ final class PatrolBackgroundRunner {
 
     if (reloadAutoScanAfterRound) {
 
-      final prefs = await SharedPreferences.getInstance();
-
-      await prefs.setBool(StorageKeys.patrolTrackPendingFgsReloadAfterRound, false);
+      await PatrolActiveRoundCache.setPendingFgsReloadAfterRound(false);
 
       // Pick up new checkpoints even if FGS survived — do not block refresh chain.
 

@@ -49,6 +49,8 @@ class PatrolTrackSocketClient {
 
   Future<void> Function()? _onFgsRoundSynced;
 
+  Future<void> Function()? _onFgsConfigUpdated;
+
   bool get isConnected => _client?.connected ?? false;
 
   bool get _runsInFgs =>
@@ -65,10 +67,14 @@ class PatrolTrackSocketClient {
     required ServiceInstance service,
 
     required Future<void> Function() onRoundSynced,
+
+    required Future<void> Function() onConfigUpdated,
   }) {
     _fgsService = service;
 
     _onFgsRoundSynced = onRoundSynced;
+
+    _onFgsConfigUpdated = onConfigUpdated;
   }
 
   Future<void> connect() async {
@@ -235,6 +241,12 @@ class PatrolTrackSocketClient {
         callback: _onActiveRoundChangedFrame,
       );
 
+      connectedClient.subscribe(
+        destination: AppConfig.stompTrackingConfigChangedDestination,
+
+        callback: _onTrackingConfigChangedFrame,
+      );
+
       unawaited(_flushOfflineQueue());
 
       return;
@@ -253,16 +265,49 @@ class PatrolTrackSocketClient {
 
       callback: _onActiveRoundChangedFrame,
     );
+
+    connectedClient.subscribe(
+      destination: AppConfig.stompTrackingConfigChangedDestination,
+
+      callback: _onTrackingConfigChangedFrame,
+    );
   }
 
+  void _onTrackingConfigChangedFrame(StompFrame frame) {
+    unawaited(_handleTrackingConfigChangedFrame(frame));
+  }
+
+  Future<void> _handleTrackingConfigChangedFrame(StompFrame frame) async {
+    final updated = await _applyConfigFromActiveRoundFrame(frame);
+    if (!updated) return;
+    if (_runsInFgs) {
+      unawaited(_onFgsConfigUpdated?.call());
+      _invokeMain(PatrolFgsInvokeEvents.trackingConfigChanged);
+      return;
+    }
+    PatrolTrackSocketDispatch.onTrackingConfigChanged?.call();
+  }
   void _onActiveRoundChangedFrame(StompFrame frame) {
     if (_runsInFgs) {
       unawaited(_syncActiveRoundInFgs());
-
       return;
     }
-
     PatrolTrackSocketDispatch.onActiveRoundChanged?.call();
+  }
+
+  Future<bool> _applyConfigFromActiveRoundFrame(StompFrame frame) async {
+    final body = frame.body?.trim();
+    if (body == null || body.isEmpty) return false;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map) return false;
+      final result = await PatrolTrackingConfigStore.applyFromActiveRoundFrame(
+        Map<String, dynamic>.from(decoded),
+      );
+      return result?.updated ?? false;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> _syncActiveRoundInFgs() async {

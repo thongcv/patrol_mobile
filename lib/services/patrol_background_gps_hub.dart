@@ -11,11 +11,10 @@ class PatrolBackgroundGpsHub {
   PatrolBackgroundGpsHub();
 
   StreamSubscription<SuperGpsEvent>? _gpsSub;
-  var _enableBarometer = false;
   var _scanWantsBarometer = false;
   var _listening = false;
   var _stopped = true;
-  double _minMoveM = 5.0;
+  SuperGpsStreamOptions? _streamOptions;
 
   PatrolBackgroundGpsHandler? autoScanHandler;
   PatrolBackgroundGpsHandler? trackHandler;
@@ -33,30 +32,33 @@ class PatrolBackgroundGpsHub {
       return;
     }
 
-    final needsBaro = _scanWantsBarometer;
-    final optionsChanged = _listening && _enableBarometer != needsBaro;
-    _enableBarometer = needsBaro;
-
-    if (_listening && !optionsChanged) return;
-
-    _stopped = false;
-    await _cancelSubscription();
-
     final denied = await checkPatrolBackgroundLocationForTracking();
     if (denied != null) return;
 
     if (!SuperGpsService.isSupported) return;
 
-    _minMoveM = await PatrolTrackingConfigStore.minMoveM();
-
-    SuperGpsService.configureStream(
-      SuperGpsStreamOptions(
-        updateIntervalMs: 1000,
-        minUpdateIntervalMs: 800,
-        minUpdateDistanceMeters: _minMoveM.round(),
-        enableBarometer: needsBaro,
-      ),
+    final nextOptions = await _streamOptionsFromConfig(
+      enableBarometer: _scanWantsBarometer,
     );
+
+    if (_listening && _streamOptions != null) {
+      final baroChanged = _streamOptions!.enableBarometer != nextOptions.enableBarometer;
+      final streamParamsChanged = _streamParamsChanged(_streamOptions!, nextOptions);
+
+      if (!baroChanged && !streamParamsChanged) return;
+
+      if (!baroChanged && streamParamsChanged) {
+        _streamOptions = nextOptions;
+        SuperGpsService.configureStream(nextOptions);
+        return;
+      }
+    }
+
+    _stopped = false;
+    await _cancelSubscription();
+
+    _streamOptions = nextOptions;
+    SuperGpsService.configureStream(nextOptions);
 
     _gpsSub = SuperGpsService.instance.locationEventStream.listen(
       _dispatchEvent,
@@ -72,7 +74,7 @@ class PatrolBackgroundGpsHub {
     autoScanHandler = null;
     trackHandler = null;
     _scanWantsBarometer = false;
-    _enableBarometer = false;
+    _streamOptions = null;
     await _cancelSubscription();
     await SuperGpsService.shutdown();
   }
@@ -89,5 +91,26 @@ class PatrolBackgroundGpsHub {
     autoScanHandler?.call(event);
     if (_stopped) return;
     trackHandler?.call(event);
+  }
+
+  static bool _streamParamsChanged(
+    SuperGpsStreamOptions current,
+    SuperGpsStreamOptions next,
+  ) {
+    return current.updateIntervalMs != next.updateIntervalMs ||
+        current.minUpdateIntervalMs != next.minUpdateIntervalMs ||
+        current.minUpdateDistanceMeters != next.minUpdateDistanceMeters;
+  }
+
+  static Future<SuperGpsStreamOptions> _streamOptionsFromConfig({
+    required bool enableBarometer,
+  }) async {
+    final config = await PatrolTrackingConfigStore.load();
+    return SuperGpsStreamOptions(
+      updateIntervalMs: config.updateIntervalMs,
+      minUpdateIntervalMs: config.minUpdateIntervalMs,
+      minUpdateDistanceMeters: config.minMoveM.round(),
+      enableBarometer: enableBarometer,
+    );
   }
 }
