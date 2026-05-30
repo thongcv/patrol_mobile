@@ -14,6 +14,7 @@ import '../http/patrol_dio.dart';
 import '../models/patrol_tracking_config.dart';
 import 'account_session_store.dart';
 import 'patrol_tracking_config_store.dart';
+import 'patrol_active_round_sync.dart';
 
 class AuthService {
   AuthService._();
@@ -57,6 +58,7 @@ class AuthService {
           await PatrolTrackingConfigStore.save(
             PatrolTrackingConfig.fromLoginEnvelope(data),
           );
+          await PatrolActiveRoundSync.clearBackgroundAutoScanArmed();
           await AccountSessionStore.instance.storeAccessToken(accessToken);
           return ApiResult.success(
             LoginSuccess(token: bearer, accessToken: accessToken),

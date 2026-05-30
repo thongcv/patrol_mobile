@@ -29,7 +29,6 @@ abstract final class PatrolRealtimeTrackCoordinator {
   }) {
     _navigatorKey = navigatorKey;
     _currentLocale = currentLocale;
-    _session.attach();
 
     _mockAlertSub ??=
         PatrolRealtimeTrackService.instance.mockViolationAlerts.listen((_) {
@@ -41,7 +40,6 @@ abstract final class PatrolRealtimeTrackCoordinator {
   }
 
   static void detach() {
-    _session.detach();
     _mockAlertSub?.cancel();
     _mockAlertSub = null;
     PatrolBackgroundService.relayFgsMockLocationAlert = null;
@@ -51,21 +49,56 @@ abstract final class PatrolRealtimeTrackCoordinator {
 
   static Future<void> resumeIfSession() => _session.resumeIfSession();
 
+  /// Called from [PatrolStartupCoordinator] after location gate — not via
+  /// [PatrolSessionListen.resumeIfSession] (separate [_session] + in-flight skip).
+  static Future<void> bootstrapAuthenticatedSession() async {
+    _session.sessionActive = true;
+    await _onAuthenticated();
+  }
+
   static Future<void> _onAuthenticated() async {
     await PatrolRealtimeTrackService.instance.onAuthenticated();
-    await PatrolRealtimeTrackService.instance.startSessionTracking();
+    final service = PatrolRealtimeTrackService.instance;
+    if (service.isSessionTracking) {
+      await service.refreshActiveTracking();
+      await syncTrackingAfterRoundPersisted(force: true);
+    } else {
+      await service.startSessionTracking();
+      await syncTrackingAfterRoundPersisted(force: true);
+    }
     _promptBackgroundLocationIfNeeded();
   }
 
   static Future<void> onSessionEnded() async {
     _session.sessionActive = false;
+    _lastSyncTrackingAfterRound = null;
     await PatrolRealtimeTrackService.instance.onSessionEnded();
     await PatrolBackgroundService.stopPatrolTracking();
   }
 
-  /// Sau [PatrolActiveRoundSync] ghi prefs — bật GPS/FGS theo `roundId` đã persist.
-  static Future<void> syncTrackingAfterRoundPersisted() async {
-    if (!await _session.ensureSessionActive()) return;
+  static DateTime? _lastSyncTrackingAfterRound;
+
+  /// Sau [PatrolActiveRoundSync] ghi prefs — refresh FGS/GPS (auto-scan prefs).
+  ///
+  /// [force] skips coordinator debounce (bootstrap / STOMP after round persist).
+  /// Does not start tracking — caller must run [bootstrapAuthenticatedSession] first.
+  static Future<void> syncTrackingAfterRoundPersisted({bool force = false}) async {
+    if (!PatrolRealtimeTrackService.instance.isSessionTracking) {
+      return;
+    }
+
+    if (!force) {
+      final now = DateTime.now();
+      final last = _lastSyncTrackingAfterRound;
+      if (last != null &&
+          now.difference(last) < const Duration(milliseconds: 1500)) {
+        return;
+      }
+      _lastSyncTrackingAfterRound = now;
+    } else {
+      _lastSyncTrackingAfterRound = DateTime.now();
+    }
+
     await PatrolRealtimeTrackService.instance.syncTrackingAfterRoundPersisted();
   }
 
@@ -73,6 +106,7 @@ abstract final class PatrolRealtimeTrackCoordinator {
   static Future<void> refreshTracking() async {
     if (!await _session.ensureSessionActive()) return;
     await PatrolRealtimeTrackService.instance.refreshActiveTracking();
+    await syncTrackingAfterRoundPersisted();
   }
 
   static void _promptBackgroundLocationIfNeeded() {

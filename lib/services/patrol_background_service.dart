@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' show DartPluginRegistrant;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../config/storage_keys.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/patrol_background_plugin_registrant.dart';
 import 'app_locale_store.dart';
@@ -15,6 +17,7 @@ import 'patrol_background_runner.dart';
 import '../utils/patrol_checkpoint_tts.dart';
 import 'patrol_fgs_invoke_events.dart';
 import 'patrol_foreground_notification.dart';
+import 'patrol_realtime_track_service.dart';
 import 'patrol_tracking_config_store.dart';
 
 /// iOS background entry from [flutter_background_service] — OS may wake the app briefly.
@@ -109,6 +112,7 @@ abstract final class PatrolBackgroundService {
   static Future<void>? _startServiceFuture;
   static Future<void>? _startTrackingFuture;
   static Future<void>? _refreshPatrolTrackingChain;
+  static DateTime? _lastBackgroundRefreshInvoke;
   static void Function(String checkpointName)? _relayCheckpointSuccessToUi;
   static void Function()? relayFgsMockLocationAlert;
   static Timer? _notificationRevertTimer;
@@ -145,11 +149,31 @@ abstract final class PatrolBackgroundService {
   static void relayCheckpointSuccessToUi(String checkpointName) =>
       _relayCheckpointSuccessToUi?.call(checkpointName);
 
-  /// Notifies main isolate that [PatrolActiveRoundCache] changed (after FGS auto-scan).
-  static void notifyActiveRoundChangedFromFgs() {
+  /// Local mock GPS in FGS — relays to UI via [mockLocationAlert] (same as STOMP).
+  static void notifyMockLocationFromFgs() {
     try {
       _backgroundServiceInstance?.invoke(
-        PatrolFgsInvokeEvents.activeRoundChanged,
+        PatrolFgsInvokeEvents.mockLocationAlert,
+      );
+    } on MissingPluginException {
+      //
+    } on PlatformException {
+      //
+    }
+  }
+
+  /// Throttled GPS sample from FGS — map/UI on main isolate (not STOMP).
+  static void notifyPositionUpdateFromFgs(Position position) {
+    if (position.isMocked) return;
+    try {
+      _backgroundServiceInstance?.invoke(
+        PatrolFgsInvokeEvents.positionUpdate,
+        {
+          'latitude': position.latitude,
+          'longitude': position.longitude,
+          'timestamp': position.timestamp.millisecondsSinceEpoch,
+          'accuracy': position.accuracy,
+        },
       );
     } on MissingPluginException {
       //
@@ -286,11 +310,9 @@ abstract final class PatrolBackgroundService {
         return;
       }
       final service = _service!;
-      if (await _isServiceRunning(service)) {
-        _attachCheckpointSuccessListener();
-        _initialized = true;
-        return;
-      }
+      // Always [configure] on the UI isolate — even when FGS is already running.
+      // Skipping it leaves the EventChannel unsubscribed; FGS [invoke] then succeeds
+      // natively but events never reach [FlutterBackgroundService.on] (silent drop).
       final l10n = await _l10nFromPrefs();
       final androidConfiguration = AndroidConfiguration(
         onStart: patrolBackgroundOnStart,
@@ -372,15 +394,38 @@ abstract final class PatrolBackgroundService {
     return false;
   }
 
-  /// Starts FGS when needed, waits until running, then one `refresh` to background isolate.
-  static Future<void> _syncTrackingWithBackground(
+  /// Starts FGS when needed and waits until running (no `refresh` — caller owns that).
+  static Future<void> _ensureBackgroundServiceRunning(
     FlutterBackgroundService service,
   ) async {
-    if (!await _isServiceRunning(service)) {
-      await _ensureServiceRunning(service);
-      if (!await _waitForServiceRunning(service)) return;
+    if (await _isServiceRunning(service)) return;
+    await _ensureServiceRunning(service);
+    await _waitForServiceRunning(service);
+  }
+
+  /// One `refresh` in the background isolate (FGS must already be running).
+  static Future<void> _invokeBackgroundRefresh(
+    FlutterBackgroundService service, {
+    bool afterRoundPersist = false,
+  }) async {
+    if (!await _isServiceRunning(service)) return;
+    // Round-persist reload must reach FGS even if a generic refresh ran <1.5s ago.
+    if (!afterRoundPersist) {
+      final now = DateTime.now();
+      final last = _lastBackgroundRefreshInvoke;
+      if (last != null &&
+          now.difference(last) < const Duration(milliseconds: 1500)) {
+        return;
+      }
     }
-    await _invoke(service, PatrolFgsInvokeEvents.refresh);
+    _lastBackgroundRefreshInvoke = DateTime.now();
+    await _invoke(
+      service,
+      PatrolFgsInvokeEvents.refresh,
+      afterRoundPersist
+          ? <String, dynamic>{'afterRoundPersist': true}
+          : null,
+    );
   }
 
   static Future<bool> _isServiceRunning(FlutterBackgroundService service) async {
@@ -411,13 +456,19 @@ abstract final class PatrolBackgroundService {
 
   static Future<void> _invoke(
     FlutterBackgroundService service,
-    String event,
-  ) async {
+    String event, [
+    Map<String, dynamic>? args,
+  ]) async {
     try {
-      service.invoke(event);
+      if (args == null || args.isEmpty) {
+        service.invoke(event);
+      } else {
+        service.invoke(event, args);
+      }
     } on MissingPluginException {
       // Plugin may be temporarily unavailable during startup races.
     } on PlatformException {
+      // Plugin may be temporarily unavailable during startup races.
     }
   }
 
@@ -427,6 +478,7 @@ abstract final class PatrolBackgroundService {
     } on MissingPluginException {
       // Plugin may be temporarily unavailable during startup races.
     } on PlatformException {
+      // Plugin may be temporarily unavailable during startup races.
     }
   }
 
@@ -446,28 +498,40 @@ abstract final class PatrolBackgroundService {
 
     void safeRelay(String event, void Function(dynamic payload) onEvent) {
       try {
-        final sub = FlutterBackgroundService()
+        final sub = fgs
             .on(event)
-            .listen((payload) => onEvent(payload));
+            .handleError((Object _, StackTrace _) {})
+            .listen(
+              onEvent,
+              onError: (Object _, StackTrace _) {},
+              cancelOnError: false,
+            );
         _mainFgsRelaySubs.add(sub);
       } on MissingPluginException {
         // Event channel may be unavailable in startup plugin races.
       } on PlatformException {
+        // Event channel may be unavailable in startup plugin races.
       }
     }
 
     try {
-      _checkpointSuccessSub = FlutterBackgroundService()
+      _checkpointSuccessSub = fgs
           .on(PatrolFgsInvokeEvents.checkpointSuccess)
-          .listen((payload) {
-        final map = payload is Map
-            ? Map<Object?, Object?>.from(payload as Map)
-            : null;
-        if (map == null) return;
-        final checkpointName = (map['checkpointName'] as String?)?.trim() ?? '';
-        if (checkpointName.isEmpty) return;
-        unawaited(_speakCheckpointOnMainIsolate(checkpointName));
-      });
+          .handleError((Object _, StackTrace _) {})
+          .listen(
+            (payload) {
+              final map = payload is Map
+                  ? Map<Object?, Object?>.from(payload as Map)
+                  : null;
+              if (map == null) return;
+              final checkpointName =
+                  (map['checkpointName'] as String?)?.trim() ?? '';
+              if (checkpointName.isEmpty) return;
+              unawaited(_speakCheckpointOnMainIsolate(checkpointName));
+            },
+            onError: (Object _, StackTrace _) {},
+            cancelOnError: false,
+          );
     } on MissingPluginException {
       //
     } on PlatformException {
@@ -476,7 +540,12 @@ abstract final class PatrolBackgroundService {
 
     safeRelay(
       PatrolFgsInvokeEvents.activeRoundChanged,
-      (_) => unawaited(PatrolActiveRoundCoordinator.applyFgsRoundUpdate()),
+      (payload) {
+        final map = payload is Map
+            ? Map<Object?, Object?>.from(payload)
+            : null;
+        unawaited(PatrolActiveRoundCoordinator.applyFgsRoundUpdate(payload: map));
+      },
     );
     safeRelay(
       PatrolFgsInvokeEvents.socketConnected,
@@ -489,6 +558,10 @@ abstract final class PatrolBackgroundService {
     safeRelay(
       PatrolFgsInvokeEvents.mockLocationAlert,
       (_) => relayFgsMockLocationAlert?.call(),
+    );
+    safeRelay(
+      PatrolFgsInvokeEvents.positionUpdate,
+      PatrolRealtimeTrackService.instance.notifyPositionFromFgsRelay,
     );
   }
 
@@ -517,32 +590,44 @@ abstract final class PatrolBackgroundService {
 
   static Future<void> refreshPatrolTracking({
     bool startIfNotRunning = false,
+    bool afterRoundPersist = false,
   }) async {
     if (!await _awaitConfigured()) return;
     _refreshPatrolTrackingChain =
         (_refreshPatrolTrackingChain ?? Future<void>.value()).then(
-      (_) => _refreshPatrolTrackingImpl(startIfNotRunning: startIfNotRunning),
+      (_) => _refreshPatrolTrackingImpl(
+        startIfNotRunning: startIfNotRunning,
+        afterRoundPersist: afterRoundPersist,
+      ),
     );
     await _refreshPatrolTrackingChain!;
   }
 
   static Future<void> _refreshPatrolTrackingImpl({
     required bool startIfNotRunning,
+    required bool afterRoundPersist,
   }) async {
     final starting = _startTrackingFuture;
     if (starting != null) {
       await starting;
-      return;
     }
     final service = _service;
     if (service == null) return;
-    if (await _isServiceRunning(service)) {
-      await _invoke(service, PatrolFgsInvokeEvents.refresh);
-      return;
+    if (!await _isServiceRunning(service)) {
+      if (!startIfNotRunning) return;
+      await _ensureBackgroundServiceRunning(service);
+      await _waitForServiceRunning(service);
     }
-    if (startIfNotRunning) {
-      await _syncTrackingWithBackground(service);
+    if (afterRoundPersist) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(StorageKeys.patrolTrackPendingFgsReloadAfterRound, true);
     }
+    await _invokeBackgroundRefresh(
+      service,
+      afterRoundPersist: afterRoundPersist,
+    );
+    // FGS may start after first [configureAtAppStart] — re-bind main listeners.
+    _attachCheckpointSuccessListener();
   }
 
   static Future<void> startPatrolTracking() async {
@@ -566,7 +651,7 @@ abstract final class PatrolBackgroundService {
     if (!await _awaitConfigured()) return;
     final service = _service;
     if (service == null) return;
-    await _syncTrackingWithBackground(service);
+    await _ensureBackgroundServiceRunning(service);
     if (!Platform.isIOS) return;
     if (!await _isServiceRunning(service)) return;
     final l10n = await _l10nFromPrefs();

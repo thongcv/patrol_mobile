@@ -14,17 +14,15 @@ import '../../l10n/app_localizations.dart';
 import '../../models/active_patrol_round.dart';
 import '../../models/check_point.dart';
 import '../../models/patrol_round.dart';
-import '../../services/check_point_service.dart';
 import '../../services/patrol_log_service.dart';
 import '../../services/patrol_round_service.dart';
 import '../../services/patrol_active_round_cache.dart';
 import '../../services/patrol_active_round_coordinator.dart';
 import '../../services/patrol_realtime_track_coordinator.dart';
+import '../../services/patrol_realtime_track_service.dart';
 import '../../utils/bluetooth_beacon_reader.dart';
 import '../../utils/check_point_proximity.dart';
-import '../../utils/api_image_preview.dart';
 import '../../utils/device_location.dart';
-import '../../utils/super_gps_service.dart';
 import '../../utils/map_pin_image.dart';
 import '../../utils/patrol_map_overlays.dart';
 import '../../utils/nfc_tag_reader.dart';
@@ -73,7 +71,8 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   /// Incremented after each successful GET active — forces list / QR preview rebuild.
   int _reloadToken = 0;
   /// Notifies route map overlay to refresh checkpoint state (scan / reload active).
-  final ValueNotifier<int> _routeMapRevision = ValueNotifier(0);
+  final ValueNotifier<_RouteMapUpdate> _routeMapRevision =
+      ValueNotifier(const _RouteMapUpdate(seq: 0));
   int? _scanningCheckpointId;
   _RoundManualScanKind? _manualScanKind;
   DeviceLocationWatch? _qrLocationWatch;
@@ -82,18 +81,31 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   _RoundAutoScanKind? _autoScanKind;
   ValueNotifier<_QrScanProximityStatus>? _autoScanStatusNotifier;
   StreamSubscription<ActivePatrolRound?>? _activeRoundSocketSub;
+  StreamSubscription<CheckPoint>? _checkpointVerifiedSub;
 
   @override
   void initState() {
     super.initState();
     // Clear stale busy flag if the app was killed mid-scan while FGS kept running.
     unawaited(PatrolRealtimeTrackCoordinator.setRoundScanBusy(false));
+    _checkpointVerifiedSub =
+        PatrolActiveRoundCoordinator.checkpointVerifiedChanges.listen(
+      (point) {
+        if (!mounted) return;
+        setState(() {
+          _applyFgsCheckpointVerified(point);
+          _loading = false;
+          _refreshing = false;
+          _failure = null;
+        });
+      },
+    );
     _activeRoundSocketSub =
         PatrolActiveRoundCoordinator.activeRoundChanges.listen((round) {
       if (!mounted) return;
       if (round != null) {
         setState(() {
-          _applyLoadedActiveRound(round, fromRefresh: false);
+          _applyLoadedActiveRound(round, fromRefresh: true);
           _loading = false;
           _refreshing = false;
           _failure = null;
@@ -102,6 +114,8 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       }
       unawaited(_load(silent: true));
     });
+    // Merge background-scanned checkpoints from FGS cache before GET returns.
+    unawaited(PatrolActiveRoundCoordinator.applyFgsRoundUpdate());
     _load();
   }
 
@@ -109,6 +123,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   void dispose() {
     TopToast.hide();
     _activeRoundSocketSub?.cancel();
+    _checkpointVerifiedSub?.cancel();
     _routeMapRevision.dispose();
     unawaited(_stopQrLocationWatch());
     unawaited(PatrolRealtimeTrackCoordinator.setRoundScanBusy(false));
@@ -124,8 +139,14 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     unawaited(PatrolRealtimeTrackCoordinator.setRoundScanBusy(busy));
   }
 
-  void _notifyRouteMapRevision() {
-    _routeMapRevision.value++;
+  void _notifyRouteMapRevision({Iterable<int>? checkpointIds}) {
+    final prev = _routeMapRevision.value;
+    _routeMapRevision.value = _RouteMapUpdate(
+      seq: prev.seq + 1,
+      checkpointIds: checkpointIds == null
+          ? const {}
+          : checkpointIds.map((id) => id).toSet(),
+    );
   }
 
   Future<void> _stopQrLocationWatch() async {
@@ -210,16 +231,15 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     ActivePatrolRound? active = r.ok ? r.data : null;
     if (active != null) {
       active = await PatrolActiveRoundCache.preservingLocalVerified(active);
-      active = await _mergeActiveRoundCheckPoints(
-        active,
-        fullRefresh: false,
-      );
+      if(silent) {
+      active = await PatrolActiveRoundCache.mergeBackgroundVerified(active);
+      }
     }
 
     if (!mounted) return;
     if (r.ok) {
       setState(() {
-        _applyLoadedActiveRound(active, fromRefresh: false);
+        _applyLoadedActiveRound(active, fromRefresh: !silent);
         _loading = false;
         _refreshing = false;
         _failure = null;
@@ -243,6 +263,30 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
   bool _isCheckpointScanned(CheckPoint p) =>
       p.verified == true || _scannedCheckpointIds.contains(p.id);
+
+  /// FGS auto-scan — [point] đã verify; cache đã ghi trên FGS isolate.
+  void _applyFgsCheckpointVerified(CheckPoint point) {
+    _applyCheckpointVerified(point, persistCache: false);
+  }
+
+  void _applyCheckpointVerified(CheckPoint point, {required bool persistCache}) {
+    final active = _active;
+    if (active == null) return;
+    
+    _scannedCheckpointIds.add(point.id);
+    _active = ActivePatrolRound(
+      schedule: active.schedule,
+      round: active.round,
+      checkPoints: [
+        for (final p in active.checkPoints)
+          p.id == point.id ? p.copyWith(verified: true) : p,
+      ],
+    );
+    _notifyRouteMapRevision(checkpointIds: {point.id});
+    if (persistCache) {
+      unawaited(PatrolActiveRoundCache.markCheckpointVerified(point.id));
+    }
+  }
 
   /// Sets [_active], syncs server `verified` into model + [_scannedCheckpointIds].
   void _applyLoadedActiveRound(
@@ -298,72 +342,18 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   void _markCheckpointVerified(int checkpointId) {
     final active = _active;
     if (active == null) return;
-    setState(() {
-      _scannedCheckpointIds.add(checkpointId);
-      _active = ActivePatrolRound(
-        schedule: active.schedule,
-        round: active.round,
-        checkPoints: [
-          for (final p in active.checkPoints)
-            p.id == checkpointId ? p.copyWith(verified: true) : p,
-        ],
-      );
-    });
-    _notifyRouteMapRevision();
-    // Keep FGS auto-scan snapshot in sync so background does not POST again.
-    unawaited(PatrolActiveRoundCache.markCheckpointVerified(checkpointId));
-  }
-
-  /// Merges QR/metadata from site. When [fullRefresh], does not overwrite GET active fields.
-  Future<ActivePatrolRound> _mergeActiveRoundCheckPoints(
-    ActivePatrolRound active, {
-    required bool fullRefresh,
-  }) async {
-    final needsSiteMerge = active.checkPoints.any((p) {
-      final q = p.qrImage?.trim();
-      final needsQr =
-          q == null || q.isEmpty || !canPreviewApiImageSource(p.qrImage);
-      final bt = p.bluetooth?.trim();
-      final needsBluetooth = bt == null || bt.isEmpty;
-      final nfc = p.nfc?.trim();
-      final needsNfc = nfc == null || nfc.isEmpty;
-      return needsQr || needsBluetooth || needsNfc;
-    });
-    if (!needsSiteMerge) return active;
-
-    final site = await CheckPointService.instance.fetchMySiteCheckPoints();
-    if (!site.ok || site.data == null) return active;
-
-    final siteById = {
-      for (final p in site.data!.checkPoints) p.id: p,
-    };
-    if (siteById.isEmpty) return active;
-
-    final preferActive = fullRefresh;
-    final mergedPoints = active.checkPoints.map((p) {
-      final sitePoint = siteById[p.id];
-      if (sitePoint == null) return p;
-
-      var merged = p.mergeSiteMetadata(sitePoint, preferActive: preferActive);
-
-      final siteQr = sitePoint.qrImage?.trim();
-      if (siteQr != null && siteQr.isNotEmpty) {
-        final current = merged.qrImage?.trim();
-        if (current == null ||
-            current.isEmpty ||
-            !canPreviewApiImageSource(merged.qrImage)) {
-          merged = merged.copyWith(qrImage: siteQr);
-        }
+    CheckPoint? point;
+    for (final p in active.checkPoints) {
+      if (p.id == checkpointId) {
+        point = p;
+        break;
       }
-
-      return merged;
-    }).toList();
-
-    return ActivePatrolRound(
-      schedule: active.schedule,
-      round: active.round,
-      checkPoints: mergedPoints,
-    );
+    }
+    if (point == null) return;
+    final verifiedPoint = point;
+    setState(() {
+      _applyCheckpointVerified(verifiedPoint, persistCache: true);
+    });
   }
 
   String _messageForFailure(ApiFailure f, AppLocalizations l10n) {

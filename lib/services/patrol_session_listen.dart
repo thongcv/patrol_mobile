@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../navigation/patrol_session.dart';
+import '../utils/device_location.dart';
 import 'account_session_store.dart';
 
 /// Shared [PatrolSession] auth / session-ended wiring for patrol coordinators.
@@ -42,6 +43,9 @@ final class PatrolSessionListen {
 
   Future<void> resumeIfSession() async {
     if (!await AccountSessionStore.instance.hasStoredSession()) return;
+    if (!await PatrolBackgroundLocationReadiness.isRecentlyVerifiedAcrossIsolates()) {
+      return;
+    }
     await runAuthenticated();
   }
 
@@ -70,6 +74,9 @@ final class PatrolSessionListen {
   Future<bool> ensureSessionActive() async {
     if (sessionActive) return true;
     if (!await AccountSessionStore.instance.hasStoredSession()) return false;
+    if (!await PatrolBackgroundLocationReadiness.isRecentlyVerifiedAcrossIsolates()) {
+      return false;
+    }
     await runAuthenticated();
     return sessionActive;
   }

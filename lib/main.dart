@@ -14,10 +14,14 @@ import 'services/app_locale_store.dart';
 import 'services/patrol_active_round_coordinator.dart';
 import 'services/patrol_background_service.dart';
 import 'services/patrol_realtime_track_coordinator.dart';
+import 'services/patrol_startup_coordinator.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await _initializeFirebase();
+  WidgetsFlutterBinding.ensureInitialized();
+  if (Firebase.apps.isEmpty) {
+    await _initializeFirebase();
+  }
 }
 
 Future<void> _initializeFirebase() async {
@@ -84,6 +88,8 @@ class _PatrolMobileAppState extends State<PatrolMobileApp> {
       currentLocale: () => _locale,
       onLocaleChanged: _onLocaleChanged,
     );
+    PatrolStartupCoordinator.resetForNewProcessLaunch();
+    PatrolStartupCoordinator.attach();
     PatrolActiveRoundCoordinator.attach();
     PatrolRealtimeTrackCoordinator.attach(
       navigatorKey: _navigatorKey,
@@ -104,6 +110,7 @@ class _PatrolMobileAppState extends State<PatrolMobileApp> {
 
   @override
   void dispose() {
+    PatrolStartupCoordinator.detach();
     PatrolActiveRoundCoordinator.detach();
     PatrolRealtimeTrackCoordinator.detach();
     PatrolSession.detach();

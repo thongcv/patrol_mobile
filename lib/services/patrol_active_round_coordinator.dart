@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../models/active_patrol_round.dart';
+import '../models/check_point.dart';
 import '../navigation/patrol_session.dart';
 import 'patrol_active_round_cache.dart';
 import 'patrol_active_round_sync.dart';
@@ -23,60 +24,181 @@ abstract final class PatrolActiveRoundCoordinator {
   static final StreamController<ActivePatrolRound?> _activeRoundChanges =
       StreamController<ActivePatrolRound?>.broadcast();
 
+  static final StreamController<CheckPoint> _checkpointVerifiedChanges =
+      StreamController<CheckPoint>.broadcast();
+
   static ActivePatrolRound? _lastEmitted;
 
-  /// Phát khi cache vòng tuần tra thay đổi (socket hoặc bootstrap sau đăng nhập).
+  /// Full round thay đổi — GET `/me/active`, session end, STOMP full sync.
   static Stream<ActivePatrolRound?> get activeRoundChanges =>
       _activeRoundChanges.stream;
 
+  /// FGS auto-scan verified một checkpoint (nguyên [CheckPoint], không kèm round).
+  static Stream<CheckPoint> get checkpointVerifiedChanges =>
+      _checkpointVerifiedChanges.stream;
+
   static void attach() {
-    _session.attach();
     _bindSocketHandlers();
   }
 
   static void _bindSocketHandlers() {
-    PatrolTrackSocketDispatch.onActiveRoundChanged = _requestSyncFromServer;
-    PatrolTrackSocketDispatch.onSocketConnected = _requestSyncFromServer;
+    PatrolTrackSocketDispatch.onActiveRoundChanged =
+        _requestSyncAfterRoundPush;
+    PatrolTrackSocketDispatch.onSocketConnected = _requestSyncOnSocketConnect;
   }
 
   static void detach() {
-    _session.detach();
     PatrolTrackSocketDispatch.onActiveRoundChanged = null;
     PatrolTrackSocketDispatch.onSocketConnected = null;
   }
 
-  static void _requestSyncFromServer() {
+  static void _requestSyncAfterRoundPush() {
+    unawaited(syncFromServer(armAutoScan: true));
+  }
+
+  static void _requestSyncOnSocketConnect() {
     unawaited(syncFromServer());
   }
 
-  /// FGS đã cập nhật cache (auto-scan) — merge `verified` vào UI, không GET lại.
-  static Future<void> applyFgsRoundUpdate() async {
-    await PatrolRealtimeTrackService.instance.reloadRoundIdFromPrefs();
-    final cached = await PatrolActiveRoundCache.load();
-    var last = _lastEmitted;
-    if (cached != null && last != null && cached.roundId == last.round.id) {
-      final verifiedIds = {
-        for (final p in cached.checkPoints)
-          if (p.verified == true) p.id,
-      };
-      if (verifiedIds.isNotEmpty) {
-        last = ActivePatrolRound(
-          schedule: last.schedule,
-          round: last.round,
-          checkPoints: [
-            for (final p in last.checkPoints)
-              verifiedIds.contains(p.id) ? p.copyWith(verified: true) : p,
-          ],
-        );
-        _lastEmitted = last;
-      }
+  /// FGS đã cập nhật cache (auto-scan / STOMP).
+  ///
+  /// [payload] `checkPoint` — auto-scan verified one point → [checkpointVerifiedChanges].
+  /// [payload] `fullSync: true` — FGS đã [PatrolActiveRoundSync.fetchAndPersist]; main đọc cache.
+  static Future<void> applyFgsRoundUpdate({Map<Object?, Object?>? payload}) async {
+    final point = _checkPointFromPayload(payload);
+    final fullSync = payload?['fullSync'] == true;
+
+    if (fullSync) {
+      unawaited(applyFromFgsCache());
+      return;
     }
+
+    if (point != null) {
+      _emitCheckpointVerified(point);
+      return;
+    }
+
+    var last = _lastEmitted;
+    if (last == null) {
+      final cached = await PatrolActiveRoundCache.load();
+      if (cached == null) return;
+      unawaited(syncFromServer());
+      return;
+    }
+
+    final before = last;
+    last = await PatrolActiveRoundCache.mergeBackgroundVerified(last);
+    _lastEmitted = last;
+    _emitNewlyVerifiedCheckpoints(before, last);
+  }
+
+  /// Đọc snapshot FGS vừa persist — tránh GET `/me/active` trùng trên main.
+  static Future<void> applyFromFgsCache() async {
+    if (!_session.sessionActive) {
+      if (!await _session.ensureSessionActive()) return;
+      _bindSocketHandlers();
+    }
+
+    final cached = await PatrolActiveRoundCache.load();
+    if (cached == null) {
+      await _emitActiveRound(null);
+      await _afterRoundPersistedSideEffects();
+      return;
+    }
+
+    final last = _lastEmitted;
+    if (last == null || last.round.id != cached.roundId) {
+      // Cache chỉ có roundId + checkPoints — cần GET khi đổi vòng hoặc chưa bootstrap UI.
+      await syncFromServer();
+      return;
+    }
+
+    await _emitActiveRound(
+      ActivePatrolRound(
+        schedule: last.schedule,
+        round: last.round,
+        checkPoints: cached.checkPoints,
+      ),
+    );
+    await _afterRoundPersistedSideEffects();
+  }
+
+  static Future<void> _emitActiveRound(ActivePatrolRound? active) async {
+    _lastEmitted = active;
     if (!_activeRoundChanges.isClosed) {
-      _activeRoundChanges.add(_lastEmitted);
+      _activeRoundChanges.add(active);
+    }
+  }
+
+  static Future<void> _afterRoundPersistedSideEffects() async {
+    if (PatrolRealtimeTrackService.instance.isSessionTracking) {
+      await PatrolRealtimeTrackCoordinator.syncTrackingAfterRoundPersisted(
+        force: true,
+      );
+    }
+
+    if (await PatrolTrackingConfigStore.socketEnabled() &&
+        !await PatrolTrackingConfigStore.backgroundEnabled()) {
+      unawaited(PatrolTrackSocketClient.instance.flushPendingLocations());
+    }
+  }
+
+  static CheckPoint? _checkPointFromPayload(Map<Object?, Object?>? payload) {
+    if (payload == null) return null;
+    final raw = payload['checkPoint'];
+    if (raw is! Map) return null;
+    try {
+      return CheckPoint.fromJson(Map<String, dynamic>.from(raw));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static void _emitCheckpointVerified(CheckPoint point) {
+    final verified =
+        point.verified == true ? point : point.copyWith(verified: true);
+    var last = _lastEmitted;
+    if (last != null) {
+      if (last.checkPoints.any(
+        (p) => p.id == verified.id && p.verified == true,
+      )) {
+        return;
+      }
+      _lastEmitted = ActivePatrolRound(
+        schedule: last.schedule,
+        round: last.round,
+        checkPoints: [
+          for (final p in last.checkPoints)
+            p.id == verified.id ? verified : p,
+        ],
+      );
+    }
+    if (!_checkpointVerifiedChanges.isClosed) {
+      _checkpointVerifiedChanges.add(verified);
+    }
+  }
+
+  static void _emitNewlyVerifiedCheckpoints(
+    ActivePatrolRound before,
+    ActivePatrolRound after,
+  ) {
+    final beforeVerified = {
+      for (final p in before.checkPoints)
+        if (p.verified == true) p.id,
+    };
+    for (final p in after.checkPoints) {
+      if (p.verified != true || beforeVerified.contains(p.id)) continue;
+      _emitCheckpointVerified(p);
     }
   }
 
   static Future<void> resumeIfSession() => _session.resumeIfSession();
+
+  /// Called from [PatrolStartupCoordinator] after location gate.
+  static Future<void> bootstrapAuthenticatedSession() async {
+    _session.sessionActive = true;
+    await _onAuthenticated();
+  }
 
   static Future<void> _onAuthenticated() async {
     _bindSocketHandlers();
@@ -96,32 +218,25 @@ abstract final class PatrolActiveRoundCoordinator {
   }
 
   /// GET `/me/active` — main STOMP hoặc sau khi FGS STOMP connect.
-  static Future<void> syncFromServer() async {
+  static Future<void> syncFromServer({bool armAutoScan = false}) async {
     if (!_session.sessionActive) {
       if (!await _session.ensureSessionActive()) return;
       _bindSocketHandlers();
     }
 
-    final r = await PatrolActiveRoundSync.fetchAndPersist();
+    final r = await PatrolActiveRoundSync.fetchAndPersist(
+      armAutoScan: armAutoScan,
+    );
     if (PatrolSession.isUnauthorized(r.failure)) {
       await PatrolSession.endSessionAndNavigateToLogin();
       return;
     }
     if (!r.ok) return;
 
-  final active = r.data == null
+    final active = r.data == null
         ? null
         : await PatrolActiveRoundCache.preservingLocalVerified(r.data!);
-    _lastEmitted = active;
-    if (!_activeRoundChanges.isClosed) {
-      _activeRoundChanges.add(active);
-    }
-
-    await PatrolRealtimeTrackCoordinator.syncTrackingAfterRoundPersisted();
-
-    if (await PatrolTrackingConfigStore.socketEnabled() &&
-        !await PatrolTrackingConfigStore.backgroundEnabled()) {
-      unawaited(PatrolTrackSocketClient.instance.flushPendingLocations());
-    }
+    await _emitActiveRound(active);
+    await _afterRoundPersistedSideEffects();
   }
 }

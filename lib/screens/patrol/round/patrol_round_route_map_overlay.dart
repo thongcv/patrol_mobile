@@ -1,6 +1,6 @@
 part of '../patrol_round_screen.dart';
 
-/// Full-screen map: device GPS + route points (Maps SDK only — [GoogleMapsConfig]).
+/// Full-screen map: session tracking GPS + route points (Maps SDK only — [GoogleMapsConfig]).
 class _RouteMapOverlay extends StatefulWidget {
   const _RouteMapOverlay({
     required this.routeRevision,
@@ -9,7 +9,7 @@ class _RouteMapOverlay extends StatefulWidget {
     required this.onDismiss,
   });
 
-  final Listenable routeRevision;
+  final ValueNotifier<_RouteMapUpdate> routeRevision;
   final List<CheckPoint> Function() checkPointsProvider;
   final bool Function(CheckPoint) isScanned;
   final VoidCallback onDismiss;
@@ -25,8 +25,10 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
   LatLng? _userPosition;
   bool _loadingLocation = true;
   bool _syncingMarkers = false;
+  bool _syncMarkersPendingFull = false;
+  Set<int>? _syncMarkersPendingPartial;
   bool _didFitCamera = false;
-  StreamSubscription<SuperGpsEvent>? _gpsSub;
+  StreamSubscription<Position>? _trackPositionSub;
   final Map<String, BitmapDescriptor> _pinIconCache = {};
 
   static final _defaultCenter = LatLng(10.8231, 106.6297);
@@ -47,44 +49,79 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
 
   void _onRouteRevision() {
     if (!mounted) return;
-    setState(() {});
-    unawaited(_syncMarkers());
+    final update = widget.routeRevision.value;
+    if (update.checkpointIds.isEmpty) {
+      setState(() {});
+      unawaited(_syncMarkers());
+      return;
+    }
+    unawaited(_syncCheckpointMarkers(update.checkpointIds));
   }
 
   @override
   void dispose() {
     widget.routeRevision.removeListener(_onRouteRevision);
-    final sub = _gpsSub;
-    _gpsSub = null;
+    final sub = _trackPositionSub;
+    _trackPositionSub = null;
     if (sub != null) unawaited(sub.cancel());
     super.dispose();
   }
 
   Future<void> _startLocationTracking() async {
+    final track = PatrolRealtimeTrackService.instance;
+
+    Future<void> applyPosition(double lat, double lng) async {
+      if (!mounted) return;
+      final latLng = finitePatrolMapLatLng(lat, lng);
+      if (latLng == null) return;
+      final firstFix = _userPosition == null;
+      setState(() {
+        _loadingLocation = false;
+        _userPosition = latLng;
+      });
+      if (firstFix) {
+        await _syncMarkers();
+        await _fitMapToMarkersOnce();
+      } else {
+        await _updateUserMarkerOnly();
+      }
+    }
+
+    final seed = track.lastKnownPosition;
+    if (seed != null) {
+      await applyPosition(seed.latitude, seed.longitude);
+    }
+
+    _trackPositionSub = track.positionUpdates.listen((pos) {
+      unawaited(applyPosition(pos.latitude, pos.longitude));
+    });
+
+    if (seed != null) return;
+
+    if (track.isSessionTracking) {
+      await Future<void>.delayed(const Duration(seconds: 3));
+      if (!mounted) return;
+      if (_userPosition == null) {
+        setState(() => _loadingLocation = false);
+        await _syncMarkers();
+        await _fitMapToMarkersOnce();
+      }
+      return;
+    }
+
     final gps = await readDeviceGpsOnce(
       timeout: const Duration(seconds: 6),
       targetAccuracyM: 25,
     );
     if (!mounted) return;
-    setState(() {
-      _loadingLocation = false;
-      _userPosition = finitePatrolMapLatLng(
-        gps.position?.latitude,
-        gps.position?.longitude,
-      );
-    });
-    await _syncMarkers();
-    await _fitMapToMarkersOnce();
-
-    _gpsSub = listenDeviceGpsForMap(
-      onPosition: (pos) {
-        if (!mounted) return;
-        final latLng = finitePatrolMapLatLng(pos.latitude, pos.longitude);
-        if (latLng == null) return;
-        _userPosition = latLng;
-        unawaited(_updateUserMarkerOnly());
-      },
-    );
+    final pos = gps.position;
+    if (pos != null) {
+      await applyPosition(pos.latitude, pos.longitude);
+    } else {
+      setState(() => _loadingLocation = false);
+      await _syncMarkers();
+      await _fitMapToMarkersOnce();
+    }
   }
 
   Future<void> _fitMapToMarkersOnce() async {
@@ -145,31 +182,102 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
     });
   }
 
+  Future<Marker?> _markerForCheckpoint(CheckPoint p) async {
+    final pos = finitePatrolMapLatLng(p.latitude, p.longitude);
+    if (pos == null) return null;
+    final scanned = widget.isScanned(p);
+    final color = scanned
+        ? const Color(0xFF34D399)
+        : const Color(0xFFFBBF24);
+    final icon = await _pinIcon(
+      color: color,
+      label: '${p.sequenceOrder}',
+    );
+    return Marker(
+      markerId: MarkerId('cp_${p.id}'),
+      position: pos,
+      icon: icon,
+      anchor: const Offset(0.5, 1.0),
+    );
+  }
+
+  Circle? _circleForCheckpoint(CheckPoint p) {
+    final circles = buildCheckpointRadiusCircles(
+      checkPoints: [p],
+      isScanned: widget.isScanned,
+    );
+    return circles.isEmpty ? null : circles.first;
+  }
+
+  Future<void> _syncCheckpointMarkers(Set<int> checkpointIds) async {
+    if (_syncingMarkers) {
+      _syncMarkersPendingPartial ??= {};
+      _syncMarkersPendingPartial!.addAll(checkpointIds);
+      return;
+    }
+    _syncingMarkers = true;
+    try {
+      var markers = _markers;
+      var circles = _circles;
+      for (final id in checkpointIds) {
+        CheckPoint? point;
+        for (final p in _pointsWithGps) {
+          if (p.id == id) {
+            point = p;
+            break;
+          }
+        }
+        if (point == null) continue;
+        final marker = await _markerForCheckpoint(point);
+        if (!mounted || marker == null) return;
+        markers = {
+          ...markers.where((m) => m.markerId.value != 'cp_$id'),
+          marker,
+        };
+        final circle = _circleForCheckpoint(point);
+        if (circle != null) {
+          circles = {
+            ...circles.where((c) => c.circleId.value != 'cp_radius_$id'),
+            circle,
+          };
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _markers = markers;
+        _circles = circles;
+      });
+    } finally {
+      _syncingMarkers = false;
+      _flushPendingMarkerSync();
+    }
+  }
+
+  void _flushPendingMarkerSync() {
+    if (_syncMarkersPendingFull) {
+      _syncMarkersPendingFull = false;
+      unawaited(_syncMarkers());
+      return;
+    }
+    final partial = _syncMarkersPendingPartial;
+    if (partial != null && partial.isNotEmpty) {
+      _syncMarkersPendingPartial = null;
+      unawaited(_syncCheckpointMarkers(partial));
+    }
+  }
+
   Future<void> _syncMarkers() async {
-    if (_syncingMarkers) return;
+    if (_syncingMarkers) {
+      _syncMarkersPendingFull = true;
+      return;
+    }
     _syncingMarkers = true;
     try {
       final markers = <Marker>{};
 
       for (final p in _pointsWithGps) {
-        final pos = finitePatrolMapLatLng(p.latitude, p.longitude);
-        if (pos == null) continue;
-        final scanned = widget.isScanned(p);
-        final color = scanned
-            ? const Color(0xFF34D399)
-            : const Color(0xFFFBBF24);
-        final icon = await _pinIcon(
-          color: color,
-          label: '${p.sequenceOrder}',
-        );
-        markers.add(
-          Marker(
-            markerId: MarkerId('cp_${p.id}'),
-            position: pos,
-            icon: icon,
-            anchor: const Offset(0.5, 1.0),
-          ),
-        );
+        final marker = await _markerForCheckpoint(p);
+        if (marker != null) markers.add(marker);
       }
 
       final circles = buildCheckpointRadiusCircles(
@@ -199,6 +307,7 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
       });
     } finally {
       _syncingMarkers = false;
+      _flushPendingMarkerSync();
     }
   }
 

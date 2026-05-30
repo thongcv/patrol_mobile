@@ -12,17 +12,23 @@ abstract final class StorageKeys {
   static const patrolTrackOfflineQueue = 'patrol_track_offline_queue';
 
   /// Realtime patrol session — used in background isolate.
-  static const patrolTrackRoundId = 'patrol_track_round_id';
   static const patrolTrackEmitEnabled = 'patrol_track_emit_enabled';
+  /// Armed by STOMP `active-round-changed` when login config allows — not on app bootstrap GET.
   static const patrolTrackBackgroundAutoScanEnabled =
       'patrol_track_background_auto_scan_enabled';
   static const patrolTrackForegroundScanBusy = 'patrol_track_foreground_scan_busy';
+
+  /// Main sets before FGS `refresh` invoke; FGS [PatrolBackgroundRunner.startTracking] consumes.
+  static const patrolTrackPendingFgsReloadAfterRound =
+      'patrol_track_pending_fgs_reload_after_round';
   static const patrolTrackActiveRoundSnapshot = 'patrol_track_active_round_snapshot';
+  /// Monotonic counter bumped on each [PatrolActiveRoundCache] write — FGS dedupes reload.
+  static const patrolTrackActiveRoundRevision = 'patrol_track_active_round_revision';
 
   /// UI locale `languageCode` (`vi` / `en`) — chosen on login, read in background isolate.
   static const appLocaleLanguageCode = 'patrol_app_locale_language_code';
 
-  /// Login `data.config`: `{ "background", "minMoveM", "socket" }`.
+  /// Login `data.config`: `{ "background", "minMoveM", "socket", "backgroundAutoScan" }`.
   static const patrolTrackingConfig = 'patrol_tracking_config';
 
   /// Epoch ms — [LocationGateScreen] / ensure background location passed (all isolates).

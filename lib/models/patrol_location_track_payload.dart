@@ -1,10 +1,9 @@
 import 'package:geolocator/geolocator.dart';
 
 /// STOMP payload to `/app/patrol/track-location` — guard from JWT, no `guardId` in body.
-/// Server resolves guard from Bearer JWT; do not send `guardId` in the body.
+/// Server resolves guard from Bearer JWT; do not send `guardId` or `roundId` in the body.
 class PatrolLocationTrackPayload {
   PatrolLocationTrackPayload({
-    required this.roundId,
     required this.latitude,
     required this.longitude,
     required this.isMocked,
@@ -14,7 +13,6 @@ class PatrolLocationTrackPayload {
     this.speedMps,
   });
 
-  final int roundId;
   final double latitude;
   final double longitude;
   final bool isMocked;
@@ -24,11 +22,9 @@ class PatrolLocationTrackPayload {
   final double? speedMps;
 
   factory PatrolLocationTrackPayload.fromPosition({
-    required int roundId,
     required Position position,
   }) {
     return PatrolLocationTrackPayload(
-      roundId: roundId,
       latitude: position.latitude,
       longitude: position.longitude,
       isMocked: position.isMocked,
@@ -44,7 +40,6 @@ class PatrolLocationTrackPayload {
   }
 
   Map<String, dynamic> toJson() => {
-    'roundId': roundId,
     'latitude': latitude,
     'longitude': longitude,
     'isMocked': isMocked,
@@ -56,7 +51,6 @@ class PatrolLocationTrackPayload {
 
   factory PatrolLocationTrackPayload.fromJson(Map<String, dynamic> json) {
     return PatrolLocationTrackPayload(
-      roundId: (json['roundId'] as num?)?.toInt() ?? 0,
       latitude: (json['latitude'] as num?)?.toDouble() ??
           (json['lat'] as num?)?.toDouble() ??
           0,

@@ -267,24 +267,27 @@ class PatrolTrackSocketClient {
 
   Future<void> _syncActiveRoundInFgs() async {
     try {
-      final r = await PatrolActiveRoundSync.fetchAndPersist();
+      final r = await PatrolActiveRoundSync.fetchAndPersist(armAutoScan: true);
       if (!r.ok) return;
 
-      await _onFgsRoundSynced?.call();
+      unawaited(_onFgsRoundSynced?.call());
 
-      _invokeMain(PatrolFgsInvokeEvents.activeRoundChanged);
+      _invokeMain(
+        PatrolFgsInvokeEvents.activeRoundChanged,
+        const {'fullSync': true},
+      );
     } catch (_) {
       //
     }
   }
 
-  void _invokeMain(String event) {
+  void _invokeMain(String event, [Map<String, dynamic>? data]) {
     final service = _fgsService;
 
     if (service == null) return;
 
     try {
-      service.invoke(event);
+      service.invoke(event, data);
     } catch (_) {
       //
     }

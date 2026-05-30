@@ -43,6 +43,9 @@ abstract final class PatrolTrackingConfigStore {
 
   static Future<bool> socketEnabled() async => (await load()).socket;
 
+  static Future<bool> backgroundAutoScanEnabled() async =>
+      (await load()).backgroundAutoScan;
+
   static Future<void> clear() async {
     final p = await SharedPreferences.getInstance();
     await p.remove(StorageKeys.patrolTrackingConfig);

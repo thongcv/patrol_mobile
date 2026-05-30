@@ -7,8 +7,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../l10n/app_localizations.dart';
 import '../navigation/patrol_session.dart';
 import '../services/account_session_store.dart';
-import '../services/patrol_active_round_coordinator.dart';
-import '../services/patrol_realtime_track_coordinator.dart';
+import '../services/patrol_background_service.dart';
+import '../services/patrol_startup_coordinator.dart';
 import '../utils/device_location.dart';
 import '../widgets/language_toggle_bar.dart';
 import '../widgets/login_background.dart';
@@ -81,7 +81,12 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
       _needsAlwaysUpgrade = false;
     });
 
-    final sessionFuture = AccountSessionStore.instance.hasStoredSession();
+    bool hasSession = false;
+    try {
+      hasSession = await AccountSessionStore.instance.hasStoredSession();
+    } catch (_) {
+      hasSession = false;
+    }
 
     LocationPermission permission;
     try {
@@ -143,24 +148,15 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
       return;
     }
 
-    bool hasSession;
-    try {
-      hasSession = await sessionFuture.timeout(
-        _kGateStepTimeout,
-        onTimeout: () => false,
-      );
-    } catch (_) {
-      hasSession = false;
-    }
     if (!mounted) return;
-    PatrolBackgroundLocationReadiness.markReady();
+    PatrolStartupCoordinator.markLocationGatePassed();
     setState(() {
       _hasStoredSession = hasSession;
       _phase = _GatePhase.ready;
     });
     if (hasSession) {
-      unawaited(PatrolActiveRoundCoordinator.resumeIfSession());
-      unawaited(PatrolRealtimeTrackCoordinator.resumeIfSession());
+      await PatrolBackgroundService.configureAtAppStart();
+      await PatrolStartupCoordinator.resumeSessionAfterLocationReady();
     }
   }
 

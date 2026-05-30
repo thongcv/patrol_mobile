@@ -11,19 +11,23 @@ import '../utils/patrol_checkpoint_success_feedback.dart';
 import 'patrol_active_round_cache.dart';
 import 'patrol_active_round_sync.dart';
 import 'patrol_background_isolate_flags.dart';
-import 'patrol_background_service.dart';
-import 'patrol_background_socket_emitter.dart';
+import 'patrol_background_gps_hub.dart';
 import 'patrol_log_service.dart';
+import 'patrol_tracking_config_store.dart';
 
-/// Background GPS auto-scan — shares one Super GPS stream with socket tracking.
+/// Background checkpoint auto-scan — GPS via [PatrolBackgroundGpsHub] (shared with track).
 class PatrolBackgroundAutoScan {
-  PatrolBackgroundAutoScan(this._socketEmitter);
+  PatrolBackgroundAutoScan(
+    this._gpsHub, {
+    void Function(CheckPoint point)? onCheckpointVerified,
+  }) : _onCheckpointVerified = onCheckpointVerified;
 
-  final PatrolBackgroundSocketEmitter _socketEmitter;
+  final PatrolBackgroundGpsHub _gpsHub;
+  final void Function(CheckPoint point)? _onCheckpointVerified;
   var _autoScanPaused = false;
   var _autoScanActive = false;
   Future<void>? _ensureWatchRunningFuture;
-  /// Serializes stop / pause / resume / refresh (avoids GPS start-stop races).
+  /// Serializes stop / resume detach-sync (reload/refresh run outside the chain).
   Future<void>? _lifecycleChain;
   /// Serializes GPS samples so only one submit runs at a time.
   Future<void>? _sampleProcessingChain;
@@ -34,79 +38,113 @@ class PatrolBackgroundAutoScan {
   final Set<int> _submittedCheckpointIds = {};
   /// Latest active-round snapshot for auto-scan (refreshed after verify).
   ({int roundId, List<CheckPoint> checkPoints})? _activeRoundSnapshot;
+  var _scanNeedsBaro = false;
+  var _reloadInFlight = false;
+  var _reloadAgain = false;
 
-  /// `true` when auto-scan is attached to the shared background GPS stream.
+  /// `true` when auto-scan listener is attached on the shared GPS hub.
   bool get isAutoScanActive => _autoScanActive;
 
-  /// Stops auto-scan callbacks; keeps shared socket GPS only while patrol emit is on.
-  Future<void> stop() => _enqueueLifecycle(_stopImpl);
+  /// Detaches auto-scan from the GPS hub (tracking may continue).
+  Future<void> stop() => _enqueueLifecycle(_detachScan);
 
-  Future<void> pause() => _enqueueLifecycle(() async {
+  Future<void> pause() async {
+    if (_autoScanPaused) return;
     _autoScanPaused = true;
-    await _stopImpl();
-  });
+  }
 
-  Future<void> resume() => _enqueueLifecycle(() async {
+  Future<void> resume() async {
+    if (!_autoScanPaused) return;
     _autoScanPaused = false;
-    await _ensureWatchRunning();
-  });
+    if (!_autoScanActive) {
+      await _enqueueLifecycle(_syncScanState);
+    }
+  }
 
   /// Re-reads prefs and (re)starts auto-scan when needed.
-  ///
-  /// Used by [PatrolBackgroundRunner.refreshTracking] (FGS invoke `refresh`, 45s poll).
-  /// If auto-scan is already active, skips GPS handler reattach to avoid stop/start churn.
-  Future<void> refresh() => _enqueueLifecycle(_refreshImpl);
+  Future<void> refresh() => _refreshImpl();
 
   /// Re-reads cache after [PatrolActiveRoundSync.fetchAndPersist] (STOMP round sync).
-  ///
-  /// Unlike [refresh], always passes [forceReattach] so new checkpoints / round data
-  /// are picked up even when `_autoScanActive` is already true.
-  /// Do not call full [PatrolBackgroundRunner.refreshTracking] from STOMP — that also
-  /// reconnects socket/token and can cause refresh loops.
-  Future<void> reloadAfterRoundPersist() =>
-      _enqueueLifecycle(_reloadAfterRoundPersistImpl);
-
-  Future<void> _reloadAfterRoundPersistImpl() async {
-    if (_autoScanPaused || await _isForegroundScanBusy()) {
-      await _stopImpl();
+  /// Coalesces burst invokes; uses [_syncScanState] dedupe — not [_lifecycleChain].
+  Future<void> reloadAfterRoundPersist() async {
+    if (_reloadInFlight) {
+      _reloadAgain = true;
       return;
     }
-    await _ensureWatchRunning(forceReattach: true);
+    _reloadInFlight = true;
+    try {
+      do {
+        _reloadAgain = false;
+        await _reloadAfterRoundPersistImpl();
+      } while (_reloadAgain);
+    } finally {
+      _reloadInFlight = false;
+    }
+  }
+
+  Future<void> _reloadAfterRoundPersistImpl() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    if (_autoScanPaused || await _isForegroundScanBusy()) {
+      await _detachScan();
+      return;
+    }
+    final cached = await PatrolActiveRoundCache.load();
+    if (cached == null) {
+      _resetAfterRoundFullyScanned();
+      return;
+    }
+    _applyServerRoundSnapshot(cached);
+    await _syncScanState();
   }
 
   Future<void> _refreshImpl() async {
     if (_autoScanPaused || await _isForegroundScanBusy()) {
-      await _stopImpl();
+      await _detachScan();
       return;
     }
-    await _ensureWatchRunning();
+    if (_autoScanActive) return;
+    await _syncScanState();
   }
 
-  Future<void> _enqueueLifecycle(Future<void> Function() action) {
-    _lifecycleChain =
-        (_lifecycleChain ?? Future<void>.value()).then((_) => action());
-    return _lifecycleChain!;
+  /// Serializes stop / resume vs hub detach (reload/refresh bypass this chain).
+  Future<void> _enqueueLifecycle(Future<void> Function() action) async {
+    final wait = (_lifecycleChain ?? Future<void>.value()).catchError((_) {});
+    final running = wait.then((_) async {
+      try {
+        await action();
+      } catch (_) {
+        // Keep the chain alive so later reload/refresh still runs.
+      }
+    });
+    _lifecycleChain = running;
+    await running;
   }
 
-  Future<void> _stopImpl() async {
+  Future<void> _detachScan() async {
     _autoScanActive = false;
-    // Keep _sampleProcessingChain, _inFlightCheckpointIds, _submittedCheckpointIds,
-    // and _activeRoundSnapshot — refresh/stop must not unblock in-flight POSTs.
-
-    final prefs = await SharedPreferences.getInstance();
-    final emit = prefs.getBool(StorageKeys.patrolTrackEmitEnabled) ?? false;
-    if (!emit) {
-      await _socketEmitter.stop();
-      return;
-    }
-    await _socketEmitter.start(enableBarometer: false);
+    _gpsHub.autoScanHandler = null;
+    _scanNeedsBaro = false;
+    await _gpsHub.ensureRunning(scanWantsBarometer: false);
   }
 
-  Future<void> _ensureWatchRunning({bool forceReattach = false}) async {
+  void _onGpsEvent(SuperGpsEvent event) {
+    if (_autoScanPaused) return;
+    final snapshot = _activeRoundSnapshot;
+    if (snapshot == null) return;
+    _enqueueAutoScanSample(
+      needsBaroValidation: _scanNeedsBaro,
+      sample: _sampleFromEvent(event),
+      barometerListening:
+          _scanNeedsBaro && event.barometerHardwareSupported,
+    );
+  }
+
+  Future<void> _syncScanState() async {
     if (_ensureWatchRunningFuture != null) {
       return _ensureWatchRunningFuture;
     }
-    final future = _ensureWatchRunningImpl(forceReattach: forceReattach);
+    final future = _syncScanStateImpl();
     _ensureWatchRunningFuture = future;
     try {
       await future;
@@ -117,72 +155,49 @@ class PatrolBackgroundAutoScan {
     }
   }
 
-  Future<void> _ensureWatchRunningImpl({bool forceReattach = false}) async {
+  Future<void> _syncScanStateImpl() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload();
     final emit = prefs.getBool(StorageKeys.patrolTrackEmitEnabled) ?? false;
-    final autoScan =
+    if (!emit ||
+        !await PatrolTrackingConfigStore.backgroundAutoScanEnabled()) {
+      if (_autoScanActive) await _detachScan();
+      return;
+    }
+    final armed =
         prefs.getBool(StorageKeys.patrolTrackBackgroundAutoScanEnabled) ??
             false;
-    if (!emit || !autoScan || _autoScanPaused) {
-      if (_autoScanActive) await _stopImpl();
+    if (!armed || _autoScanPaused) {
+      if (_autoScanActive) await _detachScan();
       return;
     }
     if (await _isForegroundScanBusy()) {
-      if (_autoScanActive) await _stopImpl();
+      if (_autoScanActive) await _detachScan();
       return;
     }
     final cached = await PatrolActiveRoundCache.load();
     if (cached == null) {
       _activeRoundSnapshot = null;
       _submittedCheckpointIds.clear();
+      if (_autoScanActive) await _detachScan();
       return;
     }
-    if (_activeRoundSnapshot?.roundId != cached.roundId) {
-      _submittedCheckpointIds.clear();
-    }
-    _activeRoundSnapshot = await _mergeSnapshotWithMemory(cached);
+    _applyServerRoundSnapshot(cached);
 
-    var eligible = _eligibleCheckPoints(_activeRoundSnapshot!.checkPoints);
-    if (eligible.isEmpty &&
-        _hasUnverifiedWithoutCoordinates(_activeRoundSnapshot!.checkPoints)) {
-      final enriched = await PatrolActiveRoundSync.enrichCheckPointsFromSite(
-        _activeRoundSnapshot!.checkPoints,
-      );
-      await PatrolActiveRoundCache.patchCheckPoints(enriched);
-      _activeRoundSnapshot = await _mergeSnapshotWithMemory(
-        (roundId: _activeRoundSnapshot!.roundId, checkPoints: enriched),
-      );
-      eligible = _eligibleCheckPoints(_activeRoundSnapshot!.checkPoints);
-    }
+    final eligible = _eligibleCheckPoints(_activeRoundSnapshot!.checkPoints);
     if (eligible.isEmpty) {
-      if (_autoScanActive) await _stopImpl();
+      if (_autoScanActive) await _detachScan();
+      await _maybeCompleteRoundIfFullyScanned();
       return;
     }
 
-    // Normal refresh: skip when handler already attached. STOMP reload: always reattach.
-    if (_autoScanActive && !forceReattach) return;
-
-    // sensors_plus is not registered in the FGS isolate — GPS-only auto-scan there.
-    final needsBaro = !PatrolBackgroundIsolateFlags.active &&
+    _scanNeedsBaro = !PatrolBackgroundIsolateFlags.active &&
         eligible.any((p) => p.baroAltitude != null);
 
-    await _socketEmitter.start(
-      enableBarometer: needsBaro,
-      onAutoScanEvent: (event) {
-        if (_autoScanPaused) return;
-        final snapshot = _activeRoundSnapshot;
-        if (snapshot == null) return;
-        _enqueueAutoScanSample(
-          needsBaroValidation: needsBaro,
-          sample: _sampleFromEvent(event),
-          barometerListening: needsBaro && event.barometerHardwareSupported,
-        );
-      },
-    );
-
+    _gpsHub.autoScanHandler = _onGpsEvent;
+    await _gpsHub.ensureRunning(scanWantsBarometer: _scanNeedsBaro);
     _autoScanActive =
-        _socketEmitter.hasAutoScanHandler && _socketEmitter.isListening;
+        _gpsHub.hasAutoScanHandler && _gpsHub.isListening;
   }
 
   void _enqueueAutoScanSample({
@@ -214,7 +229,7 @@ class PatrolBackgroundAutoScan {
 
     final unverified = _eligibleCheckPoints(active.checkPoints);
     if (unverified.isEmpty) {
-      await stop();
+      await _maybeCompleteRoundIfFullyScanned();
       return;
     }
 
@@ -239,6 +254,7 @@ class PatrolBackgroundAutoScan {
       _markSnapshotCheckpointVerified(matched.id);
       _submittedCheckpointIds.add(matched.id);
       _inFlightCheckpointIds.remove(matched.id);
+      _relayCheckpointVerified(matched.copyWith(verified: true));
       return;
     }
 
@@ -265,7 +281,7 @@ class PatrolBackgroundAutoScan {
           .timeout(_patrolLogSubmitTimeout);
       if (result.ok) {
         await PatrolActiveRoundCache.markCheckpointVerified(matched.id);
-        PatrolBackgroundService.notifyActiveRoundChangedFromFgs();
+        _relayCheckpointVerified(matched.copyWith(verified: true));
         await PatrolCheckpointSuccessFeedback.notify(
           checkpointName: matched.name,
         );
@@ -285,7 +301,18 @@ class PatrolBackgroundAutoScan {
       }
     } finally {
       _inFlightCheckpointIds.remove(matched.id);
+      await _maybeCompleteRoundIfFullyScanned();
     }
+  }
+
+  Future<void> _maybeCompleteRoundIfFullyScanned() async {
+    if (_inFlightCheckpointIds.isNotEmpty) return;
+    final snapshot = _activeRoundSnapshot;
+    if (snapshot == null) return;
+    if (_eligibleCheckPoints(snapshot.checkPoints).isNotEmpty) return;
+    _resetAfterRoundFullyScanned();
+    await PatrolActiveRoundSync.clearBackgroundAutoScanArmed();
+    await stop();
   }
 
   static DeviceLocationSample _sampleFromEvent(SuperGpsEvent event) {
@@ -300,22 +327,43 @@ class PatrolBackgroundAutoScan {
     );
   }
 
-  /// Merges in-memory `verified` flags into prefs snapshot (cache may lag behind POST).
-  Future<({int roundId, List<CheckPoint> checkPoints})> _mergeSnapshotWithMemory(
+  /// Clears optimistic auto-scan state after every checkpoint in the round is done.
+  void _resetAfterRoundFullyScanned() {
+    _submittedCheckpointIds.clear();
+    _inFlightCheckpointIds.clear();
+    _activeRoundSnapshot = null;
+  }
+
+  /// Trust server/cache on (re)start — do not overlay in-memory verified flags.
+  void _applyServerRoundSnapshot(
     ({int roundId, List<CheckPoint> checkPoints}) loaded,
-  ) async {
-    final mem = _activeRoundSnapshot;
-    final verifiedIds = <int>{
-      if (mem != null && mem.roundId == loaded.roundId)
-        for (final p in mem.checkPoints)
-          if (p.verified == true) p.id,
+  ) {
+    final idsInRound = {for (final p in loaded.checkPoints) p.id};
+    _submittedCheckpointIds.removeWhere((id) => !idsInRound.contains(id));
+    _inFlightCheckpointIds.removeWhere((id) => !idsInRound.contains(id));
+    for (final p in loaded.checkPoints) {
+      if (p.verified == true) {
+        _submittedCheckpointIds.remove(p.id);
+        _inFlightCheckpointIds.remove(p.id);
+      }
+    }
+    _activeRoundSnapshot = loaded;
+  }
+
+  /// During GPS auto-scan only — overlay in-flight / submitted ids onto cache reads.
+  ({int roundId, List<CheckPoint> checkPoints}) _mergeSnapshotWithMemory(
+    ({int roundId, List<CheckPoint> checkPoints}) loaded,
+  ) {
+    final optimistic = <int>{
+      ..._submittedCheckpointIds,
+      ..._inFlightCheckpointIds,
     };
-    if (verifiedIds.isEmpty) return loaded;
+    if (optimistic.isEmpty) return loaded;
     return (
       roundId: loaded.roundId,
       checkPoints: [
         for (final p in loaded.checkPoints)
-          verifiedIds.contains(p.id) ? p.copyWith(verified: true) : p,
+          optimistic.contains(p.id) ? p.copyWith(verified: true) : p,
       ],
     );
   }
@@ -326,10 +374,7 @@ class PatrolBackgroundAutoScan {
       _activeRoundSnapshot = null;
       return null;
     }
-    if (_activeRoundSnapshot?.roundId != loaded.roundId) {
-      _submittedCheckpointIds.clear();
-    }
-    final merged = await _mergeSnapshotWithMemory(loaded);
+    final merged = _mergeSnapshotWithMemory(loaded);
     _activeRoundSnapshot = merged;
     return merged;
   }
@@ -364,10 +409,6 @@ class PatrolBackgroundAutoScan {
           p.id == checkpointId ? p.copyWith(verified: false) : p,
       ],
     );
-  }
-
-  static bool _hasUnverifiedWithoutCoordinates(List<CheckPoint> points) {
-    return points.any((p) => p.verified != true && !p.hasCoordinates);
   }
 
   static List<CheckPoint> _eligibleCheckPoints(List<CheckPoint> points) {
@@ -406,8 +447,13 @@ class PatrolBackgroundAutoScan {
     return evaluation.result.ok ? point : null;
   }
 
+  void _relayCheckpointVerified(CheckPoint point) {
+    _onCheckpointVerified?.call(point);
+  }
+
   static Future<bool> _isForegroundScanBusy() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
     return prefs.getBool(StorageKeys.patrolTrackForegroundScanBusy) ?? false;
   }
 }

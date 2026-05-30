@@ -12,6 +12,39 @@ abstract final class PatrolActiveRoundCache {
 
   /// GET `/me/active` may omit `verified` — only then keep local verified from cache.
   /// When API sends `verified: false`, trust the server.
+  /// Merges `verified: true` from the FGS snapshot into [active] (same round id).
+  ///
+  /// Use when opening [PatrolRoundScreen] or after background auto-scan — GET active
+  /// may still return `verified: false` before the server catches up.
+  static Future<ActivePatrolRound> mergeBackgroundVerified(
+    ActivePatrolRound active,
+  ) async {
+    final cached = await load();
+    if (cached == null || cached.roundId != active.round.id) {
+      return active;
+    }
+    return mergeVerifiedCheckPoints(active, cached.checkPoints);
+  }
+
+  static ActivePatrolRound mergeVerifiedCheckPoints(
+    ActivePatrolRound active,
+    List<CheckPoint> verifiedSource,
+  ) {
+    final verifiedIds = {
+      for (final p in verifiedSource)
+        if (p.verified == true) p.id,
+    };
+    if (verifiedIds.isEmpty) return active;
+    return ActivePatrolRound(
+      schedule: active.schedule,
+      round: active.round,
+      checkPoints: [
+        for (final p in active.checkPoints)
+          verifiedIds.contains(p.id) ? p.copyWith(verified: true) : p,
+      ],
+    );
+  }
+
   static Future<ActivePatrolRound> preservingLocalVerified(
     ActivePatrolRound active,
   ) async {
@@ -50,9 +83,19 @@ abstract final class PatrolActiveRoundCache {
     final prefs = await SharedPreferences.getInstance();
     if (active == null) {
       await prefs.remove(StorageKeys.patrolTrackActiveRoundSnapshot);
+      await prefs.remove(StorageKeys.patrolTrackActiveRoundRevision);
       return;
     }
     final merged = await preservingLocalVerified(active);
+    final next = (
+      roundId: merged.round.id,
+      checkPoints: merged.checkPoints,
+    );
+    final existing = await load();
+    if (existing != null &&
+        snapshotFingerprint(existing) == snapshotFingerprint(next)) {
+      return;
+    }
     await prefs.setString(
       StorageKeys.patrolTrackActiveRoundSnapshot,
       jsonEncode(<String, dynamic>{
@@ -62,10 +105,36 @@ abstract final class PatrolActiveRoundCache {
         ],
       }),
     );
+    await _bumpRevision(prefs);
+  }
+
+  static Future<int> readRevision() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(StorageKeys.patrolTrackActiveRoundRevision) ?? 0;
+  }
+
+  /// Stable content hash for deduping reload / GPS reattach when data unchanged.
+  static String snapshotFingerprint(
+    ({int roundId, List<CheckPoint> checkPoints}) snapshot,
+  ) {
+    final parts = <String>[snapshot.roundId.toString()];
+    for (final p in snapshot.checkPoints) {
+      parts.add(
+        '${p.id}:${p.verified == true}:${p.sequenceOrder}:'
+        '${p.latitude}:${p.longitude}:${p.hasCoordinates}',
+      );
+    }
+    return parts.join('|');
+  }
+
+  static Future<void> _bumpRevision(SharedPreferences prefs) async {
+    final next = (prefs.getInt(StorageKeys.patrolTrackActiveRoundRevision) ?? 0) + 1;
+    await prefs.setInt(StorageKeys.patrolTrackActiveRoundRevision, next);
   }
 
   static Future<({int roundId, List<CheckPoint> checkPoints})?> load() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
     final raw = prefs.getString(StorageKeys.patrolTrackActiveRoundSnapshot);
     if (raw == null || raw.isEmpty) return null;
     try {
@@ -106,6 +175,12 @@ abstract final class PatrolActiveRoundCache {
     required int roundId,
     required List<CheckPoint> checkPoints,
   }) async {
+    final next = (roundId: roundId, checkPoints: checkPoints);
+    final existing = await load();
+    if (existing != null &&
+        snapshotFingerprint(existing) == snapshotFingerprint(next)) {
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       StorageKeys.patrolTrackActiveRoundSnapshot,
@@ -114,5 +189,6 @@ abstract final class PatrolActiveRoundCache {
         'checkPoints': [for (final p in checkPoints) p.toJson()],
       }),
     );
+    await _bumpRevision(prefs);
   }
 }
