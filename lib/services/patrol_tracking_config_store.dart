@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/storage_keys.dart';
 import '../http/api_response.dart';
 import '../models/patrol_tracking_config.dart';
+import '../utils/super_gps_service.dart';
 
 /// Login tracking config — persisted for UI + background isolate.
 abstract final class PatrolTrackingConfigStore {
@@ -48,6 +49,18 @@ abstract final class PatrolTrackingConfigStore {
 
   static Future<bool> backgroundAutoScanEnabled() async =>
       (await load()).backgroundAutoScan;
+
+  static Future<SuperGpsStreamOptions> superGpsStreamOptions({
+    required bool enableBarometer,
+  }) async {
+    final config = await load();
+    return SuperGpsStreamOptions(
+      updateIntervalMs: config.updateIntervalMs,
+      minUpdateIntervalMs: config.minUpdateIntervalMs,
+      minUpdateDistanceMeters: config.minMoveM.round(),
+      enableBarometer: enableBarometer,
+    );
+  }
 
   /// STOMP `tracking-config-changed` — merge frame fields into stored config.
   /// Saves only when merged config differs from current.

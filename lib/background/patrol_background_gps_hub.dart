@@ -112,13 +112,8 @@ class PatrolBackgroundGpsHub {
 
   static Future<SuperGpsStreamOptions> _streamOptionsFromConfig({
     required bool enableBarometer,
-  }) async {
-    final config = await PatrolTrackingConfigStore.load();
-    return SuperGpsStreamOptions(
-      updateIntervalMs: config.updateIntervalMs,
-      minUpdateIntervalMs: config.minUpdateIntervalMs,
-      minUpdateDistanceMeters: config.minMoveM.round(),
-      enableBarometer: enableBarometer,
-    );
-  }
+  }) =>
+      PatrolTrackingConfigStore.superGpsStreamOptions(
+        enableBarometer: enableBarometer,
+      );
 }

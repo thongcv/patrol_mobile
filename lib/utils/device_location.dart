@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/storage_keys.dart';
+import '../services/patrol_tracking_config_store.dart';
 import 'barometric_altitude.dart';
 import 'super_gps_service.dart';
 
@@ -462,7 +463,7 @@ class DeviceLocationWatch {
     _positionSub = null;
 
     _trackBarometer = enableBarometer && _barometerSupported;
-    final streamOpts = SuperGpsStreamOptions(
+    final streamOpts = await PatrolTrackingConfigStore.superGpsStreamOptions(
       enableBarometer: _trackBarometer,
     );
 
@@ -676,7 +677,7 @@ class LiveDeviceLocationTracker extends ChangeNotifier {
     if (userInitiated) messageKey = null;
     _notify();
     _baroEnabled = barometerSupported;
-    final streamOpts = SuperGpsStreamOptions(
+    final streamOpts = await PatrolTrackingConfigStore.superGpsStreamOptions(
       enableBarometer: _baroEnabled,
     );
 
