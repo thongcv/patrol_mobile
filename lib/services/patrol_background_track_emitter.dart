@@ -26,6 +26,11 @@ class PatrolBackgroundTrackEmitter {
     _hub.trackHandler = _onGpsEvent;
     _active = true;
     await _hub.ensureRunning();
+    // Re-bind if a concurrent hub shutdown ran between assignment and ensureRunning.
+    if (_active && _hub.trackHandler != _onGpsEvent) {
+      _hub.trackHandler = _onGpsEvent;
+      await _hub.ensureRunning();
+    }
   }
 
   Future<void> stop() async {

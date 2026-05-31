@@ -22,13 +22,18 @@ class PatrolBackgroundGpsHub {
   bool get isListening => _listening;
   bool get hasAutoScanHandler => autoScanHandler != null;
 
-  /// Starts or reconfigures GPS when either handler is set; stops when both are null.
+  /// Starts or reconfigures GPS when either handler is set; shuts down stream when both are null.
+  ///
+  /// [trackHandler] / [autoScanHandler] are owned by [PatrolBackgroundTrackEmitter] and
+  /// [PatrolBackgroundAutoScan] — [stop] does not clear them (avoids wiping a handler
+  /// another module just assigned before this call runs).
   Future<void> ensureRunning({bool? scanWantsBarometer}) async {
     if (scanWantsBarometer != null) {
       _scanWantsBarometer = scanWantsBarometer;
     }
     if (autoScanHandler == null && trackHandler == null) {
-      await stop();
+      _stopped = true;
+      await _shutdownStream();
       return;
     }
 
@@ -69,12 +74,15 @@ class PatrolBackgroundGpsHub {
     _listening = true;
   }
 
+  /// Stops the GPS stream only — handlers are cleared by their owning modules.
   Future<void> stop() async {
     _stopped = true;
-    autoScanHandler = null;
-    trackHandler = null;
     _scanWantsBarometer = false;
     _streamOptions = null;
+    await _shutdownStream();
+  }
+
+  Future<void> _shutdownStream() async {
     await _cancelSubscription();
     await SuperGpsService.shutdown();
   }
