@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/patrol_background_location_prompt.dart';
 import '../utils/top_toast.dart';
-import 'patrol_background_service.dart';
+import '../background/patrol_background_service.dart';
 import 'patrol_realtime_track_service.dart';
 import 'patrol_session_listen.dart';
 import 'patrol_track_socket_dispatch.dart';
@@ -131,6 +131,11 @@ abstract final class PatrolRealtimeTrackCoordinator {
   /// Tạm dừng auto-scan nền khi user quét thủ công trên UI (không dừng emit vị trí).
   static Future<void> setRoundScanBusy(bool busy) async {
     await PatrolRealtimeTrackService.instance.setForegroundRoundScanBusy(busy);
+  }
+
+  /// Bật / kích hoạt lại auto-scan nền FGS (kể cả khi cờ busy đã false).
+  static Future<void> triggerBackgroundAutoScan() async {
+    await PatrolRealtimeTrackService.instance.forceResumeBackgroundAutoScan();
   }
 
   static void _showMockGpsAlert() {

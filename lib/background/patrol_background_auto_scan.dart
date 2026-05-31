@@ -1,16 +1,16 @@
 import 'dart:async';
 
 import '../models/check_point.dart';
+import '../services/patrol_active_round_cache.dart';
+import '../services/patrol_active_round_sync.dart';
+import '../services/patrol_log_service.dart';
+import '../services/patrol_tracking_config_store.dart';
 import '../utils/check_point_proximity.dart';
 import '../utils/device_location.dart';
-import '../utils/super_gps_service.dart';
 import '../utils/patrol_checkpoint_success_feedback.dart';
-import 'patrol_active_round_cache.dart';
-import 'patrol_active_round_sync.dart';
-import 'patrol_background_isolate_flags.dart';
+import '../utils/super_gps_service.dart';
 import 'patrol_background_gps_hub.dart';
-import 'patrol_log_service.dart';
-import 'patrol_tracking_config_store.dart';
+import 'patrol_background_isolate_flags.dart';
 
 /// Background checkpoint auto-scan — GPS via [PatrolBackgroundGpsHub] (shared with track).
 class PatrolBackgroundAutoScan {

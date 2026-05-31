@@ -2,7 +2,7 @@ import 'dart:async';
 
 import '../utils/device_location.dart';
 import '../utils/super_gps_service.dart';
-import 'patrol_tracking_config_store.dart';
+import '../services/patrol_tracking_config_store.dart';
 
 typedef PatrolBackgroundGpsHandler = void Function(SuperGpsEvent event);
 

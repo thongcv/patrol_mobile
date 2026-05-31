@@ -5,22 +5,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
 import '../models/check_point.dart';
-import 'patrol_active_round_cache.dart';
+import '../services/patrol_active_round_cache.dart';
+import '../services/patrol_track_socket_client.dart';
+import '../services/patrol_track_token_sync.dart';
+import '../services/patrol_tracking_config_store.dart';
 import 'patrol_background_auto_scan.dart';
-
+import 'patrol_background_constants.dart';
 import 'patrol_background_gps_hub.dart';
-
-import 'patrol_background_service.dart';
-
 import 'patrol_background_track_emitter.dart';
-
 import 'patrol_fgs_invoke_events.dart';
-
-import 'patrol_track_socket_client.dart';
-
-import 'patrol_track_token_sync.dart';
-
-import 'patrol_tracking_config_store.dart';
+import 'patrol_fgs_isolate_bridge.dart';
+import 'patrol_fgs_notifications.dart';
 
 /// FGS isolate runtime: prefs-driven GPS emit, auto-scan, and STOMP.
 
@@ -50,9 +45,9 @@ final class PatrolBackgroundRunner {
   /// Register invoke handlers before slow FGS / notification init (UI may invoke early).
 
   void prepare() {
-    PatrolBackgroundService.attachBackgroundService(_service);
+    PatrolFgsIsolateBridge.attachBackgroundService(_service);
 
-    PatrolBackgroundService.setRelayCheckpointSuccess(_relayCheckpointSuccess);
+    PatrolFgsIsolateBridge.setRelayCheckpointSuccess(_relayCheckpointSuccess);
 
     _registerCommands();
 
@@ -235,11 +230,13 @@ final class PatrolBackgroundRunner {
 
     await _gpsHub.stop();
 
-    PatrolBackgroundService.detachBackgroundService();
+    PatrolFgsIsolateBridge.detachBackgroundService();
 
-    PatrolBackgroundService.cancelNotificationRevertTimer();
+    PatrolFgsNotifications.cancelNotificationRevertTimer();
 
-    await PatrolBackgroundService.cancelForegroundNotification();
+    await PatrolFgsNotifications.cancelForegroundNotification(
+      PatrolBackgroundConstants.foregroundNotificationId,
+    );
 
     await _service.stopSelf();
   }

@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:geolocator/geolocator.dart';
 
+import '../services/patrol_realtime_track_service.dart';
+import '../services/patrol_tracking_config_store.dart';
 import '../utils/super_gps_service.dart';
 import 'patrol_background_gps_hub.dart';
-import 'patrol_background_service.dart';
-import 'patrol_realtime_track_service.dart';
-import 'patrol_tracking_config_store.dart';
+import 'patrol_fgs_isolate_bridge.dart';
 
 /// STOMP location emit — subscribes to [PatrolBackgroundGpsHub] only (no auto-scan).
 class PatrolBackgroundTrackEmitter {
@@ -81,7 +81,7 @@ class PatrolBackgroundTrackEmitter {
       if (moved < minMoveM) return;
     }
     _anchor = pos;
-    PatrolBackgroundService.notifyPositionUpdateFromFgs(pos);
+    PatrolFgsIsolateBridge.notifyPositionUpdateFromFgs(pos);
     await PatrolRealtimeTrackService.instance.handlePositionFromBackground(pos);
   }
 }

@@ -11,7 +11,7 @@ import '../utils/device_location.dart';
 import '../utils/super_gps_service.dart';
 
 import 'patrol_active_round_cache.dart';
-import 'patrol_background_service.dart';
+import '../background/patrol_background_service.dart';
 
 import 'patrol_track_offline_queue.dart';
 
@@ -311,6 +311,14 @@ class PatrolRealtimeTrackService {
     } else {
       await PatrolBackgroundService.resumeBackgroundAutoScan();
     }
+  }
+
+  /// Clears foreground busy and invokes FGS resume even if already not busy.
+  Future<void> forceResumeBackgroundAutoScan() async {
+    await PatrolActiveRoundCache.setForegroundScanBusy(false);
+    await PatrolActiveRoundSync.armBackgroundAutoScanIfConfigured();
+    if (!_sessionTrackingActive) return;
+    await PatrolBackgroundService.resumeBackgroundAutoScan();
   }
 
   Future<void> onSessionEnded() async {

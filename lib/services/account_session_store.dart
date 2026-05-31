@@ -7,8 +7,8 @@ import '../config/access_token_payload.dart';
 import '../config/storage_keys.dart';
 import '../models/account_me.dart';
 import '../navigation/patrol_session.dart';
-import 'patrol_background_isolate_flags.dart';
-import 'patrol_background_service.dart';
+import '../background/patrol_background_isolate_flags.dart';
+import '../background/patrol_background_service.dart';
 import 'patrol_track_token_sync.dart';
 import 'patrol_tracking_config_store.dart';
 

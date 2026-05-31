@@ -14,9 +14,9 @@ import 'account_session_store.dart';
 
 import 'patrol_active_round_sync.dart';
 
-import 'patrol_background_isolate_flags.dart';
+import '../background/patrol_background_isolate_flags.dart';
 
-import 'patrol_fgs_invoke_events.dart';
+import '../background/patrol_fgs_invoke_events.dart';
 
 import 'patrol_track_offline_queue.dart';
 

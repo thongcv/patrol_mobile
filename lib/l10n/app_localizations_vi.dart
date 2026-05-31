@@ -322,6 +322,18 @@ class AppLocalizationsVi extends AppLocalizations {
   String get patrolRoundAutoScanComplete => 'Đã quét hết các điểm trên tuyến.';
 
   @override
+  String get patrolRoundResumeBackgroundScan => 'Bật quét nền';
+
+  @override
+  String get patrolRoundPauseBackgroundScan => 'Tắt quét nền';
+
+  @override
+  String get patrolRoundBackgroundScanResumed => 'Đã bật lại quét nền.';
+
+  @override
+  String get patrolRoundBackgroundScanPaused => 'Đã tắt quét nền.';
+
+  @override
   String get patrolRoundNfcNotFound =>
       'Không có điểm nào trên tuyến khớp thẻ NFC này.';
 

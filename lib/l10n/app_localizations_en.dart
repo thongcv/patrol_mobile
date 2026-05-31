@@ -325,6 +325,18 @@ class AppLocalizationsEn extends AppLocalizations {
       'All checkpoints on this route have been scanned.';
 
   @override
+  String get patrolRoundResumeBackgroundScan => 'Background scan';
+
+  @override
+  String get patrolRoundPauseBackgroundScan => 'Pause background scan';
+
+  @override
+  String get patrolRoundBackgroundScanResumed => 'Background scanning resumed.';
+
+  @override
+  String get patrolRoundBackgroundScanPaused => 'Background scanning paused.';
+
+  @override
   String get patrolRoundNfcNotFound =>
       'No checkpoint on this route matches that NFC tag.';
 

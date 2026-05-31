@@ -63,6 +63,7 @@ class PatrolRoundScreen extends StatefulWidget {
 }
 
 class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
+  // --- Active round ---
   ActivePatrolRound? _active;
   bool _loading = true;
   bool _refreshing = false;
@@ -73,21 +74,24 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   /// Notifies route map overlay to refresh checkpoint state (scan / reload active).
   final ValueNotifier<_RouteMapUpdate> _routeMapRevision =
       ValueNotifier(const _RouteMapUpdate(seq: 0));
+  StreamSubscription<ActivePatrolRound?>? _activeRoundSocketSub;
+  StreamSubscription<CheckPoint>? _checkpointVerifiedSub;
+
+  // --- Scan flows (QR → NFC → auto GPS → auto Bluetooth) ---
   int? _scanningCheckpointId;
   _RoundManualScanKind? _manualScanKind;
-  DeviceLocationWatch? _qrLocationWatch;
   bool _qrScanSubmitting = false;
   bool _autoScanActive = false;
   _RoundAutoScanKind? _autoScanKind;
+  DeviceLocationWatch? _qrLocationWatch;
   ValueNotifier<_QrScanProximityStatus>? _autoScanStatusNotifier;
-  StreamSubscription<ActivePatrolRound?>? _activeRoundSocketSub;
-  StreamSubscription<CheckPoint>? _checkpointVerifiedSub;
+  /// `false` = user enabled FGS background scan; `true` = paused until header toggle.
+  bool _preferManualScan = true;
 
   @override
   void initState() {
     super.initState();
-    // Clear stale busy flag if the app was killed mid-scan while FGS kept running.
-    unawaited(PatrolRealtimeTrackCoordinator.setRoundScanBusy(false));
+    unawaited(_restoreManualScanSuppressionState());
     _checkpointVerifiedSub =
         PatrolActiveRoundCoordinator.checkpointVerifiedChanges.listen(
       (point) {
@@ -126,18 +130,13 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     _checkpointVerifiedSub?.cancel();
     _routeMapRevision.dispose();
     unawaited(_stopQrLocationWatch());
-    unawaited(PatrolRealtimeTrackCoordinator.setRoundScanBusy(false));
+    if (!_preferManualScan) {
+      unawaited(PatrolRealtimeTrackCoordinator.setRoundScanBusy(false));
+    }
     super.dispose();
   }
 
-  /// Pauses background auto-scan while any of the four scan buttons is active on the UI.
-  void _syncBackgroundAutoScanSuppression() {
-    final busy =
-        _scanningCheckpointId != null ||
-        _autoScanActive ||
-        _manualScanKind != null;
-    unawaited(PatrolRealtimeTrackCoordinator.setRoundScanBusy(busy));
-  }
+  // --- Active round: load & checkpoint state ---
 
   void _notifyRouteMapRevision({Iterable<int>? checkpointIds}) {
     final prev = _routeMapRevision.value;
@@ -148,74 +147,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
           : checkpointIds.map((id) => id).toSet(),
     );
   }
-
-  Future<void> _stopQrLocationWatch() async {
-    await _qrLocationWatch?.stop();
-    _qrLocationWatch = null;
-  }
-
-  Future<void> _cancelQrScanWait() async {
-    await _stopQrLocationWatch();
-    _autoScanStatusNotifier?.dispose();
-    _autoScanStatusNotifier = null;
-    if (!mounted) return;
-    if (_autoScanActive && Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    }
-    setState(() {
-      _scanningCheckpointId = null;
-      _manualScanKind = null;
-      _qrScanSubmitting = false;
-      _autoScanActive = false;
-      _autoScanKind = null;
-    });
-    _syncBackgroundAutoScanSuppression();
-  }
-
-  Future<void> _finishAutoScanSession({String? message}) async {
-    await _stopQrLocationWatch();
-    _autoScanStatusNotifier?.dispose();
-    _autoScanStatusNotifier = null;
-    if (!mounted) return;
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    }
-    setState(() {
-      _scanningCheckpointId = null;
-      _manualScanKind = null;
-      _qrScanSubmitting = false;
-      _autoScanActive = false;
-      _autoScanKind = null;
-    });
-    _syncBackgroundAutoScanSuppression();
-    if (message != null && mounted) {
-      context.showTopToast(message);
-    }
-  }
-
-  void _resumeAutoScanAfterCheckpoint() {
-    if (!mounted || !_autoScanActive) return;
-    setState(() {
-      _scanningCheckpointId = null;
-      _qrScanSubmitting = false;
-    });
-    final l10n = AppLocalizations.of(context)!;
-    final headline = _autoScanKind == _RoundAutoScanKind.bluetooth
-        ? l10n.patrolRoundBluetoothWaiting
-        : l10n.patrolRoundQrWaitingPosition;
-    _autoScanStatusNotifier?.value = _QrScanProximityStatus(headline: headline);
-  }
-
-  String _gpsMessageFromKey(String? key, AppLocalizations l10n) {
-    return switch (key) {
-      'service' => l10n.patrolPointGpsServiceOff,
-      'denied' => l10n.patrolPointGpsDenied,
-      'error' => l10n.patrolPointGpsError,
-      'unavailable' => l10n.patrolRoundQrGpsUnavailable,
-      _ => l10n.patrolRoundQrGpsUnavailable,
-    };
-  }
-
   Future<void> _load({bool silent = false}) async {
     final showRefreshUi = silent && _active != null;
     setState(() {
@@ -260,15 +191,20 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       );
     }
   }
-
   bool _isCheckpointScanned(CheckPoint p) =>
       p.verified == true || _scannedCheckpointIds.contains(p.id);
+
+  bool _hasUnscannedCheckPoints(ActivePatrolRound data) {
+    for (final p in data.checkPoints) {
+      if (!_isCheckpointScanned(p)) return true;
+    }
+    return false;
+  }
 
   /// FGS auto-scan — [point] đã verify; cache đã ghi trên FGS isolate.
   void _applyFgsCheckpointVerified(CheckPoint point) {
     _applyCheckpointVerified(point, persistCache: false);
   }
-
   void _applyCheckpointVerified(CheckPoint point, {required bool persistCache}) {
     final active = _active;
     if (active == null) return;
@@ -286,6 +222,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     if (persistCache) {
       unawaited(PatrolActiveRoundCache.markCheckpointVerified(point.id));
     }
+    _maybeClearManualScanWhenRouteComplete();
   }
 
   /// Sets [_active], syncs server `verified` into model + [_scannedCheckpointIds].
@@ -338,7 +275,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     );
     _notifyRouteMapRevision();
   }
-
   void _markCheckpointVerified(int checkpointId) {
     final active = _active;
     if (active == null) return;
@@ -355,7 +291,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _applyCheckpointVerified(verifiedPoint, persistCache: true);
     });
   }
-
   String _messageForFailure(ApiFailure f, AppLocalizations l10n) {
     return f.userMessage(
       configMissing: l10n.toastApiNotConfigured,
@@ -365,7 +300,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       server: l10n.patrolRoundLoadFailed,
     );
   }
-
   String _messageForScanFailure(ApiFailure f, AppLocalizations l10n) {
     return f.userMessage(
       configMissing: l10n.toastApiNotConfigured,
@@ -374,6 +308,154 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       badResponse: l10n.patrolRoundQrScanFailed,
       server: l10n.patrolRoundQrScanFailed,
     );
+  }
+
+  // --- Scan flows: shared ---
+
+  bool get _roundActionBusy =>
+      _refreshing ||
+      _scanningCheckpointId != null ||
+      _autoScanActive ||
+      _manualScanKind != null;
+
+  bool get _backgroundFgsScanEnabled => !_preferManualScan;
+
+  bool get _backgroundFgsScanPaused =>
+      _preferManualScan ||
+      _scanningCheckpointId != null ||
+      _autoScanActive ||
+      _manualScanKind != null;
+
+  /// Pauses FGS background scan while foreground scan is preferred or any scan is in progress.
+  void _syncBackgroundAutoScanSuppression() {
+    unawaited(
+      PatrolRealtimeTrackCoordinator.setRoundScanBusy(_backgroundFgsScanPaused),
+    );
+  }
+
+  Future<void> _restoreManualScanSuppressionState() async {
+    final foregroundBusy = await PatrolActiveRoundCache.isForegroundScanBusy();
+    final armed = await PatrolActiveRoundCache.isBackgroundAutoScanArmed();
+    if (!mounted) return;
+    setState(() {
+      _preferManualScan = foregroundBusy || !armed;
+    });
+    _syncBackgroundAutoScanSuppression();
+  }
+
+  void _enterManualScanMode() {
+    if (_preferManualScan) {
+      _syncBackgroundAutoScanSuppression();
+      return;
+    }
+    setState(() => _preferManualScan = true);
+    _syncBackgroundAutoScanSuppression();
+  }
+
+  void _exitManualScanMode() {
+    if (!_preferManualScan) return;
+    setState(() => _preferManualScan = false);
+    _syncBackgroundAutoScanSuppression();
+  }
+
+  void _maybeClearManualScanWhenRouteComplete() {
+    final active = _active;
+    if (!_preferManualScan || active == null) return;
+    if (_autoScanCheckPoint(active) != null) return;
+    _exitManualScanMode();
+  }
+
+  Future<void> _onToggleBackgroundFgsScan() async {
+    final l10n = AppLocalizations.of(context)!;
+    if (_preferManualScan) {
+      _exitManualScanMode();
+      if (!_backgroundFgsScanPaused) {
+        await PatrolRealtimeTrackCoordinator.triggerBackgroundAutoScan();
+      }
+      if (!mounted) return;
+      setState(() {});
+      context.showTopToast(
+        l10n.patrolRoundBackgroundScanResumed,
+        duration: const Duration(milliseconds: 800),
+      );
+      return;
+    }
+
+    _enterManualScanMode();
+    if (!mounted) return;
+    context.showTopToast(
+      l10n.patrolRoundBackgroundScanPaused,
+      duration: const Duration(milliseconds: 800),
+    );
+  }
+  Future<void> _stopQrLocationWatch() async {
+    await _qrLocationWatch?.stop();
+    _qrLocationWatch = null;
+  }
+  Future<void> _cancelQrScanWait() async {
+    await _stopQrLocationWatch();
+    _autoScanStatusNotifier?.dispose();
+    _autoScanStatusNotifier = null;
+    if (!mounted) return;
+    if (_autoScanActive && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+    setState(() {
+      _scanningCheckpointId = null;
+      _manualScanKind = null;
+      _qrScanSubmitting = false;
+      _autoScanActive = false;
+      _autoScanKind = null;
+    });
+    _syncBackgroundAutoScanSuppression();
+  }
+  Future<void> _finishAutoScanSession({String? message}) async {
+    await _stopQrLocationWatch();
+    _autoScanStatusNotifier?.dispose();
+    _autoScanStatusNotifier = null;
+    if (!mounted) return;
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+    setState(() {
+      _scanningCheckpointId = null;
+      _manualScanKind = null;
+      _qrScanSubmitting = false;
+      _autoScanActive = false;
+      _autoScanKind = null;
+    });
+    _syncBackgroundAutoScanSuppression();
+    if (message != null && mounted) {
+      context.showTopToast(message);
+    }
+  }
+  void _resumeAutoScanAfterCheckpoint() {
+    if (!mounted || !_autoScanActive) return;
+    setState(() {
+      _scanningCheckpointId = null;
+      _qrScanSubmitting = false;
+    });
+    final l10n = AppLocalizations.of(context)!;
+    final headline = _autoScanKind == _RoundAutoScanKind.bluetooth
+        ? l10n.patrolRoundBluetoothWaiting
+        : l10n.patrolRoundQrWaitingPosition;
+    _autoScanStatusNotifier?.value = _QrScanProximityStatus(headline: headline);
+  }
+  CheckPoint? _autoScanCheckPoint(ActivePatrolRound data) {
+    final eligible = _eligibleCheckPoints(data);
+    return eligible.isEmpty ? null : eligible.first;
+  }
+  List<CheckPoint> _eligibleCheckPoints(ActivePatrolRound data) {
+    final out = <CheckPoint>[];
+    for (final p in data.checkPoints) {
+      if (_isCheckpointScanned(p)) {
+        continue;
+      }
+      if (!p.hasCoordinates) continue;
+      out.add(p);
+    }
+    out.sort((a, b) => a.sequenceOrder.compareTo(b.sequenceOrder));
+    return out;
   }
 
   /// `null` = cancel; `[]` = skip photos; non-empty = image path list.
@@ -492,89 +574,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       }
     }
   }
-
-  List<CheckPoint> _eligibleCheckPoints(ActivePatrolRound data) {
-    final out = <CheckPoint>[];
-    for (final p in data.checkPoints) {
-      if (_isCheckpointScanned(p)) {
-        continue;
-      }
-      if (!p.hasCoordinates) continue;
-      out.add(p);
-    }
-    out.sort((a, b) => a.sequenceOrder.compareTo(b.sequenceOrder));
-    return out;
-  }
-
-  CheckPoint? _autoScanCheckPoint(ActivePatrolRound data) {
-    final eligible = _eligibleCheckPoints(data);
-    return eligible.isEmpty ? null : eligible.first;
-  }
-
-  List<CheckPoint> _eligibleBluetoothCheckPoints(ActivePatrolRound data) {
-    final out = <CheckPoint>[];
-    for (final p in data.checkPoints) {
-      if (_isCheckpointScanned(p)) continue;
-      final bt = p.bluetooth?.trim();
-      if (bt == null || bt.isEmpty) continue;
-      out.add(p);
-    }
-    out.sort((a, b) => a.sequenceOrder.compareTo(b.sequenceOrder));
-    return out;
-  }
-
-  CheckPoint? _matchBluetoothCheckPoint(
-    List<CheckPoint> candidates, {
-    required String identifier,
-    String? deviceAddress,
-  }) {
-    for (final p in candidates) {
-      final bt = p.bluetooth?.trim();
-      if (bt == null || bt.isEmpty) continue;
-      if (bluetoothIdentifiersMatch(bt, identifier)) return p;
-      final addr = deviceAddress?.trim();
-      if (addr != null &&
-          addr.isNotEmpty &&
-          bluetoothIdentifiersMatch(bt, addr)) {
-        return p;
-      }
-    }
-    return null;
-  }
-
-  CheckPoint? _findCheckPointByNfc(List<CheckPoint> points, String raw) {
-    final payload = raw.trim();
-    if (payload.isEmpty) return null;
-    for (final p in points) {
-      if (p.nfc?.trim() == payload && p.verified != true) return p;
-    }
-    return null;
-  }
-
-  String _bluetoothScanFailureMessage(
-    AppLocalizations l10n,
-    BluetoothReadFailure failure,
-  ) {
-    return switch (failure) {
-      BluetoothReadFailure.disabled => l10n.patrolPointBluetoothDisabled,
-      BluetoothReadFailure.permissionDenied =>
-        l10n.patrolPointBluetoothPermissionDenied,
-      BluetoothReadFailure.timeout => l10n.patrolPointBluetoothScanTimeout,
-      BluetoothReadFailure.unavailable => l10n.patrolPointBluetoothUnavailable,
-      BluetoothReadFailure.failed => l10n.patrolRoundBluetoothScanFailed,
-    };
-  }
-
-  String _nfcScanFailureMessage(AppLocalizations l10n, NfcReadFailure failure) {
-    return switch (failure) {
-      NfcReadFailure.disabled => l10n.patrolPointNfcDisabled,
-      NfcReadFailure.timeout => l10n.patrolPointNfcScanTimeout,
-      NfcReadFailure.unavailable => l10n.patrolPointNfcUnavailable,
-      NfcReadFailure.noIdentifier || NfcReadFailure.failed =>
-        l10n.patrolPointNfcScanFailed,
-    };
-  }
-
   DeviceLocationSample _fallbackLocationSampleForCheckpoint(CheckPoint point) {
     final lat = point.latitude!;
     final lng = point.longitude!;
@@ -598,6 +597,192 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     );
   }
 
+  // --- Scan flow: QR (onQrScan) ---
+
+  /// Normalizes QR payload and matches `CheckPoint.qrCode` on the current route.
+  CheckPoint? _findCheckPointByQrCode(List<CheckPoint> points, String raw) {
+    var payload = raw.trim();
+    if (payload.isEmpty) return null;
+    for (final p in points) {
+      if (p.qrCode?.trim() == payload) return p;
+    }
+    return null;
+  }
+  Future<void> _onRoundQrScan(ActivePatrolRound data) async {
+    if (_roundActionBusy) return;
+
+    final l10n = AppLocalizations.of(context)!;
+    _enterManualScanMode();
+    setState(() => _manualScanKind = _RoundManualScanKind.qr);
+    try {
+      final payload = await Navigator.of(context).push<String>(
+        MaterialPageRoute(
+          builder: (_) => QrCodeScannerPage(l10n: l10n),
+        ),
+      );
+      if (!mounted || payload == null || payload.trim().isEmpty) return;
+
+      final point = _findCheckPointByQrCode(data.checkPoints, payload);
+      if (point == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.patrolRoundQrNotFound)),
+        );
+        return;
+      }
+      if (_isCheckpointScanned(point)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.patrolRoundQrAlreadyScanned)),
+        );
+        return;
+      }
+
+      await _onQrScanCheckpoint(point, data.round.id);
+    } finally {
+      if (mounted && _scanningCheckpointId == null) {
+        setState(() => _manualScanKind = null);
+        _syncBackgroundAutoScanSuppression();
+      }
+    }
+  }
+
+  /// After QR/NFC match: photo popup, one-shot GPS read, submit patrol log.
+  Future<void> _onQrScanCheckpoint(CheckPoint point, int roundId) async {
+    if (_scanningCheckpointId != null || _autoScanActive) return;
+    final l10n = AppLocalizations.of(context)!;
+
+    final photoPaths = await _confirmPhotoDialog(l10n: l10n, point: point);
+    if (!mounted || photoPaths == null) {
+      setState(() => _manualScanKind = null);
+      return;
+    }
+
+    setState(() {
+      _scanningCheckpointId = point.id;
+      _qrScanSubmitting = true;
+    });
+    _syncBackgroundAutoScanSuppression();
+    /*
+    final needsBaro = point.baroAltitude != null;
+    final gps = await readDeviceGpsOnce(
+      timeout: const Duration(seconds: 1),
+      enableBarometer: needsBaro,
+      targetAccuracyM: kCheckpointGpsTargetAccuracyM,
+    );
+
+    if (!mounted) return;
+
+    if (gps.position == null) {
+      context.showTopToast(
+        _gpsMessageFromKey(gps.messageKey, l10n),
+        backgroundColor: const Color(0xFFF59E0B),
+        duration: const Duration(milliseconds: 800),
+      );
+    }
+
+    final pos = gps.position;
+    final DeviceLocationSample sample;
+    if (pos != null) {
+      final gpsAlt = pos.altitude.isFinite ? pos.altitude : null;
+      sample = (
+        position: pos,
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+        gpsAltitude: gpsAlt,
+        baroAltitude: gps.barometricAltitude,
+      );
+    } else {
+      sample = _fallbackLocationSampleForCheckpoint(point);
+    }*/
+    final DeviceLocationSample sample = _fallbackLocationSampleForCheckpoint(point);
+    await _submitPatrolLogAfterProximity(
+      point: point,
+      roundId: roundId,
+      sample: sample,
+      photoPaths: photoPaths,
+    );
+  }
+
+  // --- Scan flow: NFC (onNfcScan) ---
+
+  CheckPoint? _findCheckPointByNfc(List<CheckPoint> points, String raw) {
+    final payload = raw.trim();
+    if (payload.isEmpty) return null;
+    for (final p in points) {
+      if (p.nfc?.trim() == payload && p.verified != true) return p;
+    }
+    return null;
+  }
+  String _nfcScanFailureMessage(AppLocalizations l10n, NfcReadFailure failure) {
+    return switch (failure) {
+      NfcReadFailure.disabled => l10n.patrolPointNfcDisabled,
+      NfcReadFailure.timeout => l10n.patrolPointNfcScanTimeout,
+      NfcReadFailure.unavailable => l10n.patrolPointNfcUnavailable,
+      NfcReadFailure.noIdentifier || NfcReadFailure.failed =>
+        l10n.patrolPointNfcScanFailed,
+    };
+  }
+  Future<void> _onRoundNfcScan(ActivePatrolRound data) async {
+    if (_roundActionBusy) return;
+
+    final l10n = AppLocalizations.of(context)!;
+    if (!isNfcScanSupported) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolPointNfcUnavailable)),
+      );
+      return;
+    }
+
+    _enterManualScanMode();
+    setState(() => _manualScanKind = _RoundManualScanKind.nfc);
+    try {
+      final result = await readNfcTagIdentifier(
+        iosAlertMessage: l10n.patrolPointNfcScanning,
+      );
+      if (!mounted || !result.ok || result.identifier == null) {
+        if (mounted && result.failure != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(_nfcScanFailureMessage(l10n, result.failure!)),
+            ),
+          );
+        }
+        return;
+      }
+
+      final point = _findCheckPointByNfc(data.checkPoints, result.identifier!);
+      if (point == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.patrolRoundNfcNotFound)),
+        );
+        return;
+      }
+      if (_isCheckpointScanned(point)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.patrolRoundNfcAlreadyScanned)),
+        );
+        return;
+      }
+
+      await _onQrScanCheckpoint(point, data.round.id);
+    } finally {
+      if (mounted && _scanningCheckpointId == null) {
+        setState(() => _manualScanKind = null);
+        _syncBackgroundAutoScanSuppression();
+      }
+    }
+  }
+
+  // --- Scan flow: auto GPS (onAutoScan) ---
+
+  String _gpsMessageFromKey(String? key, AppLocalizations l10n) {
+    return switch (key) {
+      'service' => l10n.patrolPointGpsServiceOff,
+      'denied' => l10n.patrolPointGpsDenied,
+      'error' => l10n.patrolPointGpsError,
+      'unavailable' => l10n.patrolRoundQrGpsUnavailable,
+      _ => l10n.patrolRoundQrGpsUnavailable,
+    };
+  }
   CheckPointProximityEvaluation _evaluatePointProximity({
     required CheckPoint point,
     required DeviceLocationSample sample,
@@ -622,7 +807,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       ),
     );
   }
-
   _CheckPointProximityScan _scanCheckPointsProximity(
     List<CheckPoint> points,
     DeviceLocationSample sample,
@@ -680,7 +864,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     }
     return _CheckPointProximityScan(feedback: nearestFeedback);
   }
-
   Future<void> _completeAutoScanAfterMatch({
     required CheckPoint point,
     required int roundId,
@@ -719,166 +902,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   }
 
   /// Normalizes QR payload and matches `CheckPoint.qrCode` on the current route.
-  CheckPoint? _findCheckPointByQrCode(List<CheckPoint> points, String raw) {
-    var payload = raw.trim();
-    if (payload.isEmpty) return null;
-    for (final p in points) {
-      if (p.qrCode?.trim() == payload) return p;
-    }
-    return null;
-  }
-
-  Future<void> _onRoundNfcScan(ActivePatrolRound data) async {
-    if (_roundActionBusy) return;
-
-    final l10n = AppLocalizations.of(context)!;
-    if (!isNfcScanSupported) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.patrolPointNfcUnavailable)),
-      );
-      return;
-    }
-
-    setState(() => _manualScanKind = _RoundManualScanKind.nfc);
-    _syncBackgroundAutoScanSuppression();
-    try {
-      final result = await readNfcTagIdentifier(
-        iosAlertMessage: l10n.patrolPointNfcScanning,
-      );
-      if (!mounted || !result.ok || result.identifier == null) {
-        if (mounted && result.failure != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(_nfcScanFailureMessage(l10n, result.failure!)),
-            ),
-          );
-        }
-        return;
-      }
-
-      final point = _findCheckPointByNfc(data.checkPoints, result.identifier!);
-      if (point == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.patrolRoundNfcNotFound)),
-        );
-        return;
-      }
-      if (_isCheckpointScanned(point)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.patrolRoundNfcAlreadyScanned)),
-        );
-        return;
-      }
-
-      await _onQrScanCheckpoint(point, data.round.id);
-    } finally {
-      if (mounted && _scanningCheckpointId == null) {
-        setState(() => _manualScanKind = null);
-        _syncBackgroundAutoScanSuppression();
-      }
-    }
-  }
-
-  Future<void> _onRoundQrScan(ActivePatrolRound data) async {
-    if (_roundActionBusy) return;
-
-    final l10n = AppLocalizations.of(context)!;
-    setState(() => _manualScanKind = _RoundManualScanKind.qr);
-    _syncBackgroundAutoScanSuppression();
-    try {
-      final payload = await Navigator.of(context).push<String>(
-        MaterialPageRoute(
-          builder: (_) => QrCodeScannerPage(l10n: l10n),
-        ),
-      );
-      if (!mounted || payload == null || payload.trim().isEmpty) return;
-
-      final point = _findCheckPointByQrCode(data.checkPoints, payload);
-      if (point == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.patrolRoundQrNotFound)),
-        );
-        return;
-      }
-      if (_isCheckpointScanned(point)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.patrolRoundQrAlreadyScanned)),
-        );
-        return;
-      }
-
-      await _onQrScanCheckpoint(point, data.round.id);
-    } finally {
-      if (mounted && _scanningCheckpointId == null) {
-        setState(() => _manualScanKind = null);
-        _syncBackgroundAutoScanSuppression();
-      }
-    }
-  }
-
-  bool get _roundActionBusy =>
-      _refreshing ||
-      _scanningCheckpointId != null ||
-      _autoScanActive ||
-      _manualScanKind != null;
-
-  /// After QR match: photo popup, one-shot GPS read, submit patrol log.
-  Future<void> _onQrScanCheckpoint(CheckPoint point, int roundId) async {
-    if (_scanningCheckpointId != null || _autoScanActive) return;
-    final l10n = AppLocalizations.of(context)!;
-
-    final photoPaths = await _confirmPhotoDialog(l10n: l10n, point: point);
-    if (!mounted || photoPaths == null) {
-      setState(() => _manualScanKind = null);
-      return;
-    }
-
-    setState(() {
-      _scanningCheckpointId = point.id;
-      _qrScanSubmitting = true;
-    });
-    _syncBackgroundAutoScanSuppression();
-    /*
-    final needsBaro = point.baroAltitude != null;
-    final gps = await readDeviceGpsOnce(
-      timeout: const Duration(seconds: 1),
-      enableBarometer: needsBaro,
-      targetAccuracyM: kCheckpointGpsTargetAccuracyM,
-    );
-
-    if (!mounted) return;
-
-    if (gps.position == null) {
-      context.showTopToast(
-        _gpsMessageFromKey(gps.messageKey, l10n),
-        backgroundColor: const Color(0xFFF59E0B),
-        duration: const Duration(milliseconds: 800),
-      );
-    }
-
-    final pos = gps.position;
-    final DeviceLocationSample sample;
-    if (pos != null) {
-      final gpsAlt = pos.altitude.isFinite ? pos.altitude : null;
-      sample = (
-        position: pos,
-        latitude: pos.latitude,
-        longitude: pos.longitude,
-        gpsAltitude: gpsAlt,
-        baroAltitude: gps.barometricAltitude,
-      );
-    } else {
-      sample = _fallbackLocationSampleForCheckpoint(point);
-    }*/
-    final DeviceLocationSample sample = _fallbackLocationSampleForCheckpoint(point);
-    await _submitPatrolLogAfterProximity(
-      point: point,
-      roundId: roundId,
-      sample: sample,
-      photoPaths: photoPaths,
-    );
-  }
-
   Future<void> _onAutoScanGps(ActivePatrolRound data) async {
     if (_roundActionBusy) return;
 
@@ -894,6 +917,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
     final roundId = data.round.id;
 
+    _enterManualScanMode();
     setState(() {
       _autoScanActive = true;
       _autoScanKind = _RoundAutoScanKind.gps;
@@ -1075,6 +1099,50 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     }
   }
 
+  // --- Scan flow: auto Bluetooth (onAutoScanBluetooth) ---
+
+  List<CheckPoint> _eligibleBluetoothCheckPoints(ActivePatrolRound data) {
+    final out = <CheckPoint>[];
+    for (final p in data.checkPoints) {
+      if (_isCheckpointScanned(p)) continue;
+      final bt = p.bluetooth?.trim();
+      if (bt == null || bt.isEmpty) continue;
+      out.add(p);
+    }
+    out.sort((a, b) => a.sequenceOrder.compareTo(b.sequenceOrder));
+    return out;
+  }
+  CheckPoint? _matchBluetoothCheckPoint(
+    List<CheckPoint> candidates, {
+    required String identifier,
+    String? deviceAddress,
+  }) {
+    for (final p in candidates) {
+      final bt = p.bluetooth?.trim();
+      if (bt == null || bt.isEmpty) continue;
+      if (bluetoothIdentifiersMatch(bt, identifier)) return p;
+      final addr = deviceAddress?.trim();
+      if (addr != null &&
+          addr.isNotEmpty &&
+          bluetoothIdentifiersMatch(bt, addr)) {
+        return p;
+      }
+    }
+    return null;
+  }
+  String _bluetoothScanFailureMessage(
+    AppLocalizations l10n,
+    BluetoothReadFailure failure,
+  ) {
+    return switch (failure) {
+      BluetoothReadFailure.disabled => l10n.patrolPointBluetoothDisabled,
+      BluetoothReadFailure.permissionDenied =>
+        l10n.patrolPointBluetoothPermissionDenied,
+      BluetoothReadFailure.timeout => l10n.patrolPointBluetoothScanTimeout,
+      BluetoothReadFailure.unavailable => l10n.patrolPointBluetoothUnavailable,
+      BluetoothReadFailure.failed => l10n.patrolRoundBluetoothScanFailed,
+    };
+  }
   Future<void> _completeBluetoothAutoScanAfterMatch({
     required CheckPoint point,
     required int roundId,
@@ -1141,7 +1209,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       resumeAutoScan: true,
     );
   }
-
   Future<void> _runBluetoothAutoScanLoop({
     required int roundId,
     required ValueNotifier<_QrScanProximityStatus> statusNotifier,
@@ -1226,7 +1293,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       );
     }
   }
-
   Future<void> _onAutoScanBluetooth(ActivePatrolRound data) async {
     if (_roundActionBusy) return;
 
@@ -1242,6 +1308,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
     final roundId = data.round.id;
 
+    _enterManualScanMode();
     setState(() {
       _autoScanActive = true;
       _autoScanKind = _RoundAutoScanKind.bluetooth;
@@ -1342,6 +1409,8 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       ),
     );
   }
+
+  // --- Overlays ---
 
   Future<void> _openRouteMapOverlay() async {
     final data = _active;
@@ -1541,6 +1610,30 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       heroRowTrailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (data != null &&
+              _failure == null &&
+              _hasUnscannedCheckPoints(data))
+            IconButton.filledTonal(
+              key: ValueKey('bg-fgs-${_backgroundFgsScanEnabled ? 'on' : 'off'}'),
+              visualDensity: VisualDensity.compact,
+              style: IconButton.styleFrom(
+                backgroundColor: _backgroundFgsScanEnabled
+                    ? const Color(0xFF34D399).withValues(alpha: 0.22)
+                    : Colors.white.withValues(alpha: 0.1),
+                foregroundColor: _backgroundFgsScanEnabled
+                    ? const Color(0xFF34D399)
+                    : Colors.white.withValues(alpha: 0.92),
+              ),
+              icon: Icon(
+                _backgroundFgsScanEnabled
+                    ? Icons.radar
+                    : Icons.radar_rounded,
+              ),
+              tooltip: _backgroundFgsScanEnabled
+                  ? l10n.patrolRoundPauseBackgroundScan
+                  : l10n.patrolRoundResumeBackgroundScan,
+              onPressed: () => unawaited(_onToggleBackgroundFgsScan()),
+            ),
           IconButton(
             icon: const Icon(Icons.map_rounded),
             color: Colors.white.withValues(alpha: 0.92),
@@ -1619,7 +1712,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
               key: ValueKey(
                 'round-${data.round.id}-${data.round.status}-'
                 '${data.round.expectedStartTime}-${data.round.expectedEndTime}-'
-                '${data.round.assignedName}-$_reloadToken',
+                '${data.round.assignedName}-$_reloadToken-$_preferManualScan',
               ),
               theme: theme,
               l10n: l10n,

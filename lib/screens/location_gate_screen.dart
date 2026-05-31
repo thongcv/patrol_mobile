@@ -7,7 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../l10n/app_localizations.dart';
 import '../navigation/patrol_session.dart';
 import '../services/account_session_store.dart';
-import '../services/patrol_background_service.dart';
+import '../background/patrol_background_service.dart';
 import '../services/patrol_startup_coordinator.dart';
 import '../utils/device_location.dart';
 import '../widgets/language_toggle_bar.dart';

@@ -12,7 +12,7 @@ import 'screens/location_gate_screen.dart';
 import 'services/account_session_store.dart';
 import 'services/app_locale_store.dart';
 import 'services/patrol_active_round_coordinator.dart';
-import 'services/patrol_background_service.dart';
+import 'background/patrol_background_service.dart';
 import 'services/patrol_realtime_track_coordinator.dart';
 import 'services/patrol_startup_coordinator.dart';
 

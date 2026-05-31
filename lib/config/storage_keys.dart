@@ -18,7 +18,7 @@ abstract final class StorageKeys {
       'patrol_track_background_auto_scan_enabled';
   static const patrolTrackForegroundScanBusy = 'patrol_track_foreground_scan_busy';
 
-  /// Main sets before FGS `refresh` invoke; FGS [PatrolBackgroundRunner.startTracking] consumes.
+  /// Main sets before FGS `refresh` invoke; FGS [PatrolBackgroundRunner.startTracking] (lib/background/) consumes.
   static const patrolTrackPendingFgsReloadAfterRound =
       'patrol_track_pending_fgs_reload_after_round';
   static const patrolTrackActiveRoundSnapshot = 'patrol_track_active_round_snapshot';

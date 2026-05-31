@@ -704,6 +704,30 @@ abstract class AppLocalizations {
   /// **'All checkpoints on this route have been scanned.'**
   String get patrolRoundAutoScanComplete;
 
+  /// No description provided for @patrolRoundResumeBackgroundScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Background scan'**
+  String get patrolRoundResumeBackgroundScan;
+
+  /// No description provided for @patrolRoundPauseBackgroundScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause background scan'**
+  String get patrolRoundPauseBackgroundScan;
+
+  /// No description provided for @patrolRoundBackgroundScanResumed.
+  ///
+  /// In en, this message translates to:
+  /// **'Background scanning resumed.'**
+  String get patrolRoundBackgroundScanResumed;
+
+  /// No description provided for @patrolRoundBackgroundScanPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Background scanning paused.'**
+  String get patrolRoundBackgroundScanPaused;
+
   /// No description provided for @patrolRoundNfcNotFound.
   ///
   /// In en, this message translates to:

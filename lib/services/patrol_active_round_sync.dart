@@ -33,6 +33,13 @@ abstract final class PatrolActiveRoundSync {
     await PatrolActiveRoundCache.setBackgroundAutoScanArmed(false);
   }
 
+  /// Arms FGS auto-scan when [backgroundAutoScan] config is on and a round is cached.
+  static Future<void> armBackgroundAutoScanIfConfigured() async {
+    final enabled = await PatrolTrackingConfigStore.backgroundAutoScanEnabled();
+    final cached = await PatrolActiveRoundCache.load();
+    await _armBackgroundAutoScanIfAllowed(cached?.roundId, enabled);
+  }
+
   static Future<void> _armBackgroundAutoScanIfAllowed(
     int? roundId,
     bool enabledScan,

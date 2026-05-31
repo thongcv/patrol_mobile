@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:vibration/vibration.dart';
 
 import '../services/app_locale_store.dart';
-import '../services/patrol_background_service.dart';
+import '../background/patrol_background_service.dart';
 import 'patrol_checkpoint_tts.dart';
 
 /// Vibration + notification when a checkpoint scan succeeds in background.
