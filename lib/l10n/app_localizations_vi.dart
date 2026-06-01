@@ -834,4 +834,17 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get patrolBackgroundLocationGrantAlways => 'Cho phép luôn luôn';
+
+  @override
+  String get patrolBackgroundNextRoundTitle => 'Vòng tuần tra tiếp theo';
+
+  @override
+  String get patrolBackgroundNextRoundBody =>
+      'Đã đến vòng tuần tra tiếp theo. Chọn Xác nhận để tự động quét điểm, hoặc Hủy.';
+
+  @override
+  String get patrolBackgroundNextRoundActionOk => 'Xác nhận';
+
+  @override
+  String get patrolBackgroundNextRoundActionCancel => 'Hủy';
 }

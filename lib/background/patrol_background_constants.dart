@@ -4,4 +4,7 @@ abstract final class PatrolBackgroundConstants {
 
   static const String notificationChannelId = 'sps_patrol_track';
   static const int foregroundNotificationId = 8812;
+
+  /// Next-round confirm notification stays until action or this elapses.
+  static const Duration nextRoundConfirmVisibleDuration = Duration(minutes: 10);
 }

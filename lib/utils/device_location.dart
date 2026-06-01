@@ -389,6 +389,12 @@ Future<String?> _ensureLocationReady({bool requestIfDenied = true}) async {
   return null;
 }
 
+/// Public wrapper for GPS permission / location service checks.
+Future<String?> ensurePatrolDeviceLocationReady({
+  bool requestIfDenied = true,
+}) =>
+    _ensureLocationReady(requestIfDenied: requestIfDenied);
+
 typedef DeviceLocationSample = ({
   Position position,
 

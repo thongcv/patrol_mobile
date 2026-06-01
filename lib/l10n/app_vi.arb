@@ -281,5 +281,9 @@
   },
   "patrolBackgroundLocationTitle": "Cần quyền vị trí nền",
   "patrolBackgroundLocationBody": "Chọn \"Luôn luôn\" để tuần tra, gửi vị trí realtime và tự quét điểm vẫn chạy khi tắt màn hình hoặc ứng dụng ở nền.",
-  "patrolBackgroundLocationGrantAlways": "Cho phép luôn luôn"
+  "patrolBackgroundLocationGrantAlways": "Cho phép luôn luôn",
+  "patrolBackgroundNextRoundTitle": "Vòng tuần tra tiếp theo",
+  "patrolBackgroundNextRoundBody": "Đã đến vòng tuần tra tiếp theo. Chọn Xác nhận để tự động quét điểm, hoặc Hủy.",
+  "patrolBackgroundNextRoundActionOk": "Xác nhận",
+  "patrolBackgroundNextRoundActionCancel": "Hủy"
 }

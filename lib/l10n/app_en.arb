@@ -436,5 +436,9 @@
   },
   "patrolBackgroundLocationTitle": "Background location required",
   "patrolBackgroundLocationBody": "Allow \"Always\" location so patrol tracking and checkpoint auto-scan continue when the screen is off or the app is in the background.",
-  "patrolBackgroundLocationGrantAlways": "Allow always"
+  "patrolBackgroundLocationGrantAlways": "Allow always",
+  "patrolBackgroundNextRoundTitle": "Next patrol round",
+  "patrolBackgroundNextRoundBody": "The next patrol round is ready. Tap Confirm to auto-scan, or Cancel.",
+  "patrolBackgroundNextRoundActionOk": "Confirm",
+  "patrolBackgroundNextRoundActionCancel": "Cancel"
 }

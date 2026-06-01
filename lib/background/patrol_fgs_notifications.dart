@@ -6,6 +6,8 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import '../l10n/app_localizations.dart';
 import '../services/app_locale_store.dart';
 import '../services/patrol_foreground_notification.dart';
+import '../utils/patrol_checkpoint_tts.dart';
+import 'patrol_background_constants.dart';
 import 'patrol_fgs_isolate_bridge.dart';
 
 /// Patrol FGS notification display and checkpoint-scan revert timer.
@@ -86,6 +88,38 @@ abstract final class PatrolFgsNotifications {
     );
   }
 
+  /// Default FGS / patrol notification text (after checkpoint pulse or next-round prompt).
+  static Future<void> revertForegroundNotificationToPatrolDefault({
+    int? foregroundNotificationId,
+    Future<bool> Function()? isRunningSafe,
+  }) async {
+    final l = await l10nFromPrefs();
+    final title = l.patrolBackgroundNotificationTitle;
+    final body = l.patrolBackgroundNotificationContent;
+    final bg = PatrolFgsIsolateBridge.backgroundServiceInstance;
+    if (bg is AndroidServiceInstance) {
+      await bg.setForegroundNotificationInfo(title: title, content: body);
+      return;
+    }
+    final id =
+        foregroundNotificationId ??
+        PatrolBackgroundConstants.foregroundNotificationId;
+    if (PatrolFgsIsolateBridge.isBackgroundIsolate && !Platform.isAndroid) {
+      await showForegroundNotification(
+        notificationId: id,
+        title: title,
+        body: body,
+      );
+      return;
+    }
+    if (isRunningSafe != null && !await isRunningSafe()) return;
+    await showForegroundNotification(
+      notificationId: id,
+      title: title,
+      body: body,
+    );
+  }
+
   static void _schedulePatrolNotificationRevert({
     required int foregroundNotificationId,
     required Future<bool> Function() isRunningSafe,
@@ -93,30 +127,13 @@ abstract final class PatrolFgsNotifications {
   }) {
     _notificationRevertTimer?.cancel();
     _notificationRevertTimer = Timer(const Duration(seconds: 8), () async {
-      final l = await l10nFromPrefs();
-      final title = l.patrolBackgroundNotificationTitle;
-      final body = l.patrolBackgroundNotificationContent;
       if (android != null) {
-        await android.setForegroundNotificationInfo(
-          title: title,
-          content: body,
-        );
+        await revertForegroundNotificationToPatrolDefault();
         return;
       }
-      // iOS background isolate: revert via flutter_local_notifications.
-      if (PatrolFgsIsolateBridge.isBackgroundIsolate && !Platform.isAndroid) {
-        await showForegroundNotification(
-          notificationId: foregroundNotificationId,
-          title: title,
-          body: body,
-        );
-        return;
-      }
-      if (!await isRunningSafe()) return;
-      await showForegroundNotification(
-        notificationId: foregroundNotificationId,
-        title: title,
-        body: body,
+      await revertForegroundNotificationToPatrolDefault(
+        foregroundNotificationId: foregroundNotificationId,
+        isRunningSafe: isRunningSafe,
       );
     });
   }
@@ -128,6 +145,29 @@ abstract final class PatrolFgsNotifications {
     await PatrolForegroundNotification.showCheckpointScanAlert(
       title: title,
       body: body,
+    );
+  }
+
+  /// Heads-up + TTS when STOMP synced the next patrol round (OK → FGS auto-scan).
+  static Future<void> showNextRoundAutoScanPrompt() async {
+    final l10n = await l10nFromPrefs();
+    final title = l10n.patrolBackgroundNextRoundTitle;
+    final body = l10n.patrolBackgroundNextRoundBody;
+
+    // Match heads-up text on the persistent Android FGS notification (like checkpoint scan).
+    final bg = PatrolFgsIsolateBridge.backgroundServiceInstance;
+    if (bg is AndroidServiceInstance) {
+      await bg.setForegroundNotificationInfo(title: title, content: body);
+    }
+
+    await PatrolForegroundNotification.showNextRoundAutoScanConfirm(
+      title: title,
+      body: body,
+      confirmLabel: l10n.patrolBackgroundNextRoundActionOk,
+      cancelLabel: l10n.patrolBackgroundNextRoundActionCancel,
+    );
+    unawaited(
+      PatrolCheckpointTts.speakNextRoundPrompt(message: body),
     );
   }
 }

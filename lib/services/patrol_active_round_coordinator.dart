@@ -157,13 +157,12 @@ abstract final class PatrolActiveRoundCoordinator {
   static void _emitCheckpointVerified(CheckPoint point) {
     final verified =
         point.verified == true ? point : point.copyWith(verified: true);
-    var last = _lastEmitted;
-    if (last != null) {
-      if (last.checkPoints.any(
-        (p) => p.id == verified.id && p.verified == true,
-      )) {
-        return;
-      }
+    final last = _lastEmitted;
+    final alreadyVerified = last != null &&
+        last.checkPoints.any(
+          (p) => p.id == verified.id && p.verified == true,
+        );
+    if (last != null && !alreadyVerified) {
       _lastEmitted = ActivePatrolRound(
         schedule: last.schedule,
         round: last.round,
@@ -173,6 +172,8 @@ abstract final class PatrolActiveRoundCoordinator {
         ],
       );
     }
+    // Always notify UI listeners — [_lastEmitted] may already include FGS/cache
+    // merges while [PatrolRoundScreen] still shows GET `verified: false`.
     if (!_checkpointVerifiedChanges.isClosed) {
       _checkpointVerifiedChanges.add(verified);
     }
@@ -202,7 +203,9 @@ abstract final class PatrolActiveRoundCoordinator {
 
   static Future<void> _onAuthenticated() async {
     _bindSocketHandlers();
-    await syncFromServer();
+    final armAutoScan =
+        await PatrolTrackingConfigStore.backgroundAutoScanEnabled();
+    await syncFromServer(armAutoScan: armAutoScan);
   }
 
   static Future<void> onSessionEnded() async {

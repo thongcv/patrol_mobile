@@ -14,11 +14,14 @@ import '../../l10n/app_localizations.dart';
 import '../../models/active_patrol_round.dart';
 import '../../models/check_point.dart';
 import '../../models/patrol_round.dart';
+import '../../services/patrol_foreground_gps_scan_session.dart';
 import '../../services/patrol_log_service.dart';
 import '../../services/patrol_round_service.dart';
 import '../../services/patrol_active_round_cache.dart';
 import '../../services/patrol_active_round_coordinator.dart';
+import '../../services/patrol_active_round_sync.dart';
 import '../../services/patrol_realtime_track_coordinator.dart';
+import '../../services/patrol_tracking_config_store.dart';
 import '../../services/patrol_realtime_track_service.dart';
 import '../../utils/bluetooth_beacon_reader.dart';
 import '../../utils/check_point_proximity.dart';
@@ -83,15 +86,35 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   bool _qrScanSubmitting = false;
   bool _autoScanActive = false;
   _RoundAutoScanKind? _autoScanKind;
-  DeviceLocationWatch? _qrLocationWatch;
+  PatrolForegroundGpsScanSession? _qrLocationWatch;
   ValueNotifier<_QrScanProximityStatus>? _autoScanStatusNotifier;
-  /// `false` = user enabled FGS background scan; `true` = paused until header toggle.
-  bool _preferManualScan = true;
+  /// `true` when user paused FGS scan (header radar or any of the four scan buttons).
+  bool _preferManualScan = false;
+
+  /// Clears in-memory scan UI — embedded / re-open must not reuse a prior session.
+  void _resetStaleForegroundScanUiState() {
+    _scanningCheckpointId = null;
+    _manualScanKind = null;
+    _qrScanSubmitting = false;
+    _autoScanActive = false;
+    _autoScanKind = null;
+    _autoScanStatusNotifier?.dispose();
+    _autoScanStatusNotifier = null;
+    unawaited(_stopQrLocationWatch());
+  }
+
+  Future<void> _bootstrapRoundScreen() async {
+    _resetStaleForegroundScanUiState();
+    // Load + persist round before arming FGS — [armBackgroundAutoScanIfConfigured] reads cache.
+    await _load();
+    if (!mounted) return;
+    unawaited(PatrolActiveRoundCoordinator.applyFgsRoundUpdate());
+  }
 
   @override
   void initState() {
     super.initState();
-    unawaited(_restoreManualScanSuppressionState());
+    unawaited(_bootstrapRoundScreen());
     _checkpointVerifiedSub =
         PatrolActiveRoundCoordinator.checkpointVerifiedChanges.listen(
       (point) {
@@ -108,19 +131,21 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
         PatrolActiveRoundCoordinator.activeRoundChanges.listen((round) {
       if (!mounted) return;
       if (round != null) {
-        setState(() {
-          _applyLoadedActiveRound(round, fromRefresh: true);
-          _loading = false;
-          _refreshing = false;
-          _failure = null;
-        });
+        unawaited(() async {
+          final merged =
+              await PatrolActiveRoundCache.mergeBackgroundVerified(round);
+          if (!mounted) return;
+          setState(() {
+            _applyLoadedActiveRound(merged, fromRefresh: false);
+            _loading = false;
+            _refreshing = false;
+            _failure = null;
+          });
+        }());
         return;
       }
       unawaited(_load(silent: true));
     });
-    // Merge background-scanned checkpoints from FGS cache before GET returns.
-    unawaited(PatrolActiveRoundCoordinator.applyFgsRoundUpdate());
-    _load();
   }
 
   @override
@@ -130,9 +155,8 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     _checkpointVerifiedSub?.cancel();
     _routeMapRevision.dispose();
     unawaited(_stopQrLocationWatch());
-    if (!_preferManualScan) {
-      unawaited(PatrolRealtimeTrackCoordinator.setRoundScanBusy(false));
-    }
+    // Always release — busy only applies while this screen suppresses FGS.
+    unawaited(PatrolRealtimeTrackCoordinator.setRoundScanBusy(false));
     super.dispose();
   }
 
@@ -162,20 +186,20 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     ActivePatrolRound? active = r.ok ? r.data : null;
     if (active != null) {
       active = await PatrolActiveRoundCache.preservingLocalVerified(active);
-      if(silent) {
       active = await PatrolActiveRoundCache.mergeBackgroundVerified(active);
-      }
     }
 
     if (!mounted) return;
     if (r.ok) {
+      await PatrolActiveRoundCache.save(active);
+      if (!mounted) return;
       setState(() {
         _applyLoadedActiveRound(active, fromRefresh: !silent);
         _loading = false;
         _refreshing = false;
         _failure = null;
       });
-      await PatrolActiveRoundCache.save(active);
+      await _applyFgsScanPolicyAfterRoundDataLoaded();
     } else if (PatrolSession.isUnauthorized(r.failure)) {
       await PatrolSession.endSessionAndNavigateToLogin();
     } else {
@@ -222,7 +246,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     if (persistCache) {
       unawaited(PatrolActiveRoundCache.markCheckpointVerified(point.id));
     }
-    _maybeClearManualScanWhenRouteComplete();
   }
 
   /// Sets [_active], syncs server `verified` into model + [_scannedCheckpointIds].
@@ -230,12 +253,18 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     ActivePatrolRound? active, {
     required bool fromRefresh,
   }) {
+    final previousRoundId = _active?.round.id;
     _reloadToken++;
     if (active == null) {
+      _resetStaleForegroundScanUiState();
       _active = null;
       _scannedCheckpointIds.clear();
       _notifyRouteMapRevision();
       return;
+    }
+
+    if (previousRoundId != null && previousRoundId != active.round.id) {
+      _resetStaleForegroundScanUiState();
     }
 
     // On user refresh: trust only GET active `verified`, drop local scan overrides.
@@ -320,58 +349,57 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
   bool get _backgroundFgsScanEnabled => !_preferManualScan;
 
-  bool get _backgroundFgsScanPaused =>
-      _preferManualScan ||
-      _scanningCheckpointId != null ||
-      _autoScanActive ||
-      _manualScanKind != null;
+  /// FGS auto-scan pause — only [_preferManualScan]; scan UI flags do not resume FGS.
+  bool get _backgroundFgsScanPaused => _preferManualScan;
 
-  /// Pauses FGS background scan while foreground scan is preferred or any scan is in progress.
+  /// Pauses FGS background auto-scan ([_preferManualScan]); emit vị trí không đổi.
   void _syncBackgroundAutoScanSuppression() {
-    unawaited(
-      PatrolRealtimeTrackCoordinator.setRoundScanBusy(_backgroundFgsScanPaused),
+    unawaited(_syncBackgroundAutoScanSuppressionAsync());
+  }
+
+  Future<void> _syncBackgroundAutoScanSuppressionAsync() async {
+    await PatrolRealtimeTrackCoordinator.setRoundScanBusy(
+      _backgroundFgsScanPaused,
     );
   }
 
-  Future<void> _restoreManualScanSuppressionState() async {
-    final foregroundBusy = await PatrolActiveRoundCache.isForegroundScanBusy();
-    final armed = await PatrolActiveRoundCache.isBackgroundAutoScanArmed();
-    if (!mounted) return;
-    setState(() {
-      _preferManualScan = foregroundBusy || !armed;
-    });
-    _syncBackgroundAutoScanSuppression();
-  }
-
-  void _enterManualScanMode() {
+  /// After [_load] + cache save — arm latch then resume/reload FGS auto-scan once.
+  Future<void> _applyFgsScanPolicyAfterRoundDataLoaded() async {
     if (_preferManualScan) {
-      _syncBackgroundAutoScanSuppression();
+      await PatrolRealtimeTrackCoordinator.setRoundScanBusy(true);
       return;
     }
-    setState(() => _preferManualScan = true);
+    if (!await PatrolTrackingConfigStore.backgroundAutoScanEnabled()) {
+      return;
+    }
+    if (!PatrolRealtimeTrackService.instance.isSessionTracking) {
+      await PatrolRealtimeTrackCoordinator.bootstrapAuthenticatedSession();
+    }
+    await PatrolActiveRoundSync.armBackgroundAutoScanIfConfigured();
+    if (!mounted) return;
+    await PatrolRealtimeTrackCoordinator.triggerBackgroundAutoScan();
+  }
+
+  /// Header radar or four scan buttons — pause FGS until [_resumeBackgroundFgsScan].
+  void _pauseBackgroundFgsScan() {
+    unawaited(PatrolActiveRoundSync.clearBackgroundAutoScanArmed());
+    if (!_preferManualScan) {
+      setState(() => _preferManualScan = true);
+    }
     _syncBackgroundAutoScanSuppression();
   }
 
-  void _exitManualScanMode() {
+  void _resumeBackgroundFgsScan() {
     if (!_preferManualScan) return;
     setState(() => _preferManualScan = false);
     _syncBackgroundAutoScanSuppression();
   }
 
-  void _maybeClearManualScanWhenRouteComplete() {
-    final active = _active;
-    if (!_preferManualScan || active == null) return;
-    if (_autoScanCheckPoint(active) != null) return;
-    _exitManualScanMode();
-  }
-
   Future<void> _onToggleBackgroundFgsScan() async {
     final l10n = AppLocalizations.of(context)!;
     if (_preferManualScan) {
-      _exitManualScanMode();
-      if (!_backgroundFgsScanPaused) {
-        await PatrolRealtimeTrackCoordinator.triggerBackgroundAutoScan();
-      }
+      _resumeBackgroundFgsScan();
+      await PatrolRealtimeTrackCoordinator.triggerBackgroundAutoScan();
       if (!mounted) return;
       setState(() {});
       context.showTopToast(
@@ -381,7 +409,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       return;
     }
 
-    _enterManualScanMode();
+    _pauseBackgroundFgsScan();
     if (!mounted) return;
     context.showTopToast(
       l10n.patrolRoundBackgroundScanPaused,
@@ -407,7 +435,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _autoScanActive = false;
       _autoScanKind = null;
     });
-    _syncBackgroundAutoScanSuppression();
   }
   Future<void> _finishAutoScanSession({String? message}) async {
     await _stopQrLocationWatch();
@@ -424,7 +451,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _autoScanActive = false;
       _autoScanKind = null;
     });
-    _syncBackgroundAutoScanSuppression();
     if (message != null && mounted) {
       context.showTopToast(message);
     }
@@ -498,7 +524,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
           _autoScanActive = false;
           _autoScanKind = null;
         });
-        _syncBackgroundAutoScanSuppression();
         await _stopQrLocationWatch();
       }
       return;
@@ -568,7 +593,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
             _autoScanActive = false;
             _autoScanKind = null;
           });
-          _syncBackgroundAutoScanSuppression();
           await _stopQrLocationWatch();
         }
       }
@@ -612,7 +636,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     if (_roundActionBusy) return;
 
     final l10n = AppLocalizations.of(context)!;
-    _enterManualScanMode();
+    _pauseBackgroundFgsScan();
     setState(() => _manualScanKind = _RoundManualScanKind.qr);
     try {
       final payload = await Navigator.of(context).push<String>(
@@ -640,7 +664,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     } finally {
       if (mounted && _scanningCheckpointId == null) {
         setState(() => _manualScanKind = null);
-        _syncBackgroundAutoScanSuppression();
       }
     }
   }
@@ -660,7 +683,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _scanningCheckpointId = point.id;
       _qrScanSubmitting = true;
     });
-    _syncBackgroundAutoScanSuppression();
     /*
     final needsBaro = point.baroAltitude != null;
     final gps = await readDeviceGpsOnce(
@@ -732,7 +754,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       return;
     }
 
-    _enterManualScanMode();
+    _pauseBackgroundFgsScan();
     setState(() => _manualScanKind = _RoundManualScanKind.nfc);
     try {
       final result = await readNfcTagIdentifier(
@@ -767,7 +789,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     } finally {
       if (mounted && _scanningCheckpointId == null) {
         setState(() => _manualScanKind = null);
-        _syncBackgroundAutoScanSuppression();
       }
     }
   }
@@ -890,7 +911,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       return;
     }
     setState(() => _scanningCheckpointId = point.id);
-    _syncBackgroundAutoScanSuppression();
 
     await _submitPatrolLogAfterProximity(
       point: point,
@@ -917,13 +937,12 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
     final roundId = data.round.id;
 
-    _enterManualScanMode();
+    _pauseBackgroundFgsScan();
     setState(() {
       _autoScanActive = true;
       _autoScanKind = _RoundAutoScanKind.gps;
       _qrScanSubmitting = false;
     });
-    _syncBackgroundAutoScanSuppression();
 
     final statusNotifier = ValueNotifier<_QrScanProximityStatus>(
       _QrScanProximityStatus(headline: l10n.patrolRoundQrWaitingPosition),
@@ -933,7 +952,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     if (!mounted) return;
 
     final needsBaroValidation = eligible.any((p) => p.baroAltitude != null);
-    final watch = await DeviceLocationWatch.create();
+    final watch = await PatrolForegroundGpsScanSession.create();
     if (!mounted) return;
     _qrLocationWatch = watch;
 
@@ -1308,13 +1327,12 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
     final roundId = data.round.id;
 
-    _enterManualScanMode();
+    _pauseBackgroundFgsScan();
     setState(() {
       _autoScanActive = true;
       _autoScanKind = _RoundAutoScanKind.bluetooth;
       _qrScanSubmitting = false;
     });
-    _syncBackgroundAutoScanSuppression();
 
     final statusNotifier = ValueNotifier<_QrScanProximityStatus>(
       _QrScanProximityStatus(headline: l10n.patrolRoundBluetoothWaiting),

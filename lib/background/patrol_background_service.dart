@@ -78,6 +78,10 @@ abstract final class PatrolBackgroundService {
   /// Socket/login flows should call [_awaitConfigured] then start/refresh only.
   static Future<bool> configureAtAppStart() => _configureOnce();
 
+  /// Drains notification-action taps that launched or resumed the app (Android).
+  static Future<void> processPendingNotificationActions() =>
+      PatrolForegroundNotification.drainAppLaunchNotificationAction();
+
   /// Ensures main isolate listens for FGS checkpoint TTS relay (call after [configureAtAppStart]).
   static Future<void> ensureCheckpointTtsRelayAttached() async {
     if (!await _awaitConfigured()) return;
@@ -134,6 +138,8 @@ abstract final class PatrolBackgroundService {
         channelId: notificationChannelId,
         channelName: l10n.patrolBackgroundNotificationTitle,
         channelDescription: l10n.patrolBackgroundNotificationInitialContent,
+        nextRoundConfirmLabel: l10n.patrolBackgroundNextRoundActionOk,
+        nextRoundCancelLabel: l10n.patrolBackgroundNextRoundActionCancel,
       );
       const maxAttempts = 3;
       for (var attempt = 0; attempt < maxAttempts; attempt++) {
@@ -143,6 +149,7 @@ abstract final class PatrolBackgroundService {
             iosConfiguration: iosConfiguration,
           );
           _attachCheckpointSuccessListener();
+          await PatrolForegroundNotification.drainAppLaunchNotificationAction();
           _initialized = true;
           return;
         } on MissingPluginException {
@@ -248,9 +255,7 @@ abstract final class PatrolBackgroundService {
   static FlutterBackgroundService? _tryCreateService() {
     try {
       return FlutterBackgroundService();
-    } on MissingPluginException {
-      return null;
-    } on PlatformException {
+    } on Exception {
       return null;
     }
   }
@@ -430,5 +435,33 @@ abstract final class PatrolBackgroundService {
     if (await _isServiceRunning(service)) {
       await _invoke(service, PatrolFgsInvokeEvents.resumeAutoScan);
     }
+  }
+
+  /// UI bật quét nền (vd. [PatrolRoundScreen]) — đồng nghĩa xác nhận vòng mới nếu đang chờ notify.
+  static Future<void> invokeConfirmNextRoundAutoScan() async {
+    if (!await _awaitConfigured()) return;
+    final service = _service;
+    if (service == null) return;
+    if (!await _isServiceRunning(service)) return;
+    await _invoke(service, PatrolFgsInvokeEvents.confirmNextRoundAutoScan);
+  }
+
+  /// Enables/disables FGS → UI GPS relay for foreground auto-scan (no second Geolocator).
+  static Future<void> setForegroundScanRelay({
+    required bool enabled,
+    bool enableBarometer = false,
+  }) async {
+    if (!await _awaitConfigured()) return;
+    final service = _service;
+    if (service == null) return;
+    if (!await _isServiceRunning(service)) return;
+    await _invoke(
+      service,
+      PatrolFgsInvokeEvents.setForegroundScanRelay,
+      {
+        'enabled': enabled,
+        'enableBarometer': enableBarometer,
+      },
+    );
   }
 }

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/storage_keys.dart';
 import '../models/active_patrol_round.dart';
 import '../models/check_point.dart';
+import 'patrol_tracking_config_store.dart';
 
 /// Active round snapshot + FGS coordination prefs (cross-isolate).
 abstract final class PatrolActiveRoundCache {
@@ -33,10 +34,14 @@ abstract final class PatrolActiveRoundCache {
     await prefs.remove(StorageKeys.patrolTrackEmitEnabled);
   }
 
+  /// STOMP/bootstrap latch AND live `backgroundAutoScan` from tracking config.
   static Future<bool> isBackgroundAutoScanArmed({bool reload = true}) async {
     final prefs = await _prefs(reload: reload);
-    return prefs.getBool(StorageKeys.patrolTrackBackgroundAutoScanEnabled) ??
-        false;
+    final latched =
+        prefs.getBool(StorageKeys.patrolTrackBackgroundAutoScanEnabled) ??
+            false;
+    if (!latched) return false;
+    return PatrolTrackingConfigStore.backgroundAutoScanEnabled();
   }
 
   static Future<void> setBackgroundAutoScanArmed(bool armed) async {
@@ -44,6 +49,8 @@ abstract final class PatrolActiveRoundCache {
     await prefs.setBool(StorageKeys.patrolTrackBackgroundAutoScanEnabled, armed);
   }
 
+  /// `true` while [PatrolRoundScreen] blocks FGS auto-scan (manual mode or in-flight QR/NFC/GPS/BT).
+  /// Cross-isolate; main sets via [PatrolRealtimeTrackService.setForegroundRoundScanBusy].
   static Future<bool> isForegroundScanBusy({bool reload = true}) async {
     final prefs = await _prefs(reload: reload);
     return prefs.getBool(StorageKeys.patrolTrackForegroundScanBusy) ?? false;
@@ -66,6 +73,71 @@ abstract final class PatrolActiveRoundCache {
       StorageKeys.patrolTrackPendingFgsReloadAfterRound,
       pending,
     );
+  }
+
+  static Future<void> clearConfirmNextRoundAutoScan() async {
+    final prefs = await _prefs();
+    await prefs.remove(StorageKeys.patrolTrackConfirmNextRoundAutoScanAtMs);
+  }
+
+  /// Written when user taps confirm on the next-round notification (any isolate).
+  static Future<void> signalConfirmNextRoundAutoScan() async {
+    final prefs = await _prefs();
+    await prefs.setInt(
+      StorageKeys.patrolTrackConfirmNextRoundAutoScanAtMs,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  /// Returns `true` once when a confirm signal is pending (clears the key).
+  static Future<bool> takeConfirmNextRoundAutoScan() async {
+    final prefs = await _prefs(reload: true);
+    final ms =
+        prefs.getInt(StorageKeys.patrolTrackConfirmNextRoundAutoScanAtMs) ?? 0;
+    if (ms == 0) return false;
+    await prefs.remove(StorageKeys.patrolTrackConfirmNextRoundAutoScanAtMs);
+    return true;
+  }
+
+  static Future<void> signalCancelNextRoundAutoScan() async {
+    final prefs = await _prefs();
+    await prefs.setInt(
+      StorageKeys.patrolTrackCancelNextRoundAutoScanAtMs,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  static Future<bool> takeCancelNextRoundAutoScan() async {
+    final prefs = await _prefs(reload: true);
+    final ms =
+        prefs.getInt(StorageKeys.patrolTrackCancelNextRoundAutoScanAtMs) ?? 0;
+    if (ms == 0) return false;
+    await prefs.remove(StorageKeys.patrolTrackCancelNextRoundAutoScanAtMs);
+    return true;
+  }
+
+  static Future<bool> isAwaitingNextRoundAutoScanConfirm({
+    bool reload = true,
+  }) async {
+    final prefs = await _prefs(reload: reload);
+    return prefs.getBool(
+          StorageKeys.patrolTrackAwaitingNextRoundAutoScanConfirm,
+        ) ??
+        false;
+  }
+
+  static Future<void> setAwaitingNextRoundAutoScanConfirm(bool awaiting) async {
+    final prefs = await _prefs();
+    if (awaiting) {
+      await prefs.setBool(
+        StorageKeys.patrolTrackAwaitingNextRoundAutoScanConfirm,
+        true,
+      );
+    } else {
+      await prefs.remove(
+        StorageKeys.patrolTrackAwaitingNextRoundAutoScanConfirm,
+      );
+    }
   }
 
   /// GET `/me/active` may omit `verified` — only then keep local verified from cache.

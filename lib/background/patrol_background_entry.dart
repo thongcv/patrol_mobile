@@ -71,6 +71,8 @@ Future<void> _runPatrolBackground(ServiceInstance service) async {
     channelId: PatrolBackgroundConstants.notificationChannelId,
     channelName: l10n.patrolBackgroundNotificationTitle,
     channelDescription: l10n.patrolBackgroundNotificationInitialContent,
+    nextRoundConfirmLabel: l10n.patrolBackgroundNextRoundActionOk,
+    nextRoundCancelLabel: l10n.patrolBackgroundNextRoundActionCancel,
   );
 
   if (service is! AndroidServiceInstance) {

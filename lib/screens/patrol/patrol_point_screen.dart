@@ -11,6 +11,7 @@ import '../../l10n/patrol_coord_label.dart';
 import '../../models/check_point.dart';
 import '../../services/account_session_store.dart';
 import '../../services/check_point_service.dart';
+import '../../services/patrol_foreground_gps_scan_session.dart';
 import '../../utils/device_location.dart';
 import '../../utils/bluetooth_beacon_reader.dart';
 import '../../utils/nfc_tag_reader.dart';
@@ -51,7 +52,7 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
   bool _loadingPoints = true;
   ApiFailure? _pointsFailure;
 
-  LiveDeviceLocationTracker? _locationTracker;
+  PatrolForegroundGpsLiveTracker? _locationTracker;
 
   final Set<(int, _PatrolPointUpdatingKind)> _updatingFields = {};
 
@@ -63,7 +64,7 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
   }
 
   Future<void> _initLocationTracker() async {
-    final tracker = await LiveDeviceLocationTracker.create(
+    final tracker = await PatrolForegroundGpsLiveTracker.create(
       isActive: () => mounted,
     );
     if (!mounted) {

@@ -5,6 +5,7 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 
 import '../services/app_locale_store.dart';
 import '../services/patrol_active_round_coordinator.dart';
+import '../services/patrol_foreground_gps_scan_session.dart';
 import '../services/patrol_realtime_track_coordinator.dart';
 import '../services/patrol_realtime_track_service.dart';
 import '../services/patrol_tracking_config_store.dart';
@@ -97,6 +98,10 @@ abstract final class PatrolFgsMainRelay {
     safeRelay(
       PatrolFgsInvokeEvents.positionUpdate,
       PatrolRealtimeTrackService.instance.notifyPositionFromFgsRelay,
+    );
+    safeRelay(
+      PatrolFgsInvokeEvents.scanGpsSample,
+      PatrolForegroundGpsScanSession.deliverFgsSample,
     );
   }
 

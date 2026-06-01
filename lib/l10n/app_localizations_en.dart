@@ -837,4 +837,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get patrolBackgroundLocationGrantAlways => 'Allow always';
+
+  @override
+  String get patrolBackgroundNextRoundTitle => 'Next patrol round';
+
+  @override
+  String get patrolBackgroundNextRoundBody =>
+      'The next patrol round is ready. Tap Confirm to auto-scan, or Cancel.';
+
+  @override
+  String get patrolBackgroundNextRoundActionOk => 'Confirm';
+
+  @override
+  String get patrolBackgroundNextRoundActionCancel => 'Cancel';
 }

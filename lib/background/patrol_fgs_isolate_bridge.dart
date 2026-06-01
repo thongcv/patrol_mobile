@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../utils/super_gps_service.dart';
 import 'patrol_background_isolate_flags.dart';
 import 'patrol_fgs_invoke_events.dart';
 
@@ -61,6 +62,31 @@ abstract final class PatrolFgsIsolateBridge {
           'longitude': position.longitude,
           'timestamp': position.timestamp.millisecondsSinceEpoch,
           'accuracy': position.accuracy,
+        },
+      );
+    } on MissingPluginException {
+      //
+    } on PlatformException {
+      //
+    }
+  }
+
+  /// Full Super GPS sample for foreground auto-scan UI (not throttled by track emit).
+  static void notifyScanGpsSampleFromFgs(SuperGpsEvent event) {
+    final position = event.position;
+    if (position.isMocked) return;
+    try {
+      _backgroundServiceInstance?.invoke(
+        PatrolFgsInvokeEvents.scanGpsSample,
+        {
+          'latitude': position.latitude,
+          'longitude': position.longitude,
+          'timestamp': position.timestamp.millisecondsSinceEpoch,
+          'accuracy': position.accuracy,
+          'altitude': position.altitude,
+          'altitudeAccuracy': position.altitudeAccuracy,
+          'barometricAltitude': event.barometricAltitude,
+          'barometerHardwareSupported': event.barometerHardwareSupported,
         },
       );
     } on MissingPluginException {

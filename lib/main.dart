@@ -16,12 +16,25 @@ import 'background/patrol_background_service.dart';
 import 'services/patrol_realtime_track_coordinator.dart';
 import 'services/patrol_startup_coordinator.dart';
 
-@pragma('vm:entry-point')
-Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (Firebase.apps.isEmpty) {
+  try {
     await _initializeFirebase();
+    if (Firebase.apps.isNotEmpty) {
+      // Do not register [FirebaseMessaging.onBackgroundMessage] unless you handle
+      // data-only pushes in a top-level handler. Registration spins a second Flutter
+      // engine on Android; [GeneratedPluginRegistrant] then loads
+      // flutter_background_service_android (main-isolate only) and logs duplicate
+      // isolate warnings on hot restart while FGS is running.
+      FirebaseMessaging.instance.onTokenRefresh.listen(
+        AccountSessionStore.instance.cacheDevicePushToken,
+      );
+      unawaited(_setupFirebaseMessaging());
+    }
+  } catch (_) {
   }
+  await AccountSessionStore.instance.loadFromPrefs();
+  runApp(const PatrolMobileApp());
 }
 
 Future<void> _initializeFirebase() async {
@@ -39,23 +52,6 @@ Future<void> _initializeFirebase() async {
   }
 }
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await _initializeFirebase();
-    if (Firebase.apps.isNotEmpty) {
-      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-      FirebaseMessaging.instance.onTokenRefresh.listen(
-        AccountSessionStore.instance.cacheDevicePushToken,
-      );
-      unawaited(_setupFirebaseMessaging());
-    }
-  } catch (_) {
-  }
-  await AccountSessionStore.instance.loadFromPrefs();
-  runApp(const PatrolMobileApp());
-}
-
 Future<void> _setupFirebaseMessaging() async {
   try {
     await FirebaseMessaging.instance.requestPermission();
@@ -70,16 +66,19 @@ class PatrolMobileApp extends StatefulWidget {
   State<PatrolMobileApp> createState() => _PatrolMobileAppState();
 }
 
-class _PatrolMobileAppState extends State<PatrolMobileApp> {
+class _PatrolMobileAppState extends State<PatrolMobileApp>
+    with WidgetsBindingObserver {
   Locale _locale = AppLocaleStore.defaultLocale;
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Configure FGS once after first frame (plugins ready; not on socket path).
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await PatrolBackgroundService.configureAtAppStart();
+      await PatrolBackgroundService.processPendingNotificationActions();
       await PatrolBackgroundService.ensureCheckpointTtsRelayAttached();
     });
     unawaited(_restoreLocale());
@@ -109,7 +108,15 @@ class _PatrolMobileAppState extends State<PatrolMobileApp> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(PatrolBackgroundService.processPendingNotificationActions());
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     PatrolStartupCoordinator.detach();
     PatrolActiveRoundCoordinator.detach();
     PatrolRealtimeTrackCoordinator.detach();

@@ -119,9 +119,8 @@ class PatrolRealtimeTrackService {
     await Future.wait<void>([
       PatrolActiveRoundCache.setTrackEmitEnabled(true),
       PatrolActiveRoundCache.setForegroundScanBusy(false),
-      PatrolActiveRoundSync.clearBackgroundAutoScanArmed(),
     ]);
-    // Round cache from GET; auto-scan armed only via STOMP active-round-changed.
+    // Do not clear armed latch here — startup / round screen / STOMP set it; cleared on session end.
 
     await _refreshTrackingConfigCache();
 
@@ -301,11 +300,13 @@ class PatrolRealtimeTrackService {
 
   Future<void> setForegroundRoundScanBusy(bool busy) async {
     final was = await PatrolActiveRoundCache.isForegroundScanBusy();
-    if (was == busy) return;
-    await PatrolActiveRoundCache.setForegroundScanBusy(busy);
+    if (was != busy) {
+      await PatrolActiveRoundCache.setForegroundScanBusy(busy);
+    }
 
     if (!_sessionTrackingActive) return;
 
+    // Always invoke FGS — prefs may already match [busy] while isolate is still paused.
     if (busy) {
       await PatrolBackgroundService.pauseBackgroundAutoScan();
     } else {
@@ -318,7 +319,17 @@ class PatrolRealtimeTrackService {
     await PatrolActiveRoundCache.setForegroundScanBusy(false);
     await PatrolActiveRoundSync.armBackgroundAutoScanIfConfigured();
     if (!_sessionTrackingActive) return;
+    if (await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      await PatrolBackgroundService.invokeConfirmNextRoundAutoScan();
+      return;
+    }
     await PatrolBackgroundService.resumeBackgroundAutoScan();
+    if (_backgroundEnabled) {
+      await PatrolBackgroundService.refreshPatrolTracking(
+        startIfNotRunning: true,
+        afterRoundPersist: true,
+      );
+    }
   }
 
   Future<void> onSessionEnded() async {

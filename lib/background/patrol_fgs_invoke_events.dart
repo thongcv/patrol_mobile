@@ -6,6 +6,9 @@ abstract final class PatrolFgsInvokeEvents {
   static const refresh = 'refresh';
   static const pauseAutoScan = 'pauseAutoScan';
   static const resumeAutoScan = 'resumeAutoScan';
+  static const confirmNextRoundAutoScan = 'confirmNextRoundAutoScan';
+  static const cancelNextRoundAutoScan = 'cancelNextRoundAutoScan';
+  static const setForegroundScanRelay = 'setForegroundScanRelay';
   static const tokenRefreshed = 'tokenRefreshed';
 
   static const checkpointSuccess = 'checkpointSuccess';
@@ -14,4 +17,5 @@ abstract final class PatrolFgsInvokeEvents {
   static const mockLocationAlert = 'mockLocationAlert';
   static const socketConnected = 'socketConnected';
   static const positionUpdate = 'positionUpdate';
+  static const scanGpsSample = 'scanGpsSample';
 }

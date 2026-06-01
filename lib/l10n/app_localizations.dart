@@ -1563,6 +1563,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Allow always'**
   String get patrolBackgroundLocationGrantAlways;
+
+  /// No description provided for @patrolBackgroundNextRoundTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Next patrol round'**
+  String get patrolBackgroundNextRoundTitle;
+
+  /// No description provided for @patrolBackgroundNextRoundBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The next patrol round is ready. Tap Confirm to auto-scan, or Cancel.'**
+  String get patrolBackgroundNextRoundBody;
+
+  /// No description provided for @patrolBackgroundNextRoundActionOk.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get patrolBackgroundNextRoundActionOk;
+
+  /// No description provided for @patrolBackgroundNextRoundActionCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get patrolBackgroundNextRoundActionCancel;
 }
 
 class _AppLocalizationsDelegate

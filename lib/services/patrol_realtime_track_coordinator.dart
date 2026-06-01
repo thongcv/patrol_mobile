@@ -129,8 +129,17 @@ abstract final class PatrolRealtimeTrackCoordinator {
   }
 
   /// Tạm dừng auto-scan nền khi user quét thủ công trên UI (không dừng emit vị trí).
-  static Future<void> setRoundScanBusy(bool busy) async {
-    await PatrolRealtimeTrackService.instance.setForegroundRoundScanBusy(busy);
+  ///
+  /// `busy: true` → FGS `pauseAutoScan` (soft). `busy: false` → `resumeAutoScan` + re-sync nếu cần.
+  static Future<void>? _roundScanBusyChain;
+
+  static Future<void> setRoundScanBusy(bool busy) {
+    _roundScanBusyChain =
+        (_roundScanBusyChain ?? Future<void>.value()).then(
+      (_) => PatrolRealtimeTrackService.instance
+          .setForegroundRoundScanBusy(busy),
+    );
+    return _roundScanBusyChain!;
   }
 
   /// Bật / kích hoạt lại auto-scan nền FGS (kể cả khi cờ busy đã false).

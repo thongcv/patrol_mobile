@@ -4,7 +4,6 @@ import '../models/check_point.dart';
 import '../services/patrol_active_round_cache.dart';
 import '../services/patrol_active_round_sync.dart';
 import '../services/patrol_log_service.dart';
-import '../services/patrol_tracking_config_store.dart';
 import '../utils/check_point_proximity.dart';
 import '../utils/device_location.dart';
 import '../utils/patrol_checkpoint_success_feedback.dart';
@@ -13,6 +12,19 @@ import 'patrol_background_gps_hub.dart';
 import 'patrol_background_isolate_flags.dart';
 
 /// Background checkpoint auto-scan — GPS via [PatrolBackgroundGpsHub] (shared with track).
+///
+/// Gate matrix (all flows should respect [_evaluateScanGate] / [_applyScanGate]):
+///
+/// | Condition | Hub attach | GPS samples |
+/// |---|---|---|
+/// | Awaiting next-round STOMP confirm | detach (hard) | off |
+/// | Track emit off or background not armed | detach (hard) | off |
+/// | [PatrolActiveRoundCache.isForegroundScanBusy] (round UI) | keep if was on | soft pause |
+/// | [_autoScanPaused] from `pauseAutoScan` invoke | keep if was on | soft pause |
+/// | All clear | attach | on |
+///
+/// Main isolate sets `foregroundScanBusy` via [PatrolRealtimeTrackService.setForegroundRoundScanBusy]
+/// (`pauseAutoScan` / `resumeAutoScan` invoke). STOMP next-round uses prefs `awaiting` + [holdForNextRoundConfirm].
 class PatrolBackgroundAutoScan {
   PatrolBackgroundAutoScan(
     this._gpsHub, {
@@ -51,10 +63,47 @@ class PatrolBackgroundAutoScan {
   }
 
   Future<void> resume() async {
-    if (!_autoScanPaused) return;
     _autoScanPaused = false;
-    if (!_autoScanActive) {
-      await _enqueueLifecycle(_syncScanState);
+    await _enqueueLifecycle(_syncScanState);
+  }
+
+  /// STOMP next-round prompt — detach GPS auto-scan until user confirms.
+  Future<void> holdForNextRoundConfirm() async {
+    _autoScanPaused = true;
+    await _detachScan();
+  }
+
+  /// Hard = detach hub. Soft = pause samples only (round UI / invoke pause).
+  Future<_ScanGate> _evaluateScanGate() async {
+    if (await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      return _ScanGate.blockedHard;
+    }
+    if (!await PatrolActiveRoundCache.isTrackEmitEnabled()) {
+      return _ScanGate.blockedHard;
+    }
+    if (!await PatrolActiveRoundCache.isBackgroundAutoScanArmed()) {
+      return _ScanGate.blockedHard;
+    }
+    if (await PatrolActiveRoundCache.isForegroundScanBusy()) {
+      return _ScanGate.blockedSoft;
+    }
+    if (_autoScanPaused) return _ScanGate.blockedSoft;
+    return _ScanGate.clear;
+  }
+
+  /// Applies gate side effects. Returns `true` when attach must not proceed yet.
+  Future<bool> _applyScanGate() async {
+    switch (await _evaluateScanGate()) {
+      case _ScanGate.blockedHard:
+        _autoScanPaused = true;
+        if (_autoScanActive) await _detachScan();
+        return true;
+      case _ScanGate.blockedSoft:
+        _autoScanPaused = true;
+        return true;
+      case _ScanGate.clear:
+        _autoScanPaused = false;
+        return false;
     }
   }
 
@@ -80,24 +129,18 @@ class PatrolBackgroundAutoScan {
   }
 
   Future<void> _reloadAfterRoundPersistImpl() async {
-    if (_autoScanPaused || await PatrolActiveRoundCache.isForegroundScanBusy()) {
-      await _detachScan();
-      return;
-    }
     final cached = await PatrolActiveRoundCache.load();
     if (cached == null) {
       _resetAfterRoundFullyScanned();
       return;
     }
     _applyServerRoundSnapshot(cached);
+    if (await _applyScanGate()) return;
     await _syncScanState();
   }
 
   Future<void> _refreshImpl() async {
-    if (_autoScanPaused || await PatrolActiveRoundCache.isForegroundScanBusy()) {
-      await _detachScan();
-      return;
-    }
+    if (await _applyScanGate()) return;
     if (_autoScanActive) return;
     await _syncScanState();
   }
@@ -151,21 +194,7 @@ class PatrolBackgroundAutoScan {
   }
 
   Future<void> _syncScanStateImpl() async {
-    final emit = await PatrolActiveRoundCache.isTrackEmitEnabled();
-    if (!emit ||
-        !await PatrolTrackingConfigStore.backgroundAutoScanEnabled()) {
-      if (_autoScanActive) await _detachScan();
-      return;
-    }
-    final armed = await PatrolActiveRoundCache.isBackgroundAutoScanArmed();
-    if (!armed || _autoScanPaused) {
-      if (_autoScanActive) await _detachScan();
-      return;
-    }
-    if (await PatrolActiveRoundCache.isForegroundScanBusy()) {
-      if (_autoScanActive) await _detachScan();
-      return;
-    }
+    if (await _applyScanGate()) return;
     final cached = await PatrolActiveRoundCache.load();
     if (cached == null) {
       _activeRoundSnapshot = null;
@@ -442,3 +471,5 @@ class PatrolBackgroundAutoScan {
     _onCheckpointVerified?.call(point);
   }
 }
+
+enum _ScanGate { blockedHard, blockedSoft, clear }

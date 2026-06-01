@@ -5,7 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
 import '../models/check_point.dart';
+import '../services/patrol_foreground_notification.dart';
 import '../services/patrol_active_round_cache.dart';
+import '../services/patrol_active_round_sync.dart';
 import '../services/patrol_track_socket_client.dart';
 import '../services/patrol_track_token_sync.dart';
 import '../services/patrol_tracking_config_store.dart';
@@ -38,7 +40,12 @@ final class PatrolBackgroundRunner {
 
   var _shuttingDown = false;
 
+  Timer? _nextRoundConfirmPollTimer;
+  Timer? _nextRoundConfirmExpiryTimer;
+
   Future<void>? _refreshChain;
+  Future<void>? _confirmNextRoundChain;
+  Future<void>? _cancelNextRoundChain;
 
   Timer? _prefsPollTimer;
 
@@ -73,13 +80,150 @@ final class PatrolBackgroundRunner {
   }
 
   Future<void> _handleActiveRoundSyncedFromStomp() async {
+    // Block main-isolate `afterRoundPersist` reload racing this callback.
+    await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(true);
+    await _autoScan.holdForNextRoundConfirm();
+    await _offerNextRoundAutoScanPrompt();
+  }
+
+  /// Notify + TTS — only from STOMP [onRoundSynced], not app open / refresh.
+  Future<void> _offerNextRoundAutoScanPrompt() async {
+    _stopNextRoundConfirmExpiryTimer();
+    await PatrolActiveRoundCache.clearConfirmNextRoundAutoScan();
+    await PatrolActiveRoundCache.takeCancelNextRoundAutoScan();
+    await PatrolFgsNotifications.showNextRoundAutoScanPrompt();
+    _startNextRoundConfirmPoll();
+    _startNextRoundConfirmExpiryTimer();
+  }
+
+  /// Reload auto-scan after round cache changed (no notification).
+  Future<void> _reloadAutoScanAfterRoundSilently() async {
+    if (await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      return;
+    }
     await PatrolActiveRoundCache.setPendingFgsReloadAfterRound(false);
     unawaited(_autoScan.reloadAfterRoundPersist());
   }
 
+  void _startNextRoundConfirmPoll() {
+    _nextRoundConfirmPollTimer?.cancel();
+    _nextRoundConfirmPollTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_shuttingDown) {
+        _stopNextRoundConfirmPoll();
+        return;
+      }
+      unawaited(_pollNextRoundConfirmFromPrefs());
+    });
+  }
+
+  void _stopNextRoundConfirmPoll() {
+    _nextRoundConfirmPollTimer?.cancel();
+    _nextRoundConfirmPollTimer = null;
+  }
+
+  void _startNextRoundConfirmExpiryTimer() {
+    _nextRoundConfirmExpiryTimer?.cancel();
+    _nextRoundConfirmExpiryTimer = Timer(
+      PatrolBackgroundConstants.nextRoundConfirmVisibleDuration,
+      () {
+        if (_shuttingDown) return;
+        unawaited(_onNextRoundConfirmExpired());
+      },
+    );
+  }
+
+  void _stopNextRoundConfirmExpiryTimer() {
+    _nextRoundConfirmExpiryTimer?.cancel();
+    _nextRoundConfirmExpiryTimer = null;
+  }
+
+  /// 10 minutes without Xác nhận / Hủy — dismiss like cancel (no auto-scan).
+  Future<void> _onNextRoundConfirmExpired() async {
+    if (!await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      return;
+    }
+    await _enqueueCancelNextRoundAutoScan();
+  }
+
+  Future<void> _pollNextRoundConfirmFromPrefs() async {
+    if (!await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      _stopNextRoundConfirmPoll();
+      return;
+    }
+    if (await PatrolActiveRoundCache.takeCancelNextRoundAutoScan()) {
+      await _enqueueCancelNextRoundAutoScan();
+      return;
+    }
+    if (!await PatrolActiveRoundCache.takeConfirmNextRoundAutoScan()) return;
+    await _enqueueConfirmNextRoundAutoScan();
+  }
+
+  Future<void> _enqueueConfirmNextRoundAutoScan() {
+    _confirmNextRoundChain =
+        (_confirmNextRoundChain ?? Future<void>.value()).then(
+      (_) => _confirmNextRoundAutoScanImpl(),
+    );
+    return _confirmNextRoundChain!;
+  }
+
+  Future<void> _confirmNextRoundAutoScanImpl() async {
+    if (!await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      return;
+    }
+    _stopNextRoundConfirmPoll();
+    _stopNextRoundConfirmExpiryTimer();
+    await PatrolActiveRoundCache.takeConfirmNextRoundAutoScan();
+    await PatrolForegroundNotification.cancelNextRoundConfirm();
+    await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(false);
+    await PatrolActiveRoundCache.setPendingFgsReloadAfterRound(false);
+    await PatrolFgsNotifications.revertForegroundNotificationToPatrolDefault();
+    await PatrolActiveRoundSync.armBackgroundAutoScanIfConfigured();
+    await _autoScan.resume();
+    await _autoScan.reloadAfterRoundPersist();
+  }
+
+  /// Chỉ gỡ pause foreground — không xác nhận notify vòng mới.
+  Future<void> _onResumeAutoScanRequested() async {
+    if (await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      return;
+    }
+    if (await PatrolActiveRoundCache.isForegroundScanBusy()) {
+      return;
+    }
+    await _autoScan.resume();
+    if (await PatrolActiveRoundCache.isBackgroundAutoScanArmed()) {
+      if (!_autoScan.isAutoScanActive) {
+        unawaited(_autoScan.reloadAfterRoundPersist());
+      }
+    } else if (!_autoScan.isAutoScanActive) {
+      unawaited(_autoScan.refresh());
+    }
+  }
+
+  Future<void> _enqueueCancelNextRoundAutoScan() {
+    _cancelNextRoundChain = (_cancelNextRoundChain ?? Future<void>.value()).then(
+      (_) => _cancelNextRoundAutoScanImpl(),
+    );
+    return _cancelNextRoundChain!;
+  }
+
+  Future<void> _cancelNextRoundAutoScanImpl() async {
+    if (!await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      return;
+    }
+    _stopNextRoundConfirmPoll();
+    _stopNextRoundConfirmExpiryTimer();
+    await PatrolActiveRoundCache.takeConfirmNextRoundAutoScan();
+    await PatrolActiveRoundCache.takeCancelNextRoundAutoScan();
+    await PatrolForegroundNotification.cancelNextRoundConfirm();
+    await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(false);
+    await PatrolActiveRoundCache.setPendingFgsReloadAfterRound(false);
+    await PatrolFgsNotifications.revertForegroundNotificationToPatrolDefault();
+  }
+
   Future<void> _onTrackingConfigUpdatedFromStomp() async {
     if (_shuttingDown) return;
-    unawaited(refreshTracking(reloadAutoScanAfterRound: true));
+    unawaited(refreshTracking());
   }
 
   /// After [prepare] — apply pending main refresh or prefs (invoke may have fired too early).
@@ -142,7 +286,30 @@ final class PatrolBackgroundRunner {
     });
 
     _safeListen(PatrolFgsInvokeEvents.resumeAutoScan, (_) {
-      if (!_shuttingDown) unawaited(_autoScan.resume());
+      if (!_shuttingDown) unawaited(_onResumeAutoScanRequested());
+    });
+
+    _safeListen(PatrolFgsInvokeEvents.confirmNextRoundAutoScan, (_) {
+      if (!_shuttingDown) unawaited(_enqueueConfirmNextRoundAutoScan());
+    });
+
+    _safeListen(PatrolFgsInvokeEvents.cancelNextRoundAutoScan, (_) {
+      if (!_shuttingDown) unawaited(_enqueueCancelNextRoundAutoScan());
+    });
+
+    _safeListen(PatrolFgsInvokeEvents.setForegroundScanRelay, (payload) {
+      if (_shuttingDown) return;
+      final map = payload is Map
+          ? Map<String, dynamic>.from(payload)
+          : const <String, dynamic>{};
+      final enabled = map['enabled'] == true;
+      final enableBarometer = map['enableBarometer'] == true;
+      unawaited(
+        _gpsHub.setForegroundScanRelay(
+          enabled: enabled,
+          wantsBarometer: enableBarometer,
+        ),
+      );
     });
   }
 
@@ -185,11 +352,7 @@ final class PatrolBackgroundRunner {
     await _trackEmitter.start();
 
     if (reloadAutoScanAfterRound) {
-      await PatrolActiveRoundCache.setPendingFgsReloadAfterRound(false);
-
-      // Pick up new checkpoints even if FGS survived — do not block refresh chain.
-
-      unawaited(_autoScan.reloadAfterRoundPersist());
+      await _reloadAutoScanAfterRoundSilently();
     } else {
       // Periodic refresh / emit toggle — skip GPS reattach when already active.
 
@@ -207,6 +370,13 @@ final class PatrolBackgroundRunner {
     if (_shuttingDown) return;
 
     _shuttingDown = true;
+
+    _stopNextRoundConfirmPoll();
+    _stopNextRoundConfirmExpiryTimer();
+    unawaited(PatrolForegroundNotification.cancelNextRoundConfirm());
+    unawaited(
+      PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(false),
+    );
 
     _prefsPollTimer?.cancel();
 

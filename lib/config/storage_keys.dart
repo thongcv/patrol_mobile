@@ -21,6 +21,14 @@ abstract final class StorageKeys {
   /// Main sets before FGS `refresh` invoke; FGS [PatrolBackgroundRunner.startTracking] (lib/background/) consumes.
   static const patrolTrackPendingFgsReloadAfterRound =
       'patrol_track_pending_fgs_reload_after_round';
+  /// User tapped confirm on next-round notification (any isolate → FGS poll).
+  static const patrolTrackConfirmNextRoundAutoScanAtMs =
+      'patrol_track_confirm_next_round_auto_scan_at_ms';
+  static const patrolTrackCancelNextRoundAutoScanAtMs =
+      'patrol_track_cancel_next_round_auto_scan_at_ms';
+  /// FGS holds auto-scan until user taps confirm on next-round notification.
+  static const patrolTrackAwaitingNextRoundAutoScanConfirm =
+      'patrol_track_awaiting_next_round_auto_scan_confirm';
   static const patrolTrackActiveRoundSnapshot = 'patrol_track_active_round_snapshot';
   /// Monotonic counter bumped on each [PatrolActiveRoundCache] write — FGS dedupes reload.
   static const patrolTrackActiveRoundRevision = 'patrol_track_active_round_revision';

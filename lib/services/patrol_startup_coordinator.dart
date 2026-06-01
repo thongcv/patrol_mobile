@@ -69,5 +69,8 @@ abstract final class PatrolStartupCoordinator {
     await PatrolActiveRoundCoordinator.bootstrapAuthenticatedSession();
     // Round prefs first; tracking bootstrap ends with syncTrackingAfterRoundPersisted(force).
     await PatrolRealtimeTrackCoordinator.bootstrapAuthenticatedSession();
+    // Cold start: FGS emit may be up before round UI — arm + reload auto-scan when config allows.
+    await PatrolActiveRoundSync.armBackgroundAutoScanIfConfigured();
+    await PatrolRealtimeTrackCoordinator.triggerBackgroundAutoScan();
   }
 }

@@ -4,6 +4,9 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../background/patrol_background_constants.dart';
+import '../background/patrol_notification_actions.dart';
+
 /// Patrol tracking notification (Android foreground service + iOS notification center).
 abstract final class PatrolForegroundNotification {
   PatrolForegroundNotification._();
@@ -12,6 +15,8 @@ abstract final class PatrolForegroundNotification {
   static const String _iosCheckpointThreadId = 'sps_patrol_checkpoint_scan';
   static const String _logoAsset = 'assets/images/ic_notification_logo.png';
   static const int checkpointAlertNotificationIdBase = 881300;
+  static const int nextRoundConfirmNotificationId = 881301;
+  static const String _iosNextRoundCategoryId = 'sps_patrol_next_round';
   static const int _checkpointAlertIdSlots = 100;
   static const int _maxCheckpointAlertsKept = 30;
 
@@ -23,8 +28,12 @@ abstract final class PatrolForegroundNotification {
   static String? _channelName;
   static String? _alertChannelId;
   static String? _alertChannelName;
+  static String? _nextRoundChannelId;
+  static String? _nextRoundChannelName;
   static String? _iosAttachmentPath;
   static var _checkpointAlertSeq = 0;
+  static var _nextRoundConfirmSeq = 0;
+  static int? _activeNextRoundConfirmNotificationId;
   static final List<int> _activeCheckpointAlertIds = <int>[];
 
   /// Two short pulses for checkpoint-scan feedback (Android channel vibration).
@@ -35,6 +44,8 @@ abstract final class PatrolForegroundNotification {
     required String channelId,
     required String channelName,
     required String channelDescription,
+    String nextRoundConfirmLabel = 'Confirm',
+    String nextRoundCancelLabel = 'Cancel',
   }) async {
     if (_ready && _channelId == channelId) return;
     _channelId = channelId;
@@ -44,7 +55,13 @@ abstract final class PatrolForegroundNotification {
       const initSettings = InitializationSettings(
         android: AndroidInitializationSettings('ic_bg_service_small'),
       );
-      await _plugin.initialize(initSettings);
+      await _plugin.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse:
+            PatrolNotificationActions.handleResponse,
+        onDidReceiveBackgroundNotificationResponse:
+            patrolNotificationBackgroundTap,
+      );
 
       final android = _plugin
           .resolvePlatformSpecificImplementation<
@@ -72,15 +89,52 @@ abstract final class PatrolForegroundNotification {
           showBadge: true,
         ),
       );
+
+      _nextRoundChannelId = '${channelId}_next_round';
+      _nextRoundChannelName = '$channelName — next round';
+      await android?.createNotificationChannel(
+        AndroidNotificationChannel(
+          _nextRoundChannelId!,
+          _nextRoundChannelName!,
+          description: 'Confirm or cancel auto-scan for the next patrol round',
+          importance: Importance.max,
+          enableVibration: true,
+          vibrationPattern: checkpointScanVibrationPattern,
+          playSound: true,
+          showBadge: true,
+        ),
+      );
     } else if (Platform.isIOS) {
-      const initSettings = InitializationSettings(
+      final initSettings = InitializationSettings(
         iOS: DarwinInitializationSettings(
           requestAlertPermission: false,
           requestBadgePermission: false,
           requestSoundPermission: false,
+          notificationCategories: [
+            DarwinNotificationCategory(
+              _iosNextRoundCategoryId,
+              actions: <DarwinNotificationAction>[
+                DarwinNotificationAction.plain(
+                  PatrolNotificationActions.autoScanConfirmActionId,
+                  nextRoundConfirmLabel,
+                ),
+                DarwinNotificationAction.plain(
+                  PatrolNotificationActions.autoScanCancelActionId,
+                  nextRoundCancelLabel,
+                  options: {DarwinNotificationActionOption.destructive},
+                ),
+              ],
+            ),
+          ],
         ),
       );
-      await _plugin.initialize(initSettings);
+      await _plugin.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse:
+            PatrolNotificationActions.handleResponse,
+        onDidReceiveBackgroundNotificationResponse:
+            patrolNotificationBackgroundTap,
+      );
 
       final ios = _plugin.resolvePlatformSpecificImplementation<
           IOSFlutterLocalNotificationsPlugin>();
@@ -248,6 +302,124 @@ abstract final class PatrolForegroundNotification {
     }
   }
 
+  /// Heads-up confirm: Xác nhận → auto-scan; Hủy → dismiss.
+  static Future<void> showNextRoundAutoScanConfirm({
+    required String title,
+    required String body,
+    required String confirmLabel,
+    required String cancelLabel,
+  }) async {
+    if (!_ready ||
+        _nextRoundChannelId == null ||
+        _nextRoundChannelName == null) {
+      return;
+    }
+
+    final postedAt = DateTime.now();
+    final payload = PatrolNotificationActions.nextRoundPayload;
+    final confirmAction = PatrolNotificationActions.autoScanConfirmActionId;
+    final cancelAction = PatrolNotificationActions.autoScanCancelActionId;
+    final notificationId =
+        nextRoundConfirmNotificationId + (_nextRoundConfirmSeq++ % 8);
+
+    if (Platform.isAndroid) {
+      final details = NotificationDetails(
+        android: AndroidNotificationDetails(
+          _nextRoundChannelId!,
+          _nextRoundChannelName!,
+          channelDescription:
+              'Confirm or cancel auto-scan for the next patrol round',
+          icon: 'ic_bg_service_small',
+          importance: Importance.max,
+          priority: Priority.max,
+          visibility: NotificationVisibility.public,
+          category: AndroidNotificationCategory.call,
+          ticker: body,
+          ongoing: true,
+          autoCancel: false,
+          timeoutAfter: PatrolBackgroundConstants
+              .nextRoundConfirmVisibleDuration
+              .inMilliseconds,
+          onlyAlertOnce: false,
+          showWhen: true,
+          when: postedAt.millisecondsSinceEpoch,
+          enableVibration: true,
+          playSound: true,
+          vibrationPattern: checkpointScanVibrationPattern,
+          styleInformation: BigTextStyleInformation(
+            body,
+            contentTitle: title,
+          ),
+          actions: <AndroidNotificationAction>[
+            AndroidNotificationAction(
+              confirmAction,
+              confirmLabel,
+              titleColor: const Color(0xFF4CAF50),
+              showsUserInterface: false,
+              cancelNotification: true,
+              contextual: false,
+            ),
+            AndroidNotificationAction(
+              cancelAction,
+              cancelLabel,
+              titleColor: const Color(0xFFE53935),
+              showsUserInterface: false,
+              cancelNotification: true,
+              contextual: false,
+            ),
+          ],
+        ),
+      );
+      _activeNextRoundConfirmNotificationId = notificationId;
+      await _plugin.show(
+        notificationId,
+        title,
+        body,
+        details,
+        payload: payload,
+      );
+      return;
+    }
+
+    if (Platform.isIOS) {
+      await _ensureIosAttachment();
+      final path = _iosAttachmentPath;
+      final details = NotificationDetails(
+        iOS: DarwinNotificationDetails(
+          presentBanner: true,
+          presentList: true,
+          presentSound: true,
+          presentBadge: false,
+          threadIdentifier: _iosCheckpointThreadId,
+          categoryIdentifier: _iosNextRoundCategoryId,
+          interruptionLevel: InterruptionLevel.timeSensitive,
+          attachments: path == null
+              ? null
+              : [DarwinNotificationAttachment(path)],
+        ),
+      );
+      _activeNextRoundConfirmNotificationId = notificationId;
+      await _plugin.show(
+        notificationId,
+        title,
+        body,
+        details,
+        payload: payload,
+      );
+    }
+  }
+
+  static Future<void> cancelNextRoundConfirm() async {
+    final active = _activeNextRoundConfirmNotificationId;
+    if (active != null) {
+      await cancel(active);
+      _activeNextRoundConfirmNotificationId = null;
+    }
+    for (var i = 0; i < 8; i++) {
+      await cancel(nextRoundConfirmNotificationId + i);
+    }
+  }
+
   static Future<void> cancel(int notificationId) async {
     await _plugin.cancel(notificationId);
   }
@@ -257,6 +429,22 @@ abstract final class PatrolForegroundNotification {
     _activeCheckpointAlertIds.clear();
     for (final id in ids) {
       await _plugin.cancel(id);
+    }
+  }
+
+  /// When a notification action opens the app, the tap is delivered here (not [handleResponse]).
+  static Future<void> drainAppLaunchNotificationAction() async {
+    if (!_ready) return;
+    try {
+      final launch = await _plugin.getNotificationAppLaunchDetails();
+      if (launch?.didNotificationLaunchApp != true) return;
+      final response = launch?.notificationResponse;
+      if (response == null) return;
+      await PatrolNotificationActions.handleResponse(response);
+    } on MissingPluginException {
+      //
+    } on PlatformException {
+      //
     }
   }
 }

@@ -18,6 +18,29 @@ abstract final class PatrolCheckpointTts {
   static final FlutterTts _tts = FlutterTts();
   static Future<void>? _speakChain;
   static const Duration _dedupeWindow = Duration(seconds: 8);
+  static const String _nextRoundDedupeKey = '__next_round_prompt__';
+
+  /// Speaks next-round auto-scan prompt (deduped across isolates).
+  static Future<bool> speakNextRoundPrompt({
+    required String message,
+    Locale? locale,
+  }) async {
+    final text = message.trim();
+    if (text.isEmpty) return false;
+    if (!await _tryAcquireSpeakSlot(_nextRoundDedupeKey)) return false;
+
+    final resolvedLocale = locale ?? await AppLocaleStore.readLocale();
+    var started = false;
+    final future = (_speakChain ?? Future<void>.value()).then((_) async {
+      started = await _speak(message: text, locale: resolvedLocale);
+      if (!started) {
+        await _releaseSpeakSlot(_nextRoundDedupeKey);
+      }
+    });
+    _speakChain = future;
+    await future;
+    return started;
+  }
 
   /// Speaks localized checkpoint-scanned message once per [checkpointName].
   /// Returns `true` when a speak attempt was started.
