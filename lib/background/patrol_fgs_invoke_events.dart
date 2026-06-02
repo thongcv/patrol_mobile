@@ -8,6 +8,8 @@ abstract final class PatrolFgsInvokeEvents {
   static const resumeAutoScan = 'resumeAutoScan';
   static const confirmNextRoundAutoScan = 'confirmNextRoundAutoScan';
   static const cancelNextRoundAutoScan = 'cancelNextRoundAutoScan';
+  /// Main / prefs — re-hold auto-scan and show next-round prompt when [awaiting] is latched.
+  static const syncNextRoundAutoScanHold = 'syncNextRoundAutoScanHold';
   static const setForegroundScanRelay = 'setForegroundScanRelay';
   static const tokenRefreshed = 'tokenRefreshed';
 
@@ -18,4 +20,5 @@ abstract final class PatrolFgsInvokeEvents {
   static const socketConnected = 'socketConnected';
   static const positionUpdate = 'positionUpdate';
   static const scanGpsSample = 'scanGpsSample';
+  static const backgroundAutoScanRunning = 'backgroundAutoScanRunning';
 }

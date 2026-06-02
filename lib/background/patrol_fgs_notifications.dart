@@ -148,17 +148,11 @@ abstract final class PatrolFgsNotifications {
     );
   }
 
-  /// Heads-up + TTS when STOMP synced the next patrol round (OK → FGS auto-scan).
+  /// Heads-up + TTS when STOMP synced the next patrol round.
   static Future<void> showNextRoundAutoScanPrompt() async {
     final l10n = await l10nFromPrefs();
     final title = l10n.patrolBackgroundNextRoundTitle;
     final body = l10n.patrolBackgroundNextRoundBody;
-
-    // Match heads-up text on the persistent Android FGS notification (like checkpoint scan).
-    final bg = PatrolFgsIsolateBridge.backgroundServiceInstance;
-    if (bg is AndroidServiceInstance) {
-      await bg.setForegroundNotificationInfo(title: title, content: body);
-    }
 
     await PatrolForegroundNotification.showNextRoundAutoScanConfirm(
       title: title,

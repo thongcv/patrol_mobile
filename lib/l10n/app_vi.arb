@@ -28,6 +28,7 @@
   "locationPermissionDenied": "Chưa cấp quyền vị trí cho ứng dụng.",
   "locationPermissionBackground": "Mới chỉ \"Cho phép khi dùng ứng dụng\". Chọn \"Luôn cho phép\" để tuần tra nền.",
   "locationPermissionForever": "Quyền vị trí bị từ chối vĩnh viễn. Mở Cài đặt ứng dụng để bật lại.",
+  "notificationPermissionDenied": "Chưa bật quyền thông báo. Bật trong Cài đặt ứng dụng để nhận cảnh báo vòng tuần tra khi tắt app.",
   "openLocationSettings": "Mở cài đặt vị trí",
   "openAppSettings": "Mở cài đặt ứng dụng",
   "retry": "Thử lại",
@@ -285,5 +286,6 @@
   "patrolBackgroundNextRoundTitle": "Vòng tuần tra tiếp theo",
   "patrolBackgroundNextRoundBody": "Đã đến vòng tuần tra tiếp theo. Chọn Xác nhận để tự động quét điểm, hoặc Hủy.",
   "patrolBackgroundNextRoundActionOk": "Xác nhận",
-  "patrolBackgroundNextRoundActionCancel": "Hủy"
+  "patrolBackgroundNextRoundActionCancel": "Hủy",
+  "patrolBackgroundNextRoundConfirmed": "Đã xác nhận — bắt đầu quét điểm tự động."
 }

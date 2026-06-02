@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:geolocator/geolocator.dart';
 
 import '../models/check_point.dart';
+import 'device_location.dart';
 
 /// Default radius (m) when checkpoint has no configured `radius`.
 const double kDefaultCheckPointRadiusM = 3;
@@ -416,4 +417,112 @@ CheckPointProximitySnapshot _buildSnapshot({
     allowedRadiusM: allowedRadiusM,
     usesBaroAltitude: usesBaroAltitude,
   );
+}
+
+/// How auto-scan picks among eligible checkpoints (sorted by `sequenceOrder`).
+enum CheckPointMatchOrder {
+  /// Only [points.first]; returns on match.
+  sequenceOrder,
+
+  /// Among matches, pick smallest horizontal distance.
+  nearest,
+}
+
+/// Proximity scan result: matched checkpoint for log and/or UI feedback.
+class CheckPointProximityScan {
+  const CheckPointProximityScan({this.matched, this.feedback});
+
+  final CheckPoint? matched;
+  final CheckPointProximityEvaluation? feedback;
+}
+
+CheckPointMatchOrder checkPointMatchOrderFromConfig(String rawOrder) {
+  return switch (rawOrder.trim().toLowerCase()) {
+    'nearest' => CheckPointMatchOrder.nearest,
+    _ => CheckPointMatchOrder.sequenceOrder,
+  };
+}
+
+CheckPointProximityEvaluation evaluateCheckPointProximityForSample({
+  required CheckPoint checkpoint,
+  required DeviceLocationSample sample,
+  required bool baroListening,
+}) {
+  final pos = sample.position;
+  final validateBaro = checkpoint.baroAltitude != null && baroListening;
+  return evaluateCheckPointProximity(
+    checkpoint: checkpoint,
+    latitude: sample.latitude,
+    longitude: sample.longitude,
+    gpsAltitude: sample.gpsAltitude,
+    baroAltitude: sample.baroAltitude,
+    validateBaroAltitude: validateBaro,
+    horizontalAccuracyM: netIncrementalAccuracyM(
+      pos.accuracy,
+      checkpoint.accuracy,
+    ),
+    gpsAltitudeAccuracyM: netIncrementalAccuracyM(
+      pos.altitudeAccuracy,
+      checkpoint.altitudeAccuracy,
+    ),
+  );
+}
+
+/// Scans [points] (expected sorted by `sequenceOrder`) for a proximity match.
+CheckPointProximityScan scanCheckPointsProximity(
+  List<CheckPoint> points,
+  DeviceLocationSample sample,
+  bool baroListening, {
+  CheckPointMatchOrder matchOrder = CheckPointMatchOrder.sequenceOrder,
+}) {
+  if (points.isEmpty) return const CheckPointProximityScan();
+
+  if (matchOrder == CheckPointMatchOrder.sequenceOrder) {
+    final evaluation = evaluateCheckPointProximityForSample(
+      checkpoint: points.first,
+      sample: sample,
+      baroListening: baroListening,
+    );
+    if (evaluation.result.ok) {
+      return CheckPointProximityScan(matched: points.first);
+    }
+    return CheckPointProximityScan(feedback: evaluation);
+  }
+
+  CheckPoint? bestMatch;
+  double? bestMatchDistanceM;
+  CheckPointProximityEvaluation? nearestFeedback;
+  double? nearestFeedbackDistanceM;
+
+  for (final point in points) {
+    final evaluation = evaluateCheckPointProximityForSample(
+      checkpoint: point,
+      sample: sample,
+      baroListening: baroListening,
+    );
+    if (evaluation.result.ok) {
+      final distanceM = evaluation.snapshot?.horizontalM;
+      if (distanceM == null) {
+        bestMatch ??= point;
+        continue;
+      }
+      if (bestMatchDistanceM == null || distanceM < bestMatchDistanceM) {
+        bestMatchDistanceM = distanceM;
+        bestMatch = point;
+      }
+    } else {
+      final distanceM = evaluation.result.distanceM;
+      if (distanceM == null) continue;
+      if (nearestFeedbackDistanceM == null ||
+          distanceM < nearestFeedbackDistanceM) {
+        nearestFeedbackDistanceM = distanceM;
+        nearestFeedback = evaluation;
+      }
+    }
+  }
+
+  if (bestMatch != null) {
+    return CheckPointProximityScan(matched: bestMatch);
+  }
+  return CheckPointProximityScan(feedback: nearestFeedback);
 }

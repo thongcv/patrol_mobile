@@ -4,8 +4,9 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-import '../background/patrol_background_constants.dart';
+import '../background/patrol_background_isolate_flags.dart';
 import '../background/patrol_notification_actions.dart';
+import '../utils/patrol_background_plugin_registrant.dart';
 
 /// Patrol tracking notification (Android foreground service + iOS notification center).
 abstract final class PatrolForegroundNotification {
@@ -14,8 +15,10 @@ abstract final class PatrolForegroundNotification {
   static const String _iosThreadId = 'sps_patrol_track';
   static const String _iosCheckpointThreadId = 'sps_patrol_checkpoint_scan';
   static const String _logoAsset = 'assets/images/ic_notification_logo.png';
+  /// Checkpoint heads-up ids: [checkpointAlertNotificationIdBase, +100).
   static const int checkpointAlertNotificationIdBase = 881300;
-  static const int nextRoundConfirmNotificationId = 881301;
+  /// Dedicated block — must not overlap checkpoint ids (was 881301, collided).
+  static const int nextRoundConfirmNotificationId = 882500;
   static const String _iosNextRoundCategoryId = 'sps_patrol_next_round';
   static const int _checkpointAlertIdSlots = 100;
   static const int _maxCheckpointAlertsKept = 30;
@@ -28,13 +31,13 @@ abstract final class PatrolForegroundNotification {
   static String? _channelName;
   static String? _alertChannelId;
   static String? _alertChannelName;
-  static String? _nextRoundChannelId;
-  static String? _nextRoundChannelName;
+  static String? _nextRoundHeadsUpChannelId;
+  static String? _nextRoundHeadsUpChannelName;
   static String? _iosAttachmentPath;
   static var _checkpointAlertSeq = 0;
-  static var _nextRoundConfirmSeq = 0;
   static int? _activeNextRoundConfirmNotificationId;
   static final List<int> _activeCheckpointAlertIds = <int>[];
+  static var _launchNotificationActionDrained = false;
 
   /// Two short pulses for checkpoint-scan feedback (Android channel vibration).
   static final Int64List checkpointScanVibrationPattern =
@@ -47,7 +50,11 @@ abstract final class PatrolForegroundNotification {
     String nextRoundConfirmLabel = 'Confirm',
     String nextRoundCancelLabel = 'Cancel',
   }) async {
-    if (_ready && _channelId == channelId) return;
+    if (_ready &&
+        _channelId == channelId &&
+        _nextRoundHeadsUpChannelId != null) {
+      return;
+    }
     _channelId = channelId;
     _channelName = channelName;
 
@@ -90,20 +97,27 @@ abstract final class PatrolForegroundNotification {
         ),
       );
 
-      _nextRoundChannelId = '${channelId}_next_round';
-      _nextRoundChannelName = '$channelName — next round';
+      // Heads-up + actions (must match MainActivity channel id).
+      _nextRoundHeadsUpChannelId = '${channelId}_next_round_popup_v3';
+      _nextRoundHeadsUpChannelName = '$channelName — next round alert';
       await android?.createNotificationChannel(
         AndroidNotificationChannel(
-          _nextRoundChannelId!,
-          _nextRoundChannelName!,
-          description: 'Confirm or cancel auto-scan for the next patrol round',
+          _nextRoundHeadsUpChannelId!,
+          _nextRoundHeadsUpChannelName!,
+          description: 'Popup on screen for the next patrol round',
           importance: Importance.max,
+          bypassDnd: true,
           enableVibration: true,
+          enableLights: true,
           vibrationPattern: checkpointScanVibrationPattern,
           playSound: true,
           showBadge: true,
+          audioAttributesUsage: AudioAttributesUsage.alarm,
         ),
       );
+
+      await ensureAndroidNotificationsEnabled();
+      await ensureAndroidHeadsUpPermissions();
     } else if (Platform.isIOS) {
       final initSettings = InitializationSettings(
         iOS: DarwinInitializationSettings(
@@ -143,6 +157,34 @@ abstract final class PatrolForegroundNotification {
     }
 
     _ready = true;
+  }
+
+  /// Android 13+ — without this, local notifications never appear when the app is closed.
+  static Future<bool> ensureAndroidNotificationsEnabled({
+    bool requestIfNeeded = true,
+  }) async {
+    if (!Platform.isAndroid) return true;
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null) return false;
+    var enabled = await android.areNotificationsEnabled() ?? false;
+    if (!enabled && requestIfNeeded) {
+      enabled = await android.requestNotificationsPermission() ?? false;
+    }
+    return enabled;
+  }
+
+  /// Full-screen / heads-up on lock screen (Android 11+); best-effort DND bypass.
+  static Future<void> ensureAndroidHeadsUpPermissions() async {
+    if (!Platform.isAndroid) return;
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null) return;
+    try {
+      await android.requestFullScreenIntentPermission();
+    } on Object {
+      //
+    }
   }
 
   static Future<void> _ensureIosAttachment() async {
@@ -309,9 +351,13 @@ abstract final class PatrolForegroundNotification {
     required String confirmLabel,
     required String cancelLabel,
   }) async {
+    if (PatrolBackgroundIsolateFlags.active) {
+      ensurePatrolBackgroundPlugins();
+    }
+
     if (!_ready ||
-        _nextRoundChannelId == null ||
-        _nextRoundChannelName == null) {
+        _nextRoundHeadsUpChannelId == null ||
+        _nextRoundHeadsUpChannelName == null) {
       return;
     }
 
@@ -319,32 +365,32 @@ abstract final class PatrolForegroundNotification {
     final payload = PatrolNotificationActions.nextRoundPayload;
     final confirmAction = PatrolNotificationActions.autoScanConfirmActionId;
     final cancelAction = PatrolNotificationActions.autoScanCancelActionId;
-    final notificationId =
-        nextRoundConfirmNotificationId + (_nextRoundConfirmSeq++ % 8);
+    const notificationId = nextRoundConfirmNotificationId;
 
     if (Platform.isAndroid) {
       final details = NotificationDetails(
         android: AndroidNotificationDetails(
-          _nextRoundChannelId!,
-          _nextRoundChannelName!,
+          _nextRoundHeadsUpChannelId!,
+          _nextRoundHeadsUpChannelName!,
           channelDescription:
               'Confirm or cancel auto-scan for the next patrol round',
           icon: 'ic_bg_service_small',
           importance: Importance.max,
           priority: Priority.max,
+          channelBypassDnd: true,
           visibility: NotificationVisibility.public,
           category: AndroidNotificationCategory.call,
           ticker: body,
           ongoing: true,
           autoCancel: false,
-          timeoutAfter: PatrolBackgroundConstants
-              .nextRoundConfirmVisibleDuration
-              .inMilliseconds,
+          fullScreenIntent: true,
           onlyAlertOnce: false,
           showWhen: true,
           when: postedAt.millisecondsSinceEpoch,
           enableVibration: true,
+          enableLights: true,
           playSound: true,
+          audioAttributesUsage: AudioAttributesUsage.alarm,
           vibrationPattern: checkpointScanVibrationPattern,
           styleInformation: BigTextStyleInformation(
             body,
@@ -354,7 +400,6 @@ abstract final class PatrolForegroundNotification {
             AndroidNotificationAction(
               confirmAction,
               confirmLabel,
-              titleColor: const Color(0xFF4CAF50),
               showsUserInterface: false,
               cancelNotification: true,
               contextual: false,
@@ -362,7 +407,6 @@ abstract final class PatrolForegroundNotification {
             AndroidNotificationAction(
               cancelAction,
               cancelLabel,
-              titleColor: const Color(0xFFE53935),
               showsUserInterface: false,
               cancelNotification: true,
               contextual: false,
@@ -371,13 +415,17 @@ abstract final class PatrolForegroundNotification {
         ),
       );
       _activeNextRoundConfirmNotificationId = notificationId;
-      await _plugin.show(
-        notificationId,
-        title,
-        body,
-        details,
-        payload: payload,
-      );
+      try {
+        await _plugin.show(
+          notificationId,
+          title,
+          body,
+          details,
+          payload: payload,
+        );
+      } on Object {
+        //
+      }
       return;
     }
 
@@ -410,14 +458,12 @@ abstract final class PatrolForegroundNotification {
   }
 
   static Future<void> cancelNextRoundConfirm() async {
-    final active = _activeNextRoundConfirmNotificationId;
-    if (active != null) {
-      await cancel(active);
-      _activeNextRoundConfirmNotificationId = null;
-    }
-    for (var i = 0; i < 8; i++) {
-      await cancel(nextRoundConfirmNotificationId + i);
-    }
+    final active =
+        _activeNextRoundConfirmNotificationId ?? nextRoundConfirmNotificationId;
+    _activeNextRoundConfirmNotificationId = null;
+    await cancel(active);
+    // Legacy peek id from older builds.
+    await cancel(882501);
   }
 
   static Future<void> cancel(int notificationId) async {
@@ -434,12 +480,13 @@ abstract final class PatrolForegroundNotification {
 
   /// When a notification action opens the app, the tap is delivered here (not [handleResponse]).
   static Future<void> drainAppLaunchNotificationAction() async {
-    if (!_ready) return;
+    if (!_ready || _launchNotificationActionDrained) return;
     try {
       final launch = await _plugin.getNotificationAppLaunchDetails();
       if (launch?.didNotificationLaunchApp != true) return;
       final response = launch?.notificationResponse;
       if (response == null) return;
+      _launchNotificationActionDrained = true;
       await PatrolNotificationActions.handleResponse(response);
     } on MissingPluginException {
       //

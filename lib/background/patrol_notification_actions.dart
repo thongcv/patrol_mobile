@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../background/patrol_background_service.dart';
 import '../services/patrol_active_round_cache.dart';
+import '../services/patrol_foreground_notification.dart';
 import '../utils/patrol_background_plugin_registrant.dart';
 
 /// Payload / action ids for next-round auto-scan confirm notifications.
@@ -26,14 +28,17 @@ abstract final class PatrolNotificationActions {
 
     if (_isCancelAction(actionId)) {
       await PatrolActiveRoundCache.signalCancelNextRoundAutoScan();
+      await PatrolBackgroundService.invokeCancelNextRoundAutoScan();
+      await PatrolForegroundNotification.cancelNextRoundConfirm();
       return;
     }
 
     if (!_isConfirmAction(actionId)) return;
 
-    // Prefs only — [FlutterBackgroundService.isRunning]/[invoke] hang or drop off the
-    // notification background isolate. [PatrolBackgroundRunner] polls every 1s.
+    // Fire direct FGS command first; prefs signal remains as fallback.
+    await PatrolBackgroundService.invokeConfirmNextRoundAutoScan();
     await PatrolActiveRoundCache.signalConfirmNextRoundAutoScan();
+    await PatrolForegroundNotification.cancelNextRoundConfirm();
   }
 
   static bool _isConfirmAction(String actionId) =>

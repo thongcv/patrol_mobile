@@ -53,7 +53,7 @@ abstract final class PatrolActiveRoundCoordinator {
   }
 
   static void _requestSyncAfterRoundPush() {
-    unawaited(syncFromServer(armAutoScan: true));
+    unawaited(syncFromServer());
   }
 
   static void _requestSyncOnSocketConnect() {
@@ -86,10 +86,7 @@ abstract final class PatrolActiveRoundCoordinator {
       return;
     }
 
-    final before = last;
-    last = await PatrolActiveRoundCache.mergeBackgroundVerified(last);
     _lastEmitted = last;
-    _emitNewlyVerifiedCheckpoints(before, last);
   }
 
   /// Đọc snapshot FGS vừa persist — tránh GET `/me/active` trùng trên main.
@@ -131,9 +128,14 @@ abstract final class PatrolActiveRoundCoordinator {
   }
 
   static Future<void> _afterRoundPersistedSideEffects() async {
+    if (await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      return;
+    }
     if (PatrolRealtimeTrackService.instance.isSessionTracking) {
       await PatrolRealtimeTrackCoordinator.syncTrackingAfterRoundPersisted(
         force: true,
+        reloadBackgroundAutoScan:
+            await PatrolActiveRoundCache.isBackgroundAutoScanRunning(),
       );
     }
 
@@ -179,20 +181,6 @@ abstract final class PatrolActiveRoundCoordinator {
     }
   }
 
-  static void _emitNewlyVerifiedCheckpoints(
-    ActivePatrolRound before,
-    ActivePatrolRound after,
-  ) {
-    final beforeVerified = {
-      for (final p in before.checkPoints)
-        if (p.verified == true) p.id,
-    };
-    for (final p in after.checkPoints) {
-      if (p.verified != true || beforeVerified.contains(p.id)) continue;
-      _emitCheckpointVerified(p);
-    }
-  }
-
   static Future<void> resumeIfSession() => _session.resumeIfSession();
 
   /// Called from [PatrolStartupCoordinator] after location gate.
@@ -203,14 +191,13 @@ abstract final class PatrolActiveRoundCoordinator {
 
   static Future<void> _onAuthenticated() async {
     _bindSocketHandlers();
-    final armAutoScan =
-        await PatrolTrackingConfigStore.backgroundAutoScanEnabled();
-    await syncFromServer(armAutoScan: armAutoScan);
+    await syncFromServer();
   }
 
   static Future<void> onSessionEnded() async {
     _session.sessionActive = false;
     _lastEmitted = null;
+    await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(false);
     await PatrolActiveRoundCache.save(null);
     if (!_activeRoundChanges.isClosed) {
       _activeRoundChanges.add(null);
@@ -221,24 +208,20 @@ abstract final class PatrolActiveRoundCoordinator {
   }
 
   /// GET `/me/active` — main STOMP hoặc sau khi FGS STOMP connect.
-  static Future<void> syncFromServer({bool armAutoScan = false}) async {
+  static Future<void> syncFromServer() async {
     if (!_session.sessionActive) {
       if (!await _session.ensureSessionActive()) return;
       _bindSocketHandlers();
     }
 
-    final r = await PatrolActiveRoundSync.fetchAndPersist(
-      armAutoScan: armAutoScan,
-    );
+    final r = await PatrolActiveRoundSync.fetchAndPersist();
     if (PatrolSession.isUnauthorized(r.failure)) {
       await PatrolSession.endSessionAndNavigateToLogin();
       return;
     }
     if (!r.ok) return;
 
-    final active = r.data == null
-        ? null
-        : await PatrolActiveRoundCache.preservingLocalVerified(r.data!);
+    final active = r.data;
     await _emitActiveRound(active);
     await _afterRoundPersistedSideEffects();
   }

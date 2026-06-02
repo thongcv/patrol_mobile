@@ -1,4 +1,5 @@
 import 'account_session_store.dart';
+import '../background/patrol_background_service.dart';
 import 'patrol_active_round_cache.dart';
 import 'patrol_active_round_coordinator.dart';
 import 'patrol_active_round_sync.dart';
@@ -69,8 +70,8 @@ abstract final class PatrolStartupCoordinator {
     await PatrolActiveRoundCoordinator.bootstrapAuthenticatedSession();
     // Round prefs first; tracking bootstrap ends with syncTrackingAfterRoundPersisted(force).
     await PatrolRealtimeTrackCoordinator.bootstrapAuthenticatedSession();
-    // Cold start: FGS emit may be up before round UI — arm + reload auto-scan when config allows.
-    await PatrolActiveRoundSync.armBackgroundAutoScanIfConfigured();
-    await PatrolRealtimeTrackCoordinator.triggerBackgroundAutoScan();
+    if (await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      await PatrolBackgroundService.syncNextRoundAutoScanHoldIfAwaiting();
+    }
   }
 }

@@ -4,12 +4,14 @@ import '../models/check_point.dart';
 import '../services/patrol_active_round_cache.dart';
 import '../services/patrol_active_round_sync.dart';
 import '../services/patrol_log_service.dart';
+import '../services/patrol_tracking_config_store.dart';
 import '../utils/check_point_proximity.dart';
 import '../utils/device_location.dart';
 import '../utils/patrol_checkpoint_success_feedback.dart';
 import '../utils/super_gps_service.dart';
 import 'patrol_background_gps_hub.dart';
 import 'patrol_background_isolate_flags.dart';
+import 'patrol_fgs_isolate_bridge.dart';
 
 /// Background checkpoint auto-scan — GPS via [PatrolBackgroundGpsHub] (shared with track).
 ///
@@ -60,6 +62,7 @@ class PatrolBackgroundAutoScan {
   Future<void> pause() async {
     if (_autoScanPaused) return;
     _autoScanPaused = true;
+    await _publishRunningState();
   }
 
   Future<void> resume() async {
@@ -71,6 +74,13 @@ class PatrolBackgroundAutoScan {
   Future<void> holdForNextRoundConfirm() async {
     _autoScanPaused = true;
     await _detachScan();
+    await _publishRunningState();
+  }
+
+  Future<void> _publishRunningState() async {
+    final running = _autoScanActive && !_autoScanPaused;
+    await PatrolActiveRoundCache.setBackgroundAutoScanRunning(running);
+    PatrolFgsIsolateBridge.notifyBackgroundAutoScanRunning(running);
   }
 
   /// Hard = detach hub. Soft = pause samples only (round UI / invoke pause).
@@ -135,12 +145,18 @@ class PatrolBackgroundAutoScan {
       return;
     }
     _applyServerRoundSnapshot(cached);
-    if (await _applyScanGate()) return;
+    if (await _applyScanGate()) {
+      await _publishRunningState();
+      return;
+    }
     await _syncScanState();
   }
 
   Future<void> _refreshImpl() async {
-    if (await _applyScanGate()) return;
+    if (await _applyScanGate()) {
+      await _publishRunningState();
+      return;
+    }
     if (_autoScanActive) return;
     await _syncScanState();
   }
@@ -164,6 +180,7 @@ class PatrolBackgroundAutoScan {
     _gpsHub.autoScanHandler = null;
     _scanNeedsBaro = false;
     await _gpsHub.ensureRunning(scanWantsBarometer: false);
+    await _publishRunningState();
   }
 
   void _onGpsEvent(SuperGpsEvent event) {
@@ -194,7 +211,10 @@ class PatrolBackgroundAutoScan {
   }
 
   Future<void> _syncScanStateImpl() async {
-    if (await _applyScanGate()) return;
+    if (await _applyScanGate()) {
+      await _publishRunningState();
+      return;
+    }
     final cached = await PatrolActiveRoundCache.load();
     if (cached == null) {
       _activeRoundSnapshot = null;
@@ -218,6 +238,7 @@ class PatrolBackgroundAutoScan {
     await _gpsHub.ensureRunning(scanWantsBarometer: _scanNeedsBaro);
     _autoScanActive =
         _gpsHub.hasAutoScanHandler && _gpsHub.isListening;
+    await _publishRunningState();
   }
 
   void _enqueueAutoScanSample({
@@ -264,7 +285,13 @@ class PatrolBackgroundAutoScan {
     if (pending.isEmpty) return;
 
     final validateBaro = needsBaroValidation && barometerListening;
-    final matched = _matchFirstEligible(pending, sample, validateBaro);
+    final matchOrder = await PatrolTrackingConfigStore.checkPointMatchOrder();
+    final matched = scanCheckPointsProximity(
+      pending,
+      sample,
+      validateBaro,
+      matchOrder: matchOrder,
+    ).matched;
     if (matched == null) return;
 
     if (!_inFlightCheckpointIds.add(matched.id)) return;
@@ -331,7 +358,7 @@ class PatrolBackgroundAutoScan {
     if (snapshot == null) return;
     if (_eligibleCheckPoints(snapshot.checkPoints).isNotEmpty) return;
     _resetAfterRoundFullyScanned();
-    await PatrolActiveRoundSync.clearBackgroundAutoScanArmed();
+    await PatrolActiveRoundSync.disarmBackgroundAutoScanOnRoundEnd();
     await stop();
   }
 
@@ -440,31 +467,6 @@ class PatrolBackgroundAutoScan {
     }
     out.sort((a, b) => a.sequenceOrder.compareTo(b.sequenceOrder));
     return out;
-  }
-
-  static CheckPoint? _matchFirstEligible(
-    List<CheckPoint> points,
-    DeviceLocationSample sample,
-    bool baroListening,
-  ) {
-    if (points.isEmpty) return null;
-    final point = points.first;
-    final pos = sample.position;
-    // Barometer altitude is optional: validate it only when the checkpoint
-    // requires baroAltitude and the device is actually listening to barometer.
-    final validateBaro = point.baroAltitude != null && baroListening;
-    final gpsAlt = pos.altitude.isFinite ? pos.altitude : null;
-    final evaluation = evaluateCheckPointProximity(
-      checkpoint: point,
-      latitude: sample.latitude,
-      longitude: sample.longitude,
-      gpsAltitude: gpsAlt,
-      baroAltitude: sample.baroAltitude,
-      validateBaroAltitude: validateBaro,
-      horizontalAccuracyM: pos.accuracy,
-      gpsAltitudeAccuracyM: pos.altitudeAccuracy,
-    );
-    return evaluation.result.ok ? point : null;
   }
 
   void _relayCheckpointVerified(CheckPoint point) {

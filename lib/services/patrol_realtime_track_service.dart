@@ -175,13 +175,17 @@ class PatrolRealtimeTrackService {
 
   /// Refresh FGS/GPS sau khi [PatrolActiveRoundSync] persist (auto-scan prefs).
 
-  Future<void> syncTrackingAfterRoundPersisted() async {
+  Future<void> syncTrackingAfterRoundPersisted({
+    bool reloadBackgroundAutoScan = true,
+  }) async {
     if (!_sessionTrackingActive) return;
 
     await _refreshTrackingConfigCache();
 
     if (_backgroundEnabled) {
-      await _refreshBackgroundAfterRoundUpdate();
+      await _refreshBackgroundAfterRoundUpdate(
+        reloadAutoScan: reloadBackgroundAutoScan,
+      );
 
       return;
     }
@@ -189,10 +193,16 @@ class PatrolRealtimeTrackService {
     await _startForegroundGpsFanOut();
   }
 
-  Future<void> _refreshBackgroundAfterRoundUpdate() async {
+  Future<void> _refreshBackgroundAfterRoundUpdate({
+    bool reloadAutoScan = true,
+  }) async {
+    if (await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      await PatrolBackgroundService.syncNextRoundAutoScanHoldIfAwaiting();
+      return;
+    }
     await PatrolBackgroundService.refreshPatrolTracking(
       startIfNotRunning: true,
-      afterRoundPersist: true,
+      afterRoundPersist: reloadAutoScan,
     );
 
     if (!await PatrolBackgroundService.isRunningSafe()) {
@@ -309,7 +319,7 @@ class PatrolRealtimeTrackService {
     // Always invoke FGS — prefs may already match [busy] while isolate is still paused.
     if (busy) {
       await PatrolBackgroundService.pauseBackgroundAutoScan();
-    } else {
+    } else if (!await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
       await PatrolBackgroundService.resumeBackgroundAutoScan();
     }
   }
@@ -317,12 +327,11 @@ class PatrolRealtimeTrackService {
   /// Clears foreground busy and invokes FGS resume even if already not busy.
   Future<void> forceResumeBackgroundAutoScan() async {
     await PatrolActiveRoundCache.setForegroundScanBusy(false);
-    await PatrolActiveRoundSync.armBackgroundAutoScanIfConfigured();
-    if (!_sessionTrackingActive) return;
     if (await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
-      await PatrolBackgroundService.invokeConfirmNextRoundAutoScan();
       return;
     }
+    if (!await PatrolActiveRoundSync.armBackgroundAutoScanByUser()) return;
+    if (!_sessionTrackingActive) return;
     await PatrolBackgroundService.resumeBackgroundAutoScan();
     if (_backgroundEnabled) {
       await PatrolBackgroundService.refreshPatrolTracking(

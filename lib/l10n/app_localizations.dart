@@ -266,6 +266,12 @@ abstract class AppLocalizations {
   /// **'Location permission permanently denied. Open app settings to enable.'**
   String get locationPermissionForever;
 
+  /// No description provided for @notificationPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are disabled. Enable them in app settings to get next-round alerts when the app is closed.'**
+  String get notificationPermissionDenied;
+
   /// No description provided for @openLocationSettings.
   ///
   /// In en, this message translates to:
@@ -1587,6 +1593,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cancel'**
   String get patrolBackgroundNextRoundActionCancel;
+
+  /// No description provided for @patrolBackgroundNextRoundConfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirmed — background auto-scan started.'**
+  String get patrolBackgroundNextRoundConfirmed;
 }
 
 class _AppLocalizationsDelegate

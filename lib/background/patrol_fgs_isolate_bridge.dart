@@ -72,6 +72,19 @@ abstract final class PatrolFgsIsolateBridge {
   }
 
   /// Full Super GPS sample for foreground auto-scan UI (not throttled by track emit).
+  static void notifyBackgroundAutoScanRunning(bool running) {
+    try {
+      _backgroundServiceInstance?.invoke(
+        PatrolFgsInvokeEvents.backgroundAutoScanRunning,
+        {'running': running},
+      );
+    } on MissingPluginException {
+      //
+    } on PlatformException {
+      //
+    }
+  }
+
   static void notifyScanGpsSampleFromFgs(SuperGpsEvent event) {
     final position = event.position;
     if (position.isMocked) return;

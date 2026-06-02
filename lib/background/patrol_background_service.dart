@@ -437,13 +437,38 @@ abstract final class PatrolBackgroundService {
     }
   }
 
-  /// UI bật quét nền (vd. [PatrolRoundScreen]) — đồng nghĩa xác nhận vòng mới nếu đang chờ notify.
+  /// UI / notification action — start FGS auto-scan for the new round.
   static Future<void> invokeConfirmNextRoundAutoScan() async {
     if (!await _awaitConfigured()) return;
     final service = _service;
     if (service == null) return;
     if (!await _isServiceRunning(service)) return;
     await _invoke(service, PatrolFgsInvokeEvents.confirmNextRoundAutoScan);
+  }
+
+  /// UI / notification action — dismiss next-round prompt without auto-scan.
+  /// Re-hold FGS auto-scan + next-round notification when prefs say [awaiting].
+  static Future<void> syncNextRoundAutoScanHoldIfAwaiting() async {
+    if (!await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      return;
+    }
+    if (!await _awaitConfigured()) return;
+    final service = _service;
+    if (service == null) return;
+    if (!await _isServiceRunning(service)) {
+      await _ensureBackgroundServiceRunning(service);
+      await _waitForServiceRunning(service);
+    }
+    if (!await _isServiceRunning(service)) return;
+    await _invoke(service, PatrolFgsInvokeEvents.syncNextRoundAutoScanHold);
+  }
+
+  static Future<void> invokeCancelNextRoundAutoScan() async {
+    if (!await _awaitConfigured()) return;
+    final service = _service;
+    if (service == null) return;
+    if (!await _isServiceRunning(service)) return;
+    await _invoke(service, PatrolFgsInvokeEvents.cancelNextRoundAutoScan);
   }
 
   /// Enables/disables FGS → UI GPS relay for foreground auto-scan (no second Geolocator).

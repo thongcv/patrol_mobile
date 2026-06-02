@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -8,6 +9,7 @@ import '../l10n/app_localizations.dart';
 import '../navigation/patrol_session.dart';
 import '../services/account_session_store.dart';
 import '../background/patrol_background_service.dart';
+import '../services/patrol_foreground_notification.dart';
 import '../services/patrol_startup_coordinator.dart';
 import '../utils/device_location.dart';
 import '../widgets/language_toggle_bar.dart';
@@ -146,6 +148,21 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
             : l10n2.locationPermissionDenied;
       });
       return;
+    }
+
+    if (!mounted) return;
+    if (Platform.isAndroid) {
+      final notifOk =
+          await PatrolForegroundNotification.ensureAndroidNotificationsEnabled();
+      await PatrolForegroundNotification.ensureAndroidHeadsUpPermissions();
+      if (!mounted) return;
+      if (!notifOk) {
+        setState(() {
+          _phase = _GatePhase.blocked;
+          _detail = l10n2.notificationPermissionDenied;
+        });
+        return;
+      }
     }
 
     if (!mounted) return;

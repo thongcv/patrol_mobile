@@ -28,6 +28,7 @@
   "locationPermissionDenied": "Location permission was not granted.",
   "locationPermissionBackground": "Only \"While using the app\" was granted. Choose \"Always allow\" for background patrol.",
   "locationPermissionForever": "Location permission permanently denied. Open app settings to enable.",
+  "notificationPermissionDenied": "Notifications are disabled. Enable them in app settings to get next-round alerts when the app is closed.",
   "openLocationSettings": "Open location settings",
   "openAppSettings": "Open app settings",
   "retry": "Try again",
@@ -440,5 +441,6 @@
   "patrolBackgroundNextRoundTitle": "Next patrol round",
   "patrolBackgroundNextRoundBody": "The next patrol round is ready. Tap Confirm to auto-scan, or Cancel.",
   "patrolBackgroundNextRoundActionOk": "Confirm",
-  "patrolBackgroundNextRoundActionCancel": "Cancel"
+  "patrolBackgroundNextRoundActionCancel": "Cancel",
+  "patrolBackgroundNextRoundConfirmed": "Confirmed — background auto-scan started."
 }

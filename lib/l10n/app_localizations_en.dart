@@ -96,6 +96,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Location permission permanently denied. Open app settings to enable.';
 
   @override
+  String get notificationPermissionDenied =>
+      'Notifications are disabled. Enable them in app settings to get next-round alerts when the app is closed.';
+
+  @override
   String get openLocationSettings => 'Open location settings';
 
   @override
@@ -850,4 +854,8 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get patrolBackgroundNextRoundActionCancel => 'Cancel';
+
+  @override
+  String get patrolBackgroundNextRoundConfirmed =>
+      'Confirmed — background auto-scan started.';
 }

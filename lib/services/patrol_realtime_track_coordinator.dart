@@ -6,6 +6,7 @@ import '../l10n/app_localizations.dart';
 import '../utils/patrol_background_location_prompt.dart';
 import '../utils/top_toast.dart';
 import '../background/patrol_background_service.dart';
+import 'patrol_active_round_cache.dart';
 import 'patrol_realtime_track_service.dart';
 import 'patrol_session_listen.dart';
 import 'patrol_track_socket_dispatch.dart';
@@ -70,10 +71,17 @@ abstract final class PatrolRealtimeTrackCoordinator {
     final service = PatrolRealtimeTrackService.instance;
     if (service.isSessionTracking) {
       await service.refreshActiveTracking();
-      await syncTrackingAfterRoundPersisted(force: true);
     } else {
       await service.startSessionTracking();
-      await syncTrackingAfterRoundPersisted(force: true);
+    }
+    if (await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      await PatrolBackgroundService.syncNextRoundAutoScanHoldIfAwaiting();
+    } else {
+      await syncTrackingAfterRoundPersisted(
+        force: true,
+        reloadBackgroundAutoScan:
+            await PatrolActiveRoundCache.isBackgroundAutoScanArmed(),
+      );
     }
     _promptBackgroundLocationIfNeeded();
   }
@@ -91,8 +99,14 @@ abstract final class PatrolRealtimeTrackCoordinator {
   ///
   /// [force] skips coordinator debounce (bootstrap / STOMP after round persist).
   /// Does not start tracking — caller must run [bootstrapAuthenticatedSession] first.
-  static Future<void> syncTrackingAfterRoundPersisted({bool force = false}) async {
+  static Future<void> syncTrackingAfterRoundPersisted({
+    bool force = false,
+    bool reloadBackgroundAutoScan = true,
+  }) async {
     if (!PatrolRealtimeTrackService.instance.isSessionTracking) {
+      return;
+    }
+    if (await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
       return;
     }
 
@@ -108,7 +122,9 @@ abstract final class PatrolRealtimeTrackCoordinator {
       _lastSyncTrackingAfterRound = DateTime.now();
     }
 
-    await PatrolRealtimeTrackService.instance.syncTrackingAfterRoundPersisted();
+    await PatrolRealtimeTrackService.instance.syncTrackingAfterRoundPersisted(
+      reloadBackgroundAutoScan: reloadBackgroundAutoScan,
+    );
   }
 
   /// Sau location gate / cấp quyền Always — gắn lại GPS nếu đang track.

@@ -49,6 +49,20 @@ abstract final class PatrolActiveRoundCache {
     await prefs.setBool(StorageKeys.patrolTrackBackgroundAutoScanEnabled, armed);
   }
 
+  static Future<bool> isBackgroundAutoScanRunning({bool reload = true}) async {
+    final prefs = await _prefs(reload: reload);
+    return prefs.getBool(StorageKeys.patrolTrackBackgroundAutoScanRunning) ??
+        false;
+  }
+
+  static Future<void> setBackgroundAutoScanRunning(bool running) async {
+    final prefs = await _prefs();
+    await prefs.setBool(
+      StorageKeys.patrolTrackBackgroundAutoScanRunning,
+      running,
+    );
+  }
+
   /// `true` while [PatrolRoundScreen] blocks FGS auto-scan (manual mode or in-flight QR/NFC/GPS/BT).
   /// Cross-isolate; main sets via [PatrolRealtimeTrackService.setForegroundRoundScanBusy].
   static Future<bool> isForegroundScanBusy({bool reload = true}) async {
@@ -140,6 +154,49 @@ abstract final class PatrolActiveRoundCache {
     }
   }
 
+  static Future<int?> lastAutoScanConfirmedRoundId({bool reload = true}) async {
+    final prefs = await _prefs(reload: reload);
+    final id =
+        prefs.getInt(StorageKeys.patrolTrackLastAutoScanConfirmedRoundId);
+    if (id == null || id <= 0) return null;
+    return id;
+  }
+
+  static Future<void> setLastAutoScanConfirmedRoundId(int roundId) async {
+    if (roundId <= 0) return;
+    final prefs = await _prefs();
+    await prefs.setInt(
+      StorageKeys.patrolTrackLastAutoScanConfirmedRoundId,
+      roundId,
+    );
+  }
+
+  /// Baselines first active round; on later round changes sets [awaiting] when config allows.
+  static Future<bool> ensureAwaitingNextRoundIfRoundChanged(int? roundId) async {
+    if (roundId == null || roundId <= 0) return false;
+    if (await isAwaitingNextRoundAutoScanConfirm()) return false;
+    if (!await PatrolTrackingConfigStore.backgroundAutoScanEnabled()) {
+      await setLastAutoScanConfirmedRoundId(roundId);
+      return false;
+    }
+
+    final last = await lastAutoScanConfirmedRoundId();
+    if (last == null || last != roundId) {
+      await setBackgroundAutoScanArmed(false);
+      await setAwaitingNextRoundAutoScanConfirm(true);
+      return true;
+    }
+    return false;
+  }
+
+  static Future<void> markAutoScanConfirmedForCurrentRound() async {
+    final cached = await load();
+    final id = cached?.roundId;
+    if (id != null && id > 0) {
+      await setLastAutoScanConfirmedRoundId(id);
+    }
+  }
+
   /// GET `/me/active` may omit `verified` — only then keep local verified from cache.
   /// When API sends `verified: false`, trust the server.
   /// Merges `verified: true` from the FGS snapshot into [active] (same round id).
@@ -214,7 +271,14 @@ abstract final class PatrolActiveRoundCache {
     if (active == null) {
       await prefs.remove(StorageKeys.patrolTrackActiveRoundSnapshot);
       await prefs.remove(StorageKeys.patrolTrackActiveRoundRevision);
+      await setBackgroundAutoScanArmed(false);
+      await setBackgroundAutoScanRunning(false);
       return;
+    }
+    final status = active.round.status.trim().toUpperCase();
+    if (status == 'COMPLETED' || status == 'CANCELLED') {
+      await setBackgroundAutoScanArmed(false);
+      await setBackgroundAutoScanRunning(false);
     }
     final merged = await preservingLocalVerified(active);
     final next = (

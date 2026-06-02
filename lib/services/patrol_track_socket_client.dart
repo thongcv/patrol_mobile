@@ -312,7 +312,7 @@ class PatrolTrackSocketClient {
 
   Future<void> _syncActiveRoundInFgs() async {
     try {
-      final r = await PatrolActiveRoundSync.fetchAndPersist(armAutoScan: true);
+      final r = await PatrolActiveRoundSync.fetchAndPersist();
       if (!r.ok) return;
 
       // Hold auto-scan + show confirm before main-isolate round side-effects.

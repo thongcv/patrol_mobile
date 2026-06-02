@@ -96,6 +96,10 @@ class AppLocalizationsVi extends AppLocalizations {
       'Quyền vị trí bị từ chối vĩnh viễn. Mở Cài đặt ứng dụng để bật lại.';
 
   @override
+  String get notificationPermissionDenied =>
+      'Chưa bật quyền thông báo. Bật trong Cài đặt ứng dụng để nhận cảnh báo vòng tuần tra khi tắt app.';
+
+  @override
   String get openLocationSettings => 'Mở cài đặt vị trí';
 
   @override
@@ -847,4 +851,8 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get patrolBackgroundNextRoundActionCancel => 'Hủy';
+
+  @override
+  String get patrolBackgroundNextRoundConfirmed =>
+      'Đã xác nhận — bắt đầu quét điểm tự động.';
 }

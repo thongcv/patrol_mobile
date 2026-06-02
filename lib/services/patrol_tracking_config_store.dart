@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/storage_keys.dart';
 import '../http/api_response.dart';
 import '../models/patrol_tracking_config.dart';
+import '../utils/check_point_proximity.dart' show CheckPointMatchOrder;
 import '../utils/super_gps_service.dart';
 
 /// Login tracking config — persisted for UI + background isolate.
@@ -49,6 +50,12 @@ abstract final class PatrolTrackingConfigStore {
 
   static Future<bool> backgroundAutoScanEnabled() async =>
       (await load()).backgroundAutoScan;
+
+  static Future<String> autoScanMatchOrder() async =>
+      (await load()).autoScanMatchOrder;
+
+  static Future<CheckPointMatchOrder> checkPointMatchOrder() async =>
+      (await load()).checkPointMatchOrder;
 
   static Future<SuperGpsStreamOptions> superGpsStreamOptions({
     required bool enableBarometer,

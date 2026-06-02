@@ -1,5 +1,6 @@
 package com.sps.patrol
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -16,6 +17,8 @@ class MainActivity : FlutterActivity() {
     companion object {
         /** Must match [PatrolBackgroundService.notificationChannelId]. */
         const val PATROL_TRACK_NOTIFICATION_CHANNEL_ID = "sps_patrol_track"
+        /** Must match Dart [PatrolForegroundNotification] next-round popup channel. */
+        const val PATROL_NEXT_ROUND_POPUP_CHANNEL_ID = "sps_patrol_track_next_round_popup_v3"
         private const val TTS_CHANNEL = "patrol/tts"
     }
 
@@ -25,6 +28,7 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ensurePatrolTrackNotificationChannel()
+        ensureNextRoundPopupNotificationChannel()
     }
 
     override fun onDestroy() {
@@ -49,6 +53,31 @@ class MainActivity : FlutterActivity() {
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
             description = "Location tracking while patrol is active"
+        }
+        manager.createNotificationChannel(channel)
+    }
+
+    /** High-importance channel for next-round heads-up / full-screen (like commerce apps). */
+    private fun ensureNextRoundPopupNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager =
+            applicationContext.getSystemService(Context.NOTIFICATION_SERVICE)
+                as? NotificationManager ?: return
+        if (manager.getNotificationChannel(PATROL_NEXT_ROUND_POPUP_CHANNEL_ID) != null) {
+            return
+        }
+        val channel = NotificationChannel(
+            PATROL_NEXT_ROUND_POPUP_CHANNEL_ID,
+            "Patrol — next round",
+            NotificationManager.IMPORTANCE_HIGH,
+        ).apply {
+            description = "Popup when a new patrol round starts"
+            enableVibration(true)
+            enableLights(true)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                setBypassDnd(true)
+            }
         }
         manager.createNotificationChannel(channel)
     }

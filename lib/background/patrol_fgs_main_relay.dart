@@ -7,6 +7,8 @@ import '../services/app_locale_store.dart';
 import '../services/patrol_active_round_coordinator.dart';
 import '../services/patrol_foreground_gps_scan_session.dart';
 import '../services/patrol_realtime_track_coordinator.dart';
+import '../services/patrol_background_auto_scan_ui_state.dart';
+import '../services/patrol_active_round_cache.dart';
 import '../services/patrol_realtime_track_service.dart';
 import '../services/patrol_tracking_config_store.dart';
 import '../utils/patrol_checkpoint_tts.dart';
@@ -102,6 +104,17 @@ abstract final class PatrolFgsMainRelay {
     safeRelay(
       PatrolFgsInvokeEvents.scanGpsSample,
       PatrolForegroundGpsScanSession.deliverFgsSample,
+    );
+    safeRelay(
+      PatrolFgsInvokeEvents.backgroundAutoScanRunning,
+      (payload) {
+        final map = payload is Map
+            ? Map<String, dynamic>.from(payload)
+            : null;
+        final running = map?['running'] == true;
+        unawaited(PatrolActiveRoundCache.setBackgroundAutoScanRunning(running));
+        PatrolBackgroundAutoScanUiState.setRunning(running);
+      },
     );
   }
 
