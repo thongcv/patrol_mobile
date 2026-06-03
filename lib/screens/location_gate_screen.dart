@@ -154,12 +154,22 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
     if (Platform.isAndroid) {
       final notifOk =
           await PatrolForegroundNotification.ensureAndroidNotificationsEnabled();
-      await PatrolForegroundNotification.ensureAndroidHeadsUpPermissions();
+      await PatrolForegroundNotification.ensureAndroidHeadsUpPermissions(
+        nextRoundChannelName: l10n2.patrolBackgroundNotificationTitle,
+      );
       if (!mounted) return;
       if (!notifOk) {
         setState(() {
           _phase = _GatePhase.blocked;
           _detail = l10n2.notificationPermissionDenied;
+        });
+        return;
+      }
+      if (!await PatrolForegroundNotification
+          .androidNotificationPolicyAccessGranted()) {
+        setState(() {
+          _phase = _GatePhase.blocked;
+          _detail = l10n2.dndPolicyPermissionDenied;
         });
         return;
       }

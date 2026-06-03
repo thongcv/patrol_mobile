@@ -71,7 +71,11 @@ abstract final class PatrolStartupCoordinator {
     // Round prefs first; tracking bootstrap ends with syncTrackingAfterRoundPersisted(force).
     await PatrolRealtimeTrackCoordinator.bootstrapAuthenticatedSession();
     if (await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
-      await PatrolBackgroundService.syncNextRoundAutoScanHoldIfAwaiting();
+      if (await PatrolActiveRoundCache.load() != null) {
+        await PatrolBackgroundService.syncNextRoundAutoScanHoldIfAwaiting();
+      } else {
+        await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(false);
+      }
     }
   }
 }

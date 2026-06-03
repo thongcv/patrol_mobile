@@ -80,6 +80,7 @@ final class PatrolBackgroundRunner {
   }
 
   Future<void> _handleActiveRoundSyncedFromStomp() async {
+    if (await PatrolActiveRoundCache.load() == null) return;
     // Block main-isolate `afterRoundPersist` reload racing this callback.
     await PatrolActiveRoundSync.clearBackgroundAutoScanArmed();
     await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(true);
@@ -231,6 +232,11 @@ final class PatrolBackgroundRunner {
 
   Future<void> _syncNextRoundAutoScanHoldFromPrefs() async {
     if (!await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      return;
+    }
+    if (await PatrolActiveRoundCache.load() == null) {
+      await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(false);
+      await PatrolForegroundNotification.cancelNextRoundConfirm();
       return;
     }
     await _autoScan.holdForNextRoundConfirm();

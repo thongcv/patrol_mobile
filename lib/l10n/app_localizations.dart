@@ -272,6 +272,12 @@ abstract class AppLocalizations {
   /// **'Notifications are disabled. Enable them in app settings to get next-round alerts when the app is closed.'**
   String get notificationPermissionDenied;
 
+  /// No description provided for @dndPolicyPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Do Not Disturb access was not granted. Allow SPS Patrol to modify notification policy so next-round popups can break through silent mode.'**
+  String get dndPolicyPermissionDenied;
+
   /// No description provided for @openLocationSettings.
   ///
   /// In en, this message translates to:

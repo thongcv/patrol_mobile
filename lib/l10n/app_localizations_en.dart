@@ -100,6 +100,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Notifications are disabled. Enable them in app settings to get next-round alerts when the app is closed.';
 
   @override
+  String get dndPolicyPermissionDenied =>
+      'Do Not Disturb access was not granted. Allow SPS Patrol to modify notification policy so next-round popups can break through silent mode.';
+
+  @override
   String get openLocationSettings => 'Open location settings';
 
   @override

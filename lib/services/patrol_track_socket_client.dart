@@ -315,7 +315,6 @@ class PatrolTrackSocketClient {
       final r = await PatrolActiveRoundSync.fetchAndPersist();
       if (!r.ok) return;
 
-      // Hold auto-scan + show confirm before main-isolate round side-effects.
       await _onFgsRoundSynced?.call();
 
       _invokeMain(

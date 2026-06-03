@@ -100,6 +100,10 @@ class AppLocalizationsVi extends AppLocalizations {
       'Chưa bật quyền thông báo. Bật trong Cài đặt ứng dụng để nhận cảnh báo vòng tuần tra khi tắt app.';
 
   @override
+  String get dndPolicyPermissionDenied =>
+      'Chưa cho phép SPS Patrol trong cài đặt Không làm phiền. Bật \"Cho phép thay đổi chính sách\" để nhận popup vòng tuần tra khi máy im lặng.';
+
+  @override
   String get openLocationSettings => 'Mở cài đặt vị trí';
 
   @override

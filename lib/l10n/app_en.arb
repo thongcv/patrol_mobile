@@ -29,6 +29,7 @@
   "locationPermissionBackground": "Only \"While using the app\" was granted. Choose \"Always allow\" for background patrol.",
   "locationPermissionForever": "Location permission permanently denied. Open app settings to enable.",
   "notificationPermissionDenied": "Notifications are disabled. Enable them in app settings to get next-round alerts when the app is closed.",
+  "dndPolicyPermissionDenied": "Do Not Disturb access was not granted. Allow SPS Patrol to modify notification policy so next-round popups can break through silent mode.",
   "openLocationSettings": "Open location settings",
   "openAppSettings": "Open app settings",
   "retry": "Try again",

@@ -18,7 +18,7 @@ class MainActivity : FlutterActivity() {
         /** Must match [PatrolBackgroundService.notificationChannelId]. */
         const val PATROL_TRACK_NOTIFICATION_CHANNEL_ID = "sps_patrol_track"
         /** Must match Dart [PatrolForegroundNotification] next-round popup channel. */
-        const val PATROL_NEXT_ROUND_POPUP_CHANNEL_ID = "sps_patrol_track_next_round_popup_v3"
+        const val PATROL_NEXT_ROUND_POPUP_CHANNEL_ID = "sps_patrol_track_next_round_popup_v1"
         private const val TTS_CHANNEL = "patrol/tts"
     }
 
@@ -75,7 +75,7 @@ class MainActivity : FlutterActivity() {
             enableVibration(true)
             enableLights(true)
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (manager.isNotificationPolicyAccessGranted) {
                 setBypassDnd(true)
             }
         }

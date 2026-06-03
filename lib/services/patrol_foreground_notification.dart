@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../background/patrol_background_constants.dart';
 import '../background/patrol_background_isolate_flags.dart';
 import '../background/patrol_notification_actions.dart';
 import '../utils/patrol_background_plugin_registrant.dart';
@@ -20,6 +21,7 @@ abstract final class PatrolForegroundNotification {
   /// Dedicated block — must not overlap checkpoint ids (was 881301, collided).
   static const int nextRoundConfirmNotificationId = 882500;
   static const String _iosNextRoundCategoryId = 'sps_patrol_next_round';
+  static const String _nextRoundChannelSuffix = 'v1';
   static const int _checkpointAlertIdSlots = 100;
   static const int _maxCheckpointAlertsKept = 30;
 
@@ -38,6 +40,8 @@ abstract final class PatrolForegroundNotification {
   static int? _activeNextRoundConfirmNotificationId;
   static final List<int> _activeCheckpointAlertIds = <int>[];
   static var _launchNotificationActionDrained = false;
+  /// Cached after channel setup; refreshed before next-round posts on Android.
+  static bool _androidBypassDndEnabled = false;
 
   /// Two short pulses for checkpoint-scan feedback (Android channel vibration).
   static final Int64List checkpointScanVibrationPattern =
@@ -97,27 +101,19 @@ abstract final class PatrolForegroundNotification {
         ),
       );
 
-      // Heads-up + actions (must match MainActivity channel id).
-      _nextRoundHeadsUpChannelId = '${channelId}_next_round_popup_v3';
-      _nextRoundHeadsUpChannelName = '$channelName — next round alert';
-      await android?.createNotificationChannel(
-        AndroidNotificationChannel(
-          _nextRoundHeadsUpChannelId!,
-          _nextRoundHeadsUpChannelName!,
-          description: 'Popup on screen for the next patrol round',
-          importance: Importance.max,
-          bypassDnd: true,
-          enableVibration: true,
-          enableLights: true,
-          vibrationPattern: checkpointScanVibrationPattern,
-          playSound: true,
-          showBadge: true,
-          audioAttributesUsage: AudioAttributesUsage.alarm,
-        ),
-      );
-
       await ensureAndroidNotificationsEnabled();
-      await ensureAndroidHeadsUpPermissions();
+
+      // Policy access must be granted before bypassDnd on the channel (plugin + OS).
+      _androidBypassDndEnabled = await androidNotificationPolicyAccessGranted();
+      await ensureAndroidHeadsUpPermissions(requestNotificationPolicyIfNeeded: false);
+
+      await _setupAndroidNextRoundChannel(
+        android: android,
+        channelId: channelId,
+        channelName: channelName,
+        bypassDnd: _androidBypassDndEnabled,
+        recreateCurrent: false,
+      );
     } else if (Platform.isIOS) {
       final initSettings = InitializationSettings(
         iOS: DarwinInitializationSettings(
@@ -174,17 +170,126 @@ abstract final class PatrolForegroundNotification {
     return enabled;
   }
 
-  /// Full-screen / heads-up on lock screen (Android 11+); best-effort DND bypass.
-  static Future<void> ensureAndroidHeadsUpPermissions() async {
-    if (!Platform.isAndroid) return;
-    final android = _plugin.resolvePlatformSpecificImplementation<
+  static AndroidFlutterLocalNotificationsPlugin? _androidPlugin() {
+    if (!Platform.isAndroid) return null;
+    return _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
+  }
+
+  /// Whether the app may set bypass-DND on notification channels (Android 6+).
+  static Future<bool> androidNotificationPolicyAccessGranted() async {
+    final android = _androidPlugin();
+    if (android == null) return false;
+    try {
+      return await android.hasNotificationPolicyAccess() ?? false;
+    } on Object {
+      return false;
+    }
+  }
+
+  /// Opens system DND-access settings when needed. Call before channels with [bypassDnd].
+  static Future<bool> ensureAndroidNotificationPolicyAccess({
+    bool requestIfNeeded = true,
+  }) async {
+    if (!Platform.isAndroid) return true;
+    if (await androidNotificationPolicyAccessGranted()) return true;
+    if (!requestIfNeeded) return false;
+    final android = _androidPlugin();
+    if (android == null) return false;
+    try {
+      return await android.requestNotificationPolicyAccess() ?? false;
+    } on Object {
+      return false;
+    }
+  }
+
+  /// Full-screen / heads-up on lock screen (Android 11+); DND bypass via policy access.
+  static Future<void> ensureAndroidHeadsUpPermissions({
+    bool requestNotificationPolicyIfNeeded = true,
+    String? nextRoundChannelName,
+  }) async {
+    if (!Platform.isAndroid) return;
+    final android = _androidPlugin();
     if (android == null) return;
     try {
       await android.requestFullScreenIntentPermission();
     } on Object {
       //
     }
+    final policyOk = await ensureAndroidNotificationPolicyAccess(
+      requestIfNeeded: requestNotificationPolicyIfNeeded,
+    );
+    _androidBypassDndEnabled = policyOk;
+    if (policyOk && nextRoundChannelName != null) {
+      await prepareAndroidNextRoundPopupChannel(
+        channelName: nextRoundChannelName,
+      );
+    }
+  }
+
+  /// Recreates next-round channel v1 with [bypassDnd] when DND policy access is granted.
+  static Future<bool> prepareAndroidNextRoundPopupChannel({
+    required String channelName,
+    String channelId = PatrolBackgroundConstants.notificationChannelId,
+  }) async {
+    if (!Platform.isAndroid) return true;
+    if (!await androidNotificationPolicyAccessGranted()) {
+      _androidBypassDndEnabled = false;
+      return false;
+    }
+    final android = _androidPlugin();
+    if (android == null) return false;
+    await _setupAndroidNextRoundChannel(
+      android: android,
+      channelId: channelId,
+      channelName: channelName,
+      bypassDnd: true,
+      recreateCurrent: true,
+    );
+    _androidBypassDndEnabled = true;
+    return true;
+  }
+
+  static String _nextRoundChannelId(String channelId) =>
+      '${channelId}_next_round_popup_$_nextRoundChannelSuffix';
+
+  /// Heads-up next-round channel (must match [MainActivity] channel id).
+  static Future<void> _setupAndroidNextRoundChannel({
+    required AndroidFlutterLocalNotificationsPlugin? android,
+    required String channelId,
+    required String channelName,
+    required bool bypassDnd,
+    required bool recreateCurrent,
+  }) async {
+    if (android == null) return;
+    _channelId = channelId;
+    _channelName = channelName;
+    _nextRoundHeadsUpChannelId = _nextRoundChannelId(channelId);
+    _nextRoundHeadsUpChannelName = '$channelName — next round alert';
+
+    if (recreateCurrent) {
+      try {
+        await android.deleteNotificationChannel(_nextRoundChannelId(channelId));
+      } on Object {
+        //
+      }
+    }
+
+    await android.createNotificationChannel(
+      AndroidNotificationChannel(
+        _nextRoundHeadsUpChannelId!,
+        _nextRoundHeadsUpChannelName!,
+        description: 'Popup on screen for the next patrol round',
+        importance: Importance.max,
+        bypassDnd: bypassDnd,
+        enableVibration: true,
+        enableLights: true,
+        vibrationPattern: checkpointScanVibrationPattern,
+        playSound: true,
+        showBadge: true,
+        audioAttributesUsage: AudioAttributesUsage.alarm,
+      ),
+    );
   }
 
   static Future<void> _ensureIosAttachment() async {
@@ -368,6 +473,8 @@ abstract final class PatrolForegroundNotification {
     const notificationId = nextRoundConfirmNotificationId;
 
     if (Platform.isAndroid) {
+      _androidBypassDndEnabled =
+          await androidNotificationPolicyAccessGranted();
       final details = NotificationDetails(
         android: AndroidNotificationDetails(
           _nextRoundHeadsUpChannelId!,
@@ -377,7 +484,7 @@ abstract final class PatrolForegroundNotification {
           icon: 'ic_bg_service_small',
           importance: Importance.max,
           priority: Priority.max,
-          channelBypassDnd: true,
+          channelBypassDnd: _androidBypassDndEnabled,
           visibility: NotificationVisibility.public,
           category: AndroidNotificationCategory.call,
           ticker: body,

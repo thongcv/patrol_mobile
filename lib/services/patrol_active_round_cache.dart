@@ -181,7 +181,12 @@ abstract final class PatrolActiveRoundCache {
     }
 
     final last = await lastAutoScanConfirmedRoundId();
-    if (last == null || last != roundId) {
+    if (last == null) {
+      // First active round for this session — baseline, not a "next round" transition.
+      await setLastAutoScanConfirmedRoundId(roundId);
+      return false;
+    }
+    if (last != roundId) {
       await setBackgroundAutoScanArmed(false);
       await setAwaitingNextRoundAutoScanConfirm(true);
       return true;

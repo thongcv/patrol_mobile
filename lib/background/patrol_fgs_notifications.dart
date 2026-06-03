@@ -154,6 +154,10 @@ abstract final class PatrolFgsNotifications {
     final title = l10n.patrolBackgroundNextRoundTitle;
     final body = l10n.patrolBackgroundNextRoundBody;
 
+    await PatrolForegroundNotification.prepareAndroidNextRoundPopupChannel(
+      channelName: l10n.patrolBackgroundNotificationTitle,
+    );
+
     await PatrolForegroundNotification.showNextRoundAutoScanConfirm(
       title: title,
       body: body,

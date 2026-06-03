@@ -29,6 +29,7 @@
   "locationPermissionBackground": "Mới chỉ \"Cho phép khi dùng ứng dụng\". Chọn \"Luôn cho phép\" để tuần tra nền.",
   "locationPermissionForever": "Quyền vị trí bị từ chối vĩnh viễn. Mở Cài đặt ứng dụng để bật lại.",
   "notificationPermissionDenied": "Chưa bật quyền thông báo. Bật trong Cài đặt ứng dụng để nhận cảnh báo vòng tuần tra khi tắt app.",
+  "dndPolicyPermissionDenied": "Chưa cho phép SPS Patrol trong cài đặt Không làm phiền. Bật \"Cho phép thay đổi chính sách\" để nhận popup vòng tuần tra khi máy im lặng.",
   "openLocationSettings": "Mở cài đặt vị trí",
   "openAppSettings": "Mở cài đặt ứng dụng",
   "retry": "Thử lại",
