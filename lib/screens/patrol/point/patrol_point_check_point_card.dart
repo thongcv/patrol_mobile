@@ -29,7 +29,7 @@ class _CheckPointCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasNfc = point.nfc != null && point.nfc!.trim().isNotEmpty;
     final hasBluetooth =
-        point.bluetooth != null && point.bluetooth!.trim().isNotEmpty;
+        point.uuid != null && point.uuid!.trim().isNotEmpty;
     final hasQrCode =
         point.qrCode != null && point.qrCode!.trim().isNotEmpty;
     final hasCoords = point.hasCoordinates;
@@ -39,11 +39,22 @@ class _CheckPointCard extends StatelessWidget {
     String bluetoothDetailBody() {
       if (!hasBluetooth) return '';
       final buf = StringBuffer(
-        l10n.patrolPointBluetoothValue(point.bluetooth!.trim()),
+        l10n.patrolPointBluetoothValue(point.uuid!.trim()),
       );
+      final major = point.major;
+      final minor = point.minor;
+      if (major != null || minor != null) {
+        buf.write(
+          '\nMajor: ${major ?? '—'} · Minor: ${minor ?? '—'}',
+        );
+      }
       final rssi = point.rssi;
       if (rssi != null) {
         buf.write('\nRSSI: $rssi dBm');
+      }
+      final remoteId = point.remoteId?.trim();
+      if (remoteId != null && remoteId.isNotEmpty) {
+        buf.write('\nRemote ID: $remoteId');
       }
       return buf.toString();
     }
@@ -226,12 +237,13 @@ class _CheckPointCard extends StatelessWidget {
                   l10n: l10n,
                   busy: bluetoothBusy,
                   icon: Icons.bluetooth_rounded,
-                  applyTooltip: l10n.patrolPointUpdateBluetoothTooltip,
+                  applyTooltip: l10n.patrolPointChangeBluetoothTooltip,
                   detailTooltip:
-                      l10n.patrolPointBluetoothValue(point.bluetooth!.trim()),
+                      l10n.patrolPointBluetoothValue(point.uuid!.trim()),
                   dialogTitle: l10n.patrolPointBluetoothDialogTitle,
                   dialogBody: bluetoothDetailBody,
                   onApply: onApplyBluetooth,
+                  directApplyWhenHasDetail: true,
                 ),
               if (hasQrCode)
                 _PatrolPointMetaIcon(

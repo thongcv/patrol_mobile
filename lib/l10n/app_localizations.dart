@@ -1308,6 +1308,627 @@ abstract class AppLocalizations {
   /// **'Beacon UUID'**
   String get patrolPointBeaconUuidLabel;
 
+  /// No description provided for @patrolPointBeaconProtocolLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Beacon programming protocol'**
+  String get patrolPointBeaconProtocolLabel;
+
+  /// No description provided for @patrolPointBeaconProtocolHm10.
+  ///
+  /// In en, this message translates to:
+  /// **'HM-10 / FFE0 (AT commands)'**
+  String get patrolPointBeaconProtocolHm10;
+
+  /// No description provided for @patrolPointBeaconProtocolHm10Hint.
+  ///
+  /// In en, this message translates to:
+  /// **'TQ clones, UART service FFE0 · char FFE1'**
+  String get patrolPointBeaconProtocolHm10Hint;
+
+  /// No description provided for @patrolPointBeaconProtocolNordic.
+  ///
+  /// In en, this message translates to:
+  /// **'Nordic nRF52 OEM'**
+  String get patrolPointBeaconProtocolNordic;
+
+  /// No description provided for @patrolPointBeaconProtocolNordicHint.
+  ///
+  /// In en, this message translates to:
+  /// **'21-byte write to advertisement content (7650/7651)'**
+  String get patrolPointBeaconProtocolNordicHint;
+
+  /// No description provided for @patrolPointBeaconProtocolJoyway.
+  ///
+  /// In en, this message translates to:
+  /// **'Joyway'**
+  String get patrolPointBeaconProtocolJoyway;
+
+  /// No description provided for @patrolPointBeaconProtocolJoywayHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Joyway JW1404 — BLE scan, pick beacon, program via UART (hold config button if connect fails)'**
+  String get patrolPointBeaconProtocolJoywayHint;
+
+  /// No description provided for @patrolPointBeaconProtocolFeasycom.
+  ///
+  /// In en, this message translates to:
+  /// **'Feasycom (FeasyBeacon)'**
+  String get patrolPointBeaconProtocolFeasycom;
+
+  /// No description provided for @patrolPointBeaconProtocolMinew.
+  ///
+  /// In en, this message translates to:
+  /// **'Minew (mBeacon)'**
+  String get patrolPointBeaconProtocolMinew;
+
+  /// No description provided for @patrolPointBeaconProtocolEddystone.
+  ///
+  /// In en, this message translates to:
+  /// **'Eddystone-GATT (FEAA)'**
+  String get patrolPointBeaconProtocolEddystone;
+
+  /// No description provided for @patrolPointBeaconProtocolComingSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Requires vendor SDK — not available in this app yet'**
+  String get patrolPointBeaconProtocolComingSoon;
+
+  /// No description provided for @patrolPointBeaconProtocolUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'This protocol is not supported yet. Choose HM-10, Nordic nRF52, or Joyway.'**
+  String get patrolPointBeaconProtocolUnsupported;
+
+  /// No description provided for @patrolPointBeaconProtocolUseCheckpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue with checkpoint protocol ({protocol})'**
+  String patrolPointBeaconProtocolUseCheckpoint(String protocol);
+
+  /// No description provided for @patrolPointCompanyBeaconUuidMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Company beacon UUID is not configured.'**
+  String get patrolPointCompanyBeaconUuidMissing;
+
+  /// No description provided for @patrolPointIBeaconConfigModeRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'No configurable beacon found. Press the beacon button to enter config mode, then try again.'**
+  String get patrolPointIBeaconConfigModeRequired;
+
+  /// No description provided for @patrolPointIBeaconConfigureFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not program the iBeacon. Try again near the device.'**
+  String get patrolPointIBeaconConfigureFailed;
+
+  /// No description provided for @patrolPointBeaconConfiguring.
+  ///
+  /// In en, this message translates to:
+  /// **'Programming beacon…'**
+  String get patrolPointBeaconConfiguring;
+
+  /// No description provided for @patrolPointBeaconConfiguringHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep the phone close to the device. Do not leave the app.'**
+  String get patrolPointBeaconConfiguringHint;
+
+  /// No description provided for @patrolPointBeaconLoginVerifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to beacon…'**
+  String get patrolPointBeaconLoginVerifying;
+
+  /// No description provided for @patrolPointBeaconLoginVerifyingHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking the password. Stay close to the device.'**
+  String get patrolPointBeaconLoginVerifyingHint;
+
+  /// No description provided for @patrolPointIBeaconWrongPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Beacon password/PIN was rejected. Check the password and try again.'**
+  String get patrolPointIBeaconWrongPassword;
+
+  /// No description provided for @patrolPointBeaconLoginDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in to beacon'**
+  String get patrolPointBeaconLoginDialogTitle;
+
+  /// No description provided for @patrolPointBeaconPasswordDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Beacon password (optional)'**
+  String get patrolPointBeaconPasswordDialogTitle;
+
+  /// No description provided for @patrolPointBeaconPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Current password / PIN'**
+  String get patrolPointBeaconPasswordLabel;
+
+  /// No description provided for @patrolPointBeaconPasswordOptionalHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty if not required'**
+  String get patrolPointBeaconPasswordOptionalHint;
+
+  /// No description provided for @patrolPointBeaconLoginHm10Hint.
+  ///
+  /// In en, this message translates to:
+  /// **'HM-10 / FFE0: enter the current 6-digit PIN to unlock config. Leave empty for factory default (000000) or open config.'**
+  String get patrolPointBeaconLoginHm10Hint;
+
+  /// No description provided for @patrolPointBeaconLoginJoywayHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Joyway: enter the current password to unlock the beacon (max 12 characters). Leave empty for factory default. Press the config button and stay close.'**
+  String get patrolPointBeaconLoginJoywayHint;
+
+  /// No description provided for @patrolPointBeaconPasswordHm10Hint.
+  ///
+  /// In en, this message translates to:
+  /// **'HM-10 / FFE0: enter the 6-digit PIN if the module requires it. Leave empty for factory default (000000) or open config.'**
+  String get patrolPointBeaconPasswordHm10Hint;
+
+  /// No description provided for @patrolPointBeaconPasswordJoywayHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Joyway: max 12 characters. This password is saved on the beacon (empty = factory default). If the beacon is new, leave empty once; if it already has a password, enter that password first. Press the config button and stay close.'**
+  String get patrolPointBeaconPasswordJoywayHint;
+
+  /// No description provided for @patrolPointBeaconPasswordNordicHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Nordic nRF52: password is not used for GATT programming in this app — leave empty.'**
+  String get patrolPointBeaconPasswordNordicHint;
+
+  /// No description provided for @patrolPointBeaconPasswordRemember.
+  ///
+  /// In en, this message translates to:
+  /// **'Remember password on this device'**
+  String get patrolPointBeaconPasswordRemember;
+
+  /// No description provided for @patrolPointBeaconPasswordContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get patrolPointBeaconPasswordContinue;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select beacon to program'**
+  String get patrolPointBeaconConfigurePickerTitle;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Only devices advertising iBeacon (UUID/Major/Minor on air). Select a device and tap Connect — keep the phone close (~1 m).'**
+  String get patrolPointBeaconConfigurePickerHint;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerManualMacLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'MAC from BLE Scanner'**
+  String get patrolPointBeaconConfigurePickerManualMacLabel;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerManualMacUse.
+  ///
+  /// In en, this message translates to:
+  /// **'Use MAC'**
+  String get patrolPointBeaconConfigurePickerManualMacUse;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerScanning.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning Bluetooth (BLE)…'**
+  String get patrolPointBeaconConfigurePickerScanning;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerScanningCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning… {count} device(s) seen'**
+  String patrolPointBeaconConfigurePickerScanningCount(int count);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerJoywayFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not start Joyway scan. Enable Bluetooth, grant Location and Bluetooth permissions, rebuild the app, then tap Rescan.'**
+  String get patrolPointBeaconConfigurePickerJoywayFailed;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No iBeacon found. Tap Rescan and keep the phone close to the beacon (~1 m).'**
+  String get patrolPointBeaconConfigurePickerEmpty;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerIBeaconSection.
+  ///
+  /// In en, this message translates to:
+  /// **'iBeacon (UUID in advert)'**
+  String get patrolPointBeaconConfigurePickerIBeaconSection;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerLikelyJoywaySection.
+  ///
+  /// In en, this message translates to:
+  /// **'Possible Joyway (press beacon button if no iBeacon row)'**
+  String get patrolPointBeaconConfigurePickerLikelyJoywaySection;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerLikelyJoywayBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Joyway?'**
+  String get patrolPointBeaconConfigurePickerLikelyJoywayBadge;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerOtherDevicesSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Other Bluetooth devices'**
+  String get patrolPointBeaconConfigurePickerOtherDevicesSection;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerConfigModeSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Config mode (no UUID on air — press beacon button; UUID shows after programming or in normal broadcast mode)'**
+  String get patrolPointBeaconConfigurePickerConfigModeSection;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerConfigModeBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Config'**
+  String get patrolPointBeaconConfigurePickerConfigModeBadge;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerRescan.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescan'**
+  String get patrolPointBeaconConfigurePickerRescan;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerCompanyUuid.
+  ///
+  /// In en, this message translates to:
+  /// **'Company beacon UUID'**
+  String get patrolPointBeaconConfigurePickerCompanyUuid;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerOtherIBeacon.
+  ///
+  /// In en, this message translates to:
+  /// **'Other iBeacon (different UUID)'**
+  String get patrolPointBeaconConfigurePickerOtherIBeacon;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerRecommended.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended'**
+  String get patrolPointBeaconConfigurePickerRecommended;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other nearby devices'**
+  String get patrolPointBeaconConfigurePickerOther;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerRssi.
+  ///
+  /// In en, this message translates to:
+  /// **'RSSI: {rssi} dBm'**
+  String patrolPointBeaconConfigurePickerRssi(int rssi);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerMacLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'MAC: {mac}'**
+  String patrolPointBeaconConfigurePickerMacLabel(String mac);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerUuidLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'UUID: {uuid}'**
+  String patrolPointBeaconConfigurePickerUuidLabel(String uuid);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerMajorMinorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Major/Minor: {major}/{minor}'**
+  String patrolPointBeaconConfigurePickerMajorMinorLabel(
+    String major,
+    String minor,
+  );
+
+  /// No description provided for @patrolPointBeaconConfigurePickerMacRssiLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'MAC: {mac} · {rssi} dBm'**
+  String patrolPointBeaconConfigurePickerMacRssiLabel(String mac, int rssi);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerBroadcastNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Broadcast: {name}'**
+  String patrolPointBeaconConfigurePickerBroadcastNameLabel(String name);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerConnectable.
+  ///
+  /// In en, this message translates to:
+  /// **'Connectable'**
+  String get patrolPointBeaconConfigurePickerConnectable;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerProtocolLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Protocol: {protocols}'**
+  String patrolPointBeaconConfigurePickerProtocolLabel(String protocols);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerProtocolUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Protocol: not detected from advert (choose after connect)'**
+  String get patrolPointBeaconConfigurePickerProtocolUnknown;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerServicesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'BLE services: {services}'**
+  String patrolPointBeaconConfigurePickerServicesLabel(String services);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerCheckpointProtocol.
+  ///
+  /// In en, this message translates to:
+  /// **'Checkpoint protocol: {protocol}'**
+  String patrolPointBeaconConfigurePickerCheckpointProtocol(String protocol);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerConnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect'**
+  String get patrolPointBeaconConfigurePickerConnect;
+
+  /// No description provided for @patrolPointBeaconSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Beacon settings'**
+  String get patrolPointBeaconSettingsTitle;
+
+  /// No description provided for @patrolPointBeaconSettingsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit the values to write to the beacon, then tap Update to program the device and save this checkpoint.'**
+  String get patrolPointBeaconSettingsHint;
+
+  /// No description provided for @patrolPointBeaconSettingsDeviceSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected device'**
+  String get patrolPointBeaconSettingsDeviceSection;
+
+  /// No description provided for @patrolPointBeaconSettingsDeviceName.
+  ///
+  /// In en, this message translates to:
+  /// **'Checkpoint name'**
+  String get patrolPointBeaconSettingsDeviceName;
+
+  /// No description provided for @patrolPointBeaconSettingsNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'BLE broadcast name (defaults to this checkpoint)'**
+  String get patrolPointBeaconSettingsNameHint;
+
+  /// No description provided for @patrolPointBeaconSettingsNameHintJoyway.
+  ///
+  /// In en, this message translates to:
+  /// **'Max 12 bytes UTF-8 (Vietnamese OK, e.g. \"Điểm 1\")'**
+  String get patrolPointBeaconSettingsNameHintJoyway;
+
+  /// No description provided for @patrolPointBeaconSettingsNameTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Name is too long for the beacon (max 12 UTF-8 bytes).'**
+  String get patrolPointBeaconSettingsNameTooLong;
+
+  /// No description provided for @patrolPointBeaconSettingsNewPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'New beacon password'**
+  String get patrolPointBeaconSettingsNewPasswordLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsNewPasswordHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty to keep current password'**
+  String get patrolPointBeaconSettingsNewPasswordHint;
+
+  /// No description provided for @patrolPointBeaconSettingsNewPasswordJoywayHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Joyway: written to the beacon when you tap Update (max 12 characters). Leave empty to keep the existing password on the device.'**
+  String get patrolPointBeaconSettingsNewPasswordJoywayHint;
+
+  /// No description provided for @patrolPointBeaconSettingsShowPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Show password'**
+  String get patrolPointBeaconSettingsShowPassword;
+
+  /// No description provided for @patrolPointBeaconSettingsRssiAt1mLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'RSSI at 1 m (dBm)'**
+  String get patrolPointBeaconSettingsRssiAt1mLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsRssiAt1mHint.
+  ///
+  /// In en, this message translates to:
+  /// **'-100 to 0'**
+  String get patrolPointBeaconSettingsRssiAt1mHint;
+
+  /// No description provided for @patrolPointBeaconSettingsTxPowerDbmLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'TX power (dBm)'**
+  String get patrolPointBeaconSettingsTxPowerDbmLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsAdv1Section.
+  ///
+  /// In en, this message translates to:
+  /// **'Advertising 1'**
+  String get patrolPointBeaconSettingsAdv1Section;
+
+  /// No description provided for @patrolPointBeaconSettingsAdv1IntervalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Adv 1 interval (ms)'**
+  String get patrolPointBeaconSettingsAdv1IntervalLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsAdv1TimeLenLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Adv 1 time length (ms)'**
+  String get patrolPointBeaconSettingsAdv1TimeLenLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsAdv1NeverStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Adv 1 never stop'**
+  String get patrolPointBeaconSettingsAdv1NeverStop;
+
+  /// No description provided for @patrolPointBeaconSettingsAdv2Section.
+  ///
+  /// In en, this message translates to:
+  /// **'Advertising 2'**
+  String get patrolPointBeaconSettingsAdv2Section;
+
+  /// No description provided for @patrolPointBeaconSettingsAdv2IntervalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Adv 2 interval (ms)'**
+  String get patrolPointBeaconSettingsAdv2IntervalLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsAdv2TimeLenLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Adv 2 time length (ms)'**
+  String get patrolPointBeaconSettingsAdv2TimeLenLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsAdv2NeverStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Adv 2 never stop'**
+  String get patrolPointBeaconSettingsAdv2NeverStop;
+
+  /// No description provided for @patrolPointBeaconSettingsButtonSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Button'**
+  String get patrolPointBeaconSettingsButtonSection;
+
+  /// No description provided for @patrolPointBeaconSettingsButtonDelayLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Button delay for turning on (ms)'**
+  String get patrolPointBeaconSettingsButtonDelayLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsAdvertiseButtonEvent.
+  ///
+  /// In en, this message translates to:
+  /// **'Advertise button event'**
+  String get patrolPointBeaconSettingsAdvertiseButtonEvent;
+
+  /// No description provided for @patrolPointBeaconSettingsInvalidRssiAt1m.
+  ///
+  /// In en, this message translates to:
+  /// **'RSSI at 1 m must be −100 to 0 dBm.'**
+  String get patrolPointBeaconSettingsInvalidRssiAt1m;
+
+  /// No description provided for @patrolPointBeaconSettingsInvalidAdvInterval.
+  ///
+  /// In en, this message translates to:
+  /// **'Interval must be 100–10000 ms.'**
+  String get patrolPointBeaconSettingsInvalidAdvInterval;
+
+  /// No description provided for @patrolPointBeaconSettingsInvalidAdvTimeLen.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid time length in ms.'**
+  String get patrolPointBeaconSettingsInvalidAdvTimeLen;
+
+  /// No description provided for @patrolPointBeaconSettingsInvalidButtonDelay.
+  ///
+  /// In en, this message translates to:
+  /// **'Button delay must be 0–25500 ms.'**
+  String get patrolPointBeaconSettingsInvalidButtonDelay;
+
+  /// No description provided for @patrolPointBeaconSettingsCurrentSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Currently advertising'**
+  String get patrolPointBeaconSettingsCurrentSection;
+
+  /// No description provided for @patrolPointBeaconSettingsTargetSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Values to write'**
+  String get patrolPointBeaconSettingsTargetSection;
+
+  /// No description provided for @patrolPointBeaconSettingsMajorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Major'**
+  String get patrolPointBeaconSettingsMajorLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsMinorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Minor'**
+  String get patrolPointBeaconSettingsMinorLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsTxPowerLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Tx power at 1 m'**
+  String get patrolPointBeaconSettingsTxPowerLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsTxPowerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'-59 (Apple default)'**
+  String get patrolPointBeaconSettingsTxPowerHint;
+
+  /// No description provided for @patrolPointBeaconSettingsInvalidTxPower.
+  ///
+  /// In en, this message translates to:
+  /// **'Tx power must be −128 to 127 dBm.'**
+  String get patrolPointBeaconSettingsInvalidTxPower;
+
+  /// No description provided for @patrolPointBeaconSettingsInvalidUuid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid beacon UUID.'**
+  String get patrolPointBeaconSettingsInvalidUuid;
+
+  /// No description provided for @patrolPointBeaconSettingsInvalidMajor.
+  ///
+  /// In en, this message translates to:
+  /// **'Major must be 0–65535.'**
+  String get patrolPointBeaconSettingsInvalidMajor;
+
+  /// No description provided for @patrolPointBeaconSettingsInvalidMinor.
+  ///
+  /// In en, this message translates to:
+  /// **'Minor must be 0–65535.'**
+  String get patrolPointBeaconSettingsInvalidMinor;
+
+  /// No description provided for @patrolPointBeaconSettingsUpdate.
+  ///
+  /// In en, this message translates to:
+  /// **'Update'**
+  String get patrolPointBeaconSettingsUpdate;
+
   /// No description provided for @patrolPointCopyUuidTooltip.
   ///
   /// In en, this message translates to:
@@ -1325,6 +1946,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Assign Bluetooth ID to this point'**
   String get patrolPointUpdateBluetoothTooltip;
+
+  /// No description provided for @patrolPointChangeBluetoothTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconfigure Bluetooth beacon for this point'**
+  String get patrolPointChangeBluetoothTooltip;
 
   /// No description provided for @patrolPointDialogSave.
   ///

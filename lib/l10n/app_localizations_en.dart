@@ -687,6 +687,390 @@ class AppLocalizationsEn extends AppLocalizations {
   String get patrolPointBeaconUuidLabel => 'Beacon UUID';
 
   @override
+  String get patrolPointBeaconProtocolLabel => 'Beacon programming protocol';
+
+  @override
+  String get patrolPointBeaconProtocolHm10 => 'HM-10 / FFE0 (AT commands)';
+
+  @override
+  String get patrolPointBeaconProtocolHm10Hint =>
+      'TQ clones, UART service FFE0 · char FFE1';
+
+  @override
+  String get patrolPointBeaconProtocolNordic => 'Nordic nRF52 OEM';
+
+  @override
+  String get patrolPointBeaconProtocolNordicHint =>
+      '21-byte write to advertisement content (7650/7651)';
+
+  @override
+  String get patrolPointBeaconProtocolJoyway => 'Joyway';
+
+  @override
+  String get patrolPointBeaconProtocolJoywayHint =>
+      'Joyway JW1404 — BLE scan, pick beacon, program via UART (hold config button if connect fails)';
+
+  @override
+  String get patrolPointBeaconProtocolFeasycom => 'Feasycom (FeasyBeacon)';
+
+  @override
+  String get patrolPointBeaconProtocolMinew => 'Minew (mBeacon)';
+
+  @override
+  String get patrolPointBeaconProtocolEddystone => 'Eddystone-GATT (FEAA)';
+
+  @override
+  String get patrolPointBeaconProtocolComingSoon =>
+      'Requires vendor SDK — not available in this app yet';
+
+  @override
+  String get patrolPointBeaconProtocolUnsupported =>
+      'This protocol is not supported yet. Choose HM-10, Nordic nRF52, or Joyway.';
+
+  @override
+  String patrolPointBeaconProtocolUseCheckpoint(String protocol) {
+    return 'Continue with checkpoint protocol ($protocol)';
+  }
+
+  @override
+  String get patrolPointCompanyBeaconUuidMissing =>
+      'Company beacon UUID is not configured.';
+
+  @override
+  String get patrolPointIBeaconConfigModeRequired =>
+      'No configurable beacon found. Press the beacon button to enter config mode, then try again.';
+
+  @override
+  String get patrolPointIBeaconConfigureFailed =>
+      'Could not program the iBeacon. Try again near the device.';
+
+  @override
+  String get patrolPointBeaconConfiguring => 'Programming beacon…';
+
+  @override
+  String get patrolPointBeaconConfiguringHint =>
+      'Keep the phone close to the device. Do not leave the app.';
+
+  @override
+  String get patrolPointBeaconLoginVerifying => 'Connecting to beacon…';
+
+  @override
+  String get patrolPointBeaconLoginVerifyingHint =>
+      'Checking the password. Stay close to the device.';
+
+  @override
+  String get patrolPointIBeaconWrongPassword =>
+      'Beacon password/PIN was rejected. Check the password and try again.';
+
+  @override
+  String get patrolPointBeaconLoginDialogTitle => 'Log in to beacon';
+
+  @override
+  String get patrolPointBeaconPasswordDialogTitle =>
+      'Beacon password (optional)';
+
+  @override
+  String get patrolPointBeaconPasswordLabel => 'Current password / PIN';
+
+  @override
+  String get patrolPointBeaconPasswordOptionalHint =>
+      'Leave empty if not required';
+
+  @override
+  String get patrolPointBeaconLoginHm10Hint =>
+      'HM-10 / FFE0: enter the current 6-digit PIN to unlock config. Leave empty for factory default (000000) or open config.';
+
+  @override
+  String get patrolPointBeaconLoginJoywayHint =>
+      'Joyway: enter the current password to unlock the beacon (max 12 characters). Leave empty for factory default. Press the config button and stay close.';
+
+  @override
+  String get patrolPointBeaconPasswordHm10Hint =>
+      'HM-10 / FFE0: enter the 6-digit PIN if the module requires it. Leave empty for factory default (000000) or open config.';
+
+  @override
+  String get patrolPointBeaconPasswordJoywayHint =>
+      'Joyway: max 12 characters. This password is saved on the beacon (empty = factory default). If the beacon is new, leave empty once; if it already has a password, enter that password first. Press the config button and stay close.';
+
+  @override
+  String get patrolPointBeaconPasswordNordicHint =>
+      'Nordic nRF52: password is not used for GATT programming in this app — leave empty.';
+
+  @override
+  String get patrolPointBeaconPasswordRemember =>
+      'Remember password on this device';
+
+  @override
+  String get patrolPointBeaconPasswordContinue => 'Continue';
+
+  @override
+  String get patrolPointBeaconConfigurePickerTitle =>
+      'Select beacon to program';
+
+  @override
+  String get patrolPointBeaconConfigurePickerHint =>
+      'Only devices advertising iBeacon (UUID/Major/Minor on air). Select a device and tap Connect — keep the phone close (~1 m).';
+
+  @override
+  String get patrolPointBeaconConfigurePickerManualMacLabel =>
+      'MAC from BLE Scanner';
+
+  @override
+  String get patrolPointBeaconConfigurePickerManualMacUse => 'Use MAC';
+
+  @override
+  String get patrolPointBeaconConfigurePickerScanning =>
+      'Scanning Bluetooth (BLE)…';
+
+  @override
+  String patrolPointBeaconConfigurePickerScanningCount(int count) {
+    return 'Scanning… $count device(s) seen';
+  }
+
+  @override
+  String get patrolPointBeaconConfigurePickerJoywayFailed =>
+      'Could not start Joyway scan. Enable Bluetooth, grant Location and Bluetooth permissions, rebuild the app, then tap Rescan.';
+
+  @override
+  String get patrolPointBeaconConfigurePickerEmpty =>
+      'No iBeacon found. Tap Rescan and keep the phone close to the beacon (~1 m).';
+
+  @override
+  String get patrolPointBeaconConfigurePickerIBeaconSection =>
+      'iBeacon (UUID in advert)';
+
+  @override
+  String get patrolPointBeaconConfigurePickerLikelyJoywaySection =>
+      'Possible Joyway (press beacon button if no iBeacon row)';
+
+  @override
+  String get patrolPointBeaconConfigurePickerLikelyJoywayBadge => 'Joyway?';
+
+  @override
+  String get patrolPointBeaconConfigurePickerOtherDevicesSection =>
+      'Other Bluetooth devices';
+
+  @override
+  String get patrolPointBeaconConfigurePickerConfigModeSection =>
+      'Config mode (no UUID on air — press beacon button; UUID shows after programming or in normal broadcast mode)';
+
+  @override
+  String get patrolPointBeaconConfigurePickerConfigModeBadge => 'Config';
+
+  @override
+  String get patrolPointBeaconConfigurePickerRescan => 'Rescan';
+
+  @override
+  String get patrolPointBeaconConfigurePickerCompanyUuid =>
+      'Company beacon UUID';
+
+  @override
+  String get patrolPointBeaconConfigurePickerOtherIBeacon =>
+      'Other iBeacon (different UUID)';
+
+  @override
+  String get patrolPointBeaconConfigurePickerRecommended => 'Recommended';
+
+  @override
+  String get patrolPointBeaconConfigurePickerOther => 'Other nearby devices';
+
+  @override
+  String patrolPointBeaconConfigurePickerRssi(int rssi) {
+    return 'RSSI: $rssi dBm';
+  }
+
+  @override
+  String patrolPointBeaconConfigurePickerMacLabel(String mac) {
+    return 'MAC: $mac';
+  }
+
+  @override
+  String patrolPointBeaconConfigurePickerUuidLabel(String uuid) {
+    return 'UUID: $uuid';
+  }
+
+  @override
+  String patrolPointBeaconConfigurePickerMajorMinorLabel(
+    String major,
+    String minor,
+  ) {
+    return 'Major/Minor: $major/$minor';
+  }
+
+  @override
+  String patrolPointBeaconConfigurePickerMacRssiLabel(String mac, int rssi) {
+    return 'MAC: $mac · $rssi dBm';
+  }
+
+  @override
+  String patrolPointBeaconConfigurePickerBroadcastNameLabel(String name) {
+    return 'Broadcast: $name';
+  }
+
+  @override
+  String get patrolPointBeaconConfigurePickerConnectable => 'Connectable';
+
+  @override
+  String patrolPointBeaconConfigurePickerProtocolLabel(String protocols) {
+    return 'Protocol: $protocols';
+  }
+
+  @override
+  String get patrolPointBeaconConfigurePickerProtocolUnknown =>
+      'Protocol: not detected from advert (choose after connect)';
+
+  @override
+  String patrolPointBeaconConfigurePickerServicesLabel(String services) {
+    return 'BLE services: $services';
+  }
+
+  @override
+  String patrolPointBeaconConfigurePickerCheckpointProtocol(String protocol) {
+    return 'Checkpoint protocol: $protocol';
+  }
+
+  @override
+  String get patrolPointBeaconConfigurePickerConnect => 'Connect';
+
+  @override
+  String get patrolPointBeaconSettingsTitle => 'Beacon settings';
+
+  @override
+  String get patrolPointBeaconSettingsHint =>
+      'Edit the values to write to the beacon, then tap Update to program the device and save this checkpoint.';
+
+  @override
+  String get patrolPointBeaconSettingsDeviceSection => 'Selected device';
+
+  @override
+  String get patrolPointBeaconSettingsDeviceName => 'Checkpoint name';
+
+  @override
+  String get patrolPointBeaconSettingsNameHint =>
+      'BLE broadcast name (defaults to this checkpoint)';
+
+  @override
+  String get patrolPointBeaconSettingsNameHintJoyway =>
+      'Max 12 bytes UTF-8 (Vietnamese OK, e.g. \"Điểm 1\")';
+
+  @override
+  String get patrolPointBeaconSettingsNameTooLong =>
+      'Name is too long for the beacon (max 12 UTF-8 bytes).';
+
+  @override
+  String get patrolPointBeaconSettingsNewPasswordLabel => 'New beacon password';
+
+  @override
+  String get patrolPointBeaconSettingsNewPasswordHint =>
+      'Leave empty to keep current password';
+
+  @override
+  String get patrolPointBeaconSettingsNewPasswordJoywayHint =>
+      'Joyway: written to the beacon when you tap Update (max 12 characters). Leave empty to keep the existing password on the device.';
+
+  @override
+  String get patrolPointBeaconSettingsShowPassword => 'Show password';
+
+  @override
+  String get patrolPointBeaconSettingsRssiAt1mLabel => 'RSSI at 1 m (dBm)';
+
+  @override
+  String get patrolPointBeaconSettingsRssiAt1mHint => '-100 to 0';
+
+  @override
+  String get patrolPointBeaconSettingsTxPowerDbmLabel => 'TX power (dBm)';
+
+  @override
+  String get patrolPointBeaconSettingsAdv1Section => 'Advertising 1';
+
+  @override
+  String get patrolPointBeaconSettingsAdv1IntervalLabel =>
+      'Adv 1 interval (ms)';
+
+  @override
+  String get patrolPointBeaconSettingsAdv1TimeLenLabel =>
+      'Adv 1 time length (ms)';
+
+  @override
+  String get patrolPointBeaconSettingsAdv1NeverStop => 'Adv 1 never stop';
+
+  @override
+  String get patrolPointBeaconSettingsAdv2Section => 'Advertising 2';
+
+  @override
+  String get patrolPointBeaconSettingsAdv2IntervalLabel =>
+      'Adv 2 interval (ms)';
+
+  @override
+  String get patrolPointBeaconSettingsAdv2TimeLenLabel =>
+      'Adv 2 time length (ms)';
+
+  @override
+  String get patrolPointBeaconSettingsAdv2NeverStop => 'Adv 2 never stop';
+
+  @override
+  String get patrolPointBeaconSettingsButtonSection => 'Button';
+
+  @override
+  String get patrolPointBeaconSettingsButtonDelayLabel =>
+      'Button delay for turning on (ms)';
+
+  @override
+  String get patrolPointBeaconSettingsAdvertiseButtonEvent =>
+      'Advertise button event';
+
+  @override
+  String get patrolPointBeaconSettingsInvalidRssiAt1m =>
+      'RSSI at 1 m must be −100 to 0 dBm.';
+
+  @override
+  String get patrolPointBeaconSettingsInvalidAdvInterval =>
+      'Interval must be 100–10000 ms.';
+
+  @override
+  String get patrolPointBeaconSettingsInvalidAdvTimeLen =>
+      'Enter a valid time length in ms.';
+
+  @override
+  String get patrolPointBeaconSettingsInvalidButtonDelay =>
+      'Button delay must be 0–25500 ms.';
+
+  @override
+  String get patrolPointBeaconSettingsCurrentSection => 'Currently advertising';
+
+  @override
+  String get patrolPointBeaconSettingsTargetSection => 'Values to write';
+
+  @override
+  String get patrolPointBeaconSettingsMajorLabel => 'Major';
+
+  @override
+  String get patrolPointBeaconSettingsMinorLabel => 'Minor';
+
+  @override
+  String get patrolPointBeaconSettingsTxPowerLabel => 'Tx power at 1 m';
+
+  @override
+  String get patrolPointBeaconSettingsTxPowerHint => '-59 (Apple default)';
+
+  @override
+  String get patrolPointBeaconSettingsInvalidTxPower =>
+      'Tx power must be −128 to 127 dBm.';
+
+  @override
+  String get patrolPointBeaconSettingsInvalidUuid =>
+      'Enter a valid beacon UUID.';
+
+  @override
+  String get patrolPointBeaconSettingsInvalidMajor => 'Major must be 0–65535.';
+
+  @override
+  String get patrolPointBeaconSettingsInvalidMinor => 'Minor must be 0–65535.';
+
+  @override
+  String get patrolPointBeaconSettingsUpdate => 'Update';
+
+  @override
   String get patrolPointCopyUuidTooltip => 'Copy UUID';
 
   @override
@@ -695,6 +1079,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get patrolPointUpdateBluetoothTooltip =>
       'Assign Bluetooth ID to this point';
+
+  @override
+  String get patrolPointChangeBluetoothTooltip =>
+      'Reconfigure Bluetooth beacon for this point';
 
   @override
   String get patrolPointDialogSave => 'Save';

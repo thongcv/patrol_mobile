@@ -138,7 +138,7 @@ class _PatrolMobileAppState extends State<PatrolMobileApp>
     return MaterialApp(
       navigatorKey: _navigatorKey,
       title: 'SPS Patrol',
-      debugShowCheckedModeBanner: false,
+      debugShowCheckedModeBanner: true,
       locale: _locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,

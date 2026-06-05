@@ -13,6 +13,7 @@ import '../http/patrol_api_endpoints.dart';
 import '../http/patrol_dio.dart';
 import '../models/patrol_tracking_config.dart';
 import 'account_session_store.dart';
+import 'beacon_device_password_store.dart';
 import 'patrol_tracking_config_store.dart';
 import 'patrol_active_round_sync.dart';
 
@@ -58,6 +59,7 @@ class AuthService {
           await PatrolTrackingConfigStore.save(
             PatrolTrackingConfig.fromLoginEnvelope(data),
           );
+          await BeaconDevicePasswordStore.saveFromLoginEnvelope(data);
           await PatrolActiveRoundSync.clearBackgroundAutoScanArmed();
           await AccountSessionStore.instance.storeAccessToken(accessToken);
           return ApiResult.success(

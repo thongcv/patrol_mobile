@@ -12,6 +12,7 @@ Future<BluetoothReadResult> readBluetoothBeaconIdentifier({
   int minRssi = kBluetoothDiscoveryMinRssi,
   int successRssi = kBluetoothDiscoverySuccessRssi,
   int stableHits = kBluetoothDiscoveryStableHits,
+  List<String>? uuids,
   List<String>? remoteIds,
 }) =>
     impl.readBluetoothBeaconIdentifier(
@@ -19,5 +20,8 @@ Future<BluetoothReadResult> readBluetoothBeaconIdentifier({
       minRssi: minRssi,
       successRssi: successRssi,
       stableHits: stableHits,
+      uuids: uuids,
       remoteIds: remoteIds,
     );
+
+typedef BluetoothBeaconScanSession = impl.BluetoothBeaconScanSession;

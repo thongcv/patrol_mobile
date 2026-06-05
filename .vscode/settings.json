@@ -1,4 +1,5 @@
 {
+  "dart.pauseIsolatesOnStart": false,
   "kotlin.languageServer.enabled": true,
   "kotlin.languageServer.transport": "stdio",
   "kotlin.languageServer.gradle.enabled": false,

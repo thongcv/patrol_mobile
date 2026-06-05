@@ -12,6 +12,7 @@ class _PatrolPointMetaIcon extends StatelessWidget {
     required this.onApply,
     this.readOnly = false,
     this.showTooltip = true,
+    this.directApplyWhenHasDetail = false,
   });
 
   final AppLocalizations l10n;
@@ -26,15 +27,12 @@ class _PatrolPointMetaIcon extends StatelessWidget {
   final VoidCallback onApply;
   final bool readOnly;
   final bool showTooltip;
+  /// Tap runs [onApply] even when detail exists (e.g. Bluetooth reconfigure).
+  final bool directApplyWhenHasDetail;
 
-  Future<void> _onTap(BuildContext context) async {
-    if (busy) return;
+  Future<void> _showDetailDialog(BuildContext context) async {
     final body = dialogBody();
-    final hasDetail = body.trim().isNotEmpty;
-    if (!hasDetail) {
-      onApply();
-      return;
-    }
+    if (body.trim().isEmpty) return;
     await _showPatrolCheckpointMetaDialog(
       context,
       l10n: l10n,
@@ -44,6 +42,24 @@ class _PatrolPointMetaIcon extends StatelessWidget {
     );
   }
 
+  Future<void> _onTap(BuildContext context) async {
+    if (busy) return;
+    final body = dialogBody();
+    final hasDetail = body.trim().isNotEmpty;
+    if (!hasDetail || directApplyWhenHasDetail) {
+      onApply();
+      return;
+    }
+    await _showDetailDialog(context);
+  }
+
+  Future<void> _onLongPress(BuildContext context) async {
+    if (busy) return;
+    final body = dialogBody();
+    if (body.trim().isEmpty) return;
+    await _showDetailDialog(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     final body = dialogBody();
@@ -51,9 +67,13 @@ class _PatrolPointMetaIcon extends StatelessWidget {
     final accent = hasDetail
         ? PatrolShellColors.accent
         : Colors.white.withValues(alpha: 0.55);
-    final hint = hasDetail ? detailTooltip : applyTooltip;
+    final hint = hasDetail && directApplyWhenHasDetail
+        ? applyTooltip
+        : (hasDetail ? detailTooltip : applyTooltip);
 
-    final button = IconButton.filledTonal(
+    final button = GestureDetector(
+      onLongPress: busy || !hasDetail ? null : () => _onLongPress(context),
+      child: IconButton.filledTonal(
       onPressed: busy ? null : () => _onTap(context),
       padding: const EdgeInsets.all(10),
       constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
@@ -73,6 +93,7 @@ class _PatrolPointMetaIcon extends StatelessWidget {
               ),
             )
           : Icon(icon, size: 26),
+      ),
     );
 
     final padded = Padding(

@@ -7,7 +7,8 @@ class CheckPoint {
     required this.sequenceOrder,
     required this.active,
     this.nfc,
-    this.bluetooth,
+    this.uuid,
+    this.remoteId,
     this.qrImage,
     this.latitude,
     this.longitude,
@@ -19,6 +20,8 @@ class CheckPoint {
     this.rssi,
     this.major,
     this.minor,
+    this.devicePassword,
+    this.beaconProtocol,
     this.description,
     this.createdBy,
     this.updatedBy,
@@ -34,7 +37,8 @@ class CheckPoint {
   final int sequenceOrder;
   final bool active;
   final String? nfc;
-  final String? bluetooth;
+  final String? uuid;
+  final String? remoteId;
   final String? qrImage;
   final double? latitude;
   final double? longitude;
@@ -46,6 +50,9 @@ class CheckPoint {
   final double? rssi;
   final int? major;
   final int? minor;
+  final String? devicePassword;
+  /// Beacon configure protocol (`hm10_ffe0`, `joyway`, …) from server.
+  final String? beaconProtocol;
   final String? description;
   final String? createdBy;
   final String? updatedBy;
@@ -114,7 +121,8 @@ class CheckPoint {
       sequenceOrder: order,
       active: preferActive ? active : site.active,
       nfc: pickOptStr(nfc, site.nfc),
-      bluetooth: pickOptStr(bluetooth, site.bluetooth),
+      uuid: pickOptStr(uuid, site.uuid),
+      remoteId: pickOptStr(remoteId, site.remoteId),
       qrImage: qrImage,
       latitude: pickOptDouble(latitude, site.latitude),
       longitude: pickOptDouble(longitude, site.longitude),
@@ -126,6 +134,8 @@ class CheckPoint {
       rssi: pickOptDouble(rssi, site.rssi),
       major: pickOptInt(major, site.major),
       minor: pickOptInt(minor, site.minor),
+      devicePassword: pickOptStr(devicePassword, site.devicePassword),
+      beaconProtocol: pickOptStr(beaconProtocol, site.beaconProtocol),
       description: pickOptStr(description, site.description),
       createdBy: preferActive ? (createdBy ?? site.createdBy) : (site.createdBy ?? createdBy),
       updatedBy: preferActive ? (updatedBy ?? site.updatedBy) : (site.updatedBy ?? updatedBy),
@@ -145,7 +155,8 @@ class CheckPoint {
     int? sequenceOrder,
     bool? active,
     String? nfc,
-    String? bluetooth,
+    String? uuid,
+    String? remoteId,
     String? qrImage,
     double? latitude,
     double? longitude,
@@ -157,6 +168,8 @@ class CheckPoint {
     double? rssi,
     int? major,
     int? minor,
+    String? devicePassword,
+    String? beaconProtocol,
     String? description,
     String? createdBy,
     String? updatedBy,
@@ -172,7 +185,8 @@ class CheckPoint {
       sequenceOrder: sequenceOrder ?? this.sequenceOrder,
       active: active ?? this.active,
       nfc: nfc ?? this.nfc,
-      bluetooth: bluetooth ?? this.bluetooth,
+      uuid: uuid ?? this.uuid,
+      remoteId: remoteId ?? this.remoteId,
       qrImage: qrImage ?? this.qrImage,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
@@ -184,6 +198,8 @@ class CheckPoint {
       rssi: rssi ?? this.rssi,
       major: major ?? this.major,
       minor: minor ?? this.minor,
+      devicePassword: devicePassword ?? this.devicePassword,
+      beaconProtocol: beaconProtocol ?? this.beaconProtocol,
       description: description ?? this.description,
       createdBy: createdBy ?? this.createdBy,
       updatedBy: updatedBy ?? this.updatedBy,
@@ -202,7 +218,8 @@ class CheckPoint {
       'sequenceOrder': sequenceOrder,
       'active': active,
       'nfc': nfc,
-      'bluetooth': bluetooth,
+      'uuid': uuid,
+      'remoteId': remoteId,
       'qrImage': qrImage,
       'latitude': latitude,
       'longitude': longitude,
@@ -214,6 +231,8 @@ class CheckPoint {
       'rssi': rssi,
       'major': major,
       'minor': minor,
+      'devicePassword': devicePassword,
+      'beaconProtocol': beaconProtocol,
       'description': description,
       'createdBy': createdBy,
       'updatedBy': updatedBy,
@@ -232,7 +251,8 @@ class CheckPoint {
       sequenceOrder: (json['sequenceOrder'] as num?)?.toInt() ?? 0,
       active: json['active'] as bool? ?? true,
       nfc: json['nfc'] as String?,
-      bluetooth: json['bluetooth'] as String?,
+      uuid: json['uuid'] as String? ?? json['bluetooth'] as String?,
+      remoteId: json['remoteId'] as String? ?? json['remote_id'] as String?,
       qrImage: json['qrImage'] as String? ?? json['qr_image'] as String?,
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
@@ -245,6 +265,10 @@ class CheckPoint {
       rssi: (json['rssi'] as num?)?.toDouble(),
       major: (json['major'] as num?)?.toInt(),
       minor: (json['minor'] as num?)?.toInt(),
+      devicePassword: json['devicePassword'] as String? ??
+          json['device_password'] as String?,
+      beaconProtocol: json['beaconProtocol'] as String? ??
+          json['beacon_protocol'] as String?,
       description: json['description'] as String?,
       createdBy: json['createdBy'] as String?,
       updatedBy: json['updatedBy'] as String?,

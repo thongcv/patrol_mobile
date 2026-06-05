@@ -9,6 +9,7 @@ import '../models/account_me.dart';
 import '../navigation/patrol_session.dart';
 import '../background/patrol_background_isolate_flags.dart';
 import '../background/patrol_background_service.dart';
+import 'beacon_device_password_store.dart';
 import 'patrol_track_token_sync.dart';
 import 'patrol_tracking_config_store.dart';
 
@@ -95,6 +96,7 @@ class AccountSessionStore {
   Future<void> clearToken() async {
     await clearAccessToken();
     await PatrolTrackingConfigStore.clear();
+    await BeaconDevicePasswordStore.clear();
     await clear();
   }
 

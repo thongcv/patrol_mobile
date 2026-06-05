@@ -8,6 +8,12 @@ abstract final class StorageKeys {
   /// Company/merchant iBeacon proximity UUID — from `userInfo.beaconUuid` (`/accounts/me`).
   static const companyBeaconUuid = 'patrol_company_beacon_uuid';
 
+  /// GATT protocol for programming beacons (`hm10_ffe0`, `nordic_nrf52`, …).
+  static const beaconConfigureProtocol = 'patrol_beacon_configure_protocol';
+
+  /// Optional HM-10 / clone PIN for beacon configure (6 digits); empty = not used.
+  static const beaconDevicePassword = 'patrol_beacon_device_password';
+
   /// Location queue when WebSocket is down (JSON array).
   static const patrolTrackOfflineQueue = 'patrol_track_offline_queue';
 

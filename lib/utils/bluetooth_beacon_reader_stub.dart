@@ -7,7 +7,22 @@ Future<BluetoothReadResult> readBluetoothBeaconIdentifier({
   int minRssi = kBluetoothDiscoveryMinRssi,
   int successRssi = kBluetoothDiscoverySuccessRssi,
   int stableHits = kBluetoothDiscoveryStableHits,
+  List<String>? uuids,
   List<String>? remoteIds,
 }) async {
   return const BluetoothReadResult.failure(BluetoothReadFailure.unavailable);
+}
+
+class BluetoothBeaconScanSession {
+  Future<BluetoothReadFailure?> start({
+    List<String>? uuids,
+    List<String>? remoteIds,
+    required BluetoothBeaconOnHit onHit,
+    int minRssi = kBluetoothDiscoveryMinRssi,
+    int successRssi = kBluetoothDiscoverySuccessRssi,
+    int stableHits = kBluetoothDiscoveryStableHits,
+  }) async =>
+      BluetoothReadFailure.unavailable;
+
+  Future<void> stop() async {}
 }

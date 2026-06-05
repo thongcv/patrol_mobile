@@ -205,9 +205,178 @@
   "patrolPointSiteAddressLabel": "Địa chỉ",
   "patrolPointSiteIdLabel": "Mã site",
   "patrolPointBeaconUuidLabel": "Beacon UUID",
+  "patrolPointBeaconProtocolLabel": "Giao thức cấu hình beacon",
+  "patrolPointBeaconProtocolHm10": "HM-10 / FFE0 (lệnh AT)",
+  "patrolPointBeaconProtocolHm10Hint": "Clone TQ, UART service FFE0 · char FFE1",
+  "patrolPointBeaconProtocolNordic": "Nordic nRF52 OEM",
+  "patrolPointBeaconProtocolNordicHint": "Ghi 21 byte vào advertisement content (7650/7651)",
+  "patrolPointBeaconProtocolJoyway": "Joyway",
+  "patrolPointBeaconProtocolJoywayHint": "Joyway JW1404 — quét BLE, chọn beacon, ghi qua UART (giữ nút config nếu không kết nối được)",
+  "patrolPointBeaconProtocolFeasycom": "Feasycom (FeasyBeacon)",
+  "patrolPointBeaconProtocolMinew": "Minew (mBeacon)",
+  "patrolPointBeaconProtocolEddystone": "Eddystone-GATT (FEAA)",
+  "patrolPointBeaconProtocolComingSoon": "Cần SDK hãng — chưa hỗ trợ trong app",
+  "patrolPointBeaconProtocolUnsupported": "Giao thức này chưa hỗ trợ. Chọn HM-10, Nordic nRF52 hoặc Joyway.",
+  "patrolPointBeaconProtocolUseCheckpoint": "Tiếp tục với giao thức điểm tuần tra ({protocol})",
+  "@patrolPointBeaconProtocolUseCheckpoint": {
+    "placeholders": {
+      "protocol": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointCompanyBeaconUuidMissing": "Chưa cấu hình Beacon UUID của công ty.",
+  "patrolPointIBeaconConfigModeRequired": "Không tìm thấy beacon ở chế độ cấu hình. Nhấn nút trên beacon để vào chế độ cấu hình rồi thử lại.",
+  "patrolPointIBeaconConfigureFailed": "Không lập trình được iBeacon. Hãy thử lại khi ở gần thiết bị.",
+  "patrolPointBeaconConfiguring": "Đang lập trình beacon…",
+  "patrolPointBeaconConfiguringHint": "Giữ điện thoại gần thiết bị. Đừng thoát app.",
+  "patrolPointBeaconLoginVerifying": "Đang kết nối beacon…",
+  "patrolPointBeaconLoginVerifyingHint": "Đang kiểm tra mật khẩu. Giữ điện thoại gần thiết bị.",
+  "patrolPointIBeaconWrongPassword": "Mật khẩu/PIN beacon không đúng. Kiểm tra mật khẩu và thử lại.",
+  "patrolPointBeaconLoginDialogTitle": "Đăng nhập beacon",
+  "patrolPointBeaconPasswordDialogTitle": "Mật khẩu beacon (tùy chọn)",
+  "patrolPointBeaconPasswordLabel": "Mật khẩu / PIN hiện tại",
+  "patrolPointBeaconPasswordOptionalHint": "Để trống nếu không cần",
+  "patrolPointBeaconLoginHm10Hint": "HM-10 / FFE0: nhập PIN 6 số hiện tại để mở khóa cấu hình. Để trống nếu mặc định (000000) hoặc không khóa.",
+  "patrolPointBeaconLoginJoywayHint": "Joyway: nhập mật khẩu hiện tại để mở khóa beacon (tối đa 12 ký tự). Để trống nếu mặc định nhà máy. Nhấn nút cấu hình trên beacon, đặt sát máy.",
+  "patrolPointBeaconPasswordHm10Hint": "HM-10 / FFE0: nhập PIN 6 số nếu module yêu cầu. Để trống nếu mặc định (000000) hoặc không khóa.",
+  "patrolPointBeaconPasswordJoywayHint": "Joyway: tối đa 12 ký tự. Mật khẩu này sẽ được lưu lên beacon (để trống = mặc định nhà máy). Beacon mới: để trống lần đầu; beacon đã có mật khẩu: nhập đúng mật khẩu hiện tại. Nhấn nút cấu hình trên beacon, đặt sát máy.",
+  "patrolPointBeaconPasswordNordicHint": "Nordic nRF52: app không dùng mật khẩu khi ghi GATT — để trống.",
+  "patrolPointBeaconPasswordRemember": "Ghi nhớ mật khẩu trên thiết bị này",
+  "patrolPointBeaconPasswordContinue": "Tiếp tục",
+  "patrolPointBeaconConfigurePickerTitle": "Chọn beacon để cấu hình",
+  "patrolPointBeaconConfigurePickerHint": "Chỉ hiện thiết bị quảng bá iBeacon (UUID/Major/Minor trên sóng). Chọn thiết bị rồi bấm Kết nối — giữ điện thoại gần beacon (~1 m).",
+  "patrolPointBeaconConfigurePickerManualMacLabel": "MAC từ BLE Scanner",
+  "patrolPointBeaconConfigurePickerManualMacUse": "Dùng MAC",
+  "patrolPointBeaconConfigurePickerScanning": "Đang quét Bluetooth (BLE)…",
+  "patrolPointBeaconConfigurePickerScanningCount": "Đang quét… đã thấy {count} thiết bị",
+  "@patrolPointBeaconConfigurePickerScanningCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerJoywayFailed": "Không khởi động được quét Joyway. Bật Bluetooth, cấp quyền Vị trí + Bluetooth cho app, build lại app, rồi thử Quét lại.",
+  "patrolPointBeaconConfigurePickerEmpty": "Không thấy iBeacon. Bấm Quét lại và giữ điện thoại gần beacon (~1 m).",
+  "patrolPointBeaconConfigurePickerIBeaconSection": "iBeacon (có UUID trên sóng)",
+  "patrolPointBeaconConfigurePickerLikelyJoywaySection": "Có thể là Joyway (nhấn nút beacon nếu chưa thấy iBeacon)",
+  "patrolPointBeaconConfigurePickerLikelyJoywayBadge": "Joyway?",
+  "patrolPointBeaconConfigurePickerOtherDevicesSection": "Thiết bị Bluetooth khác",
+  "patrolPointBeaconConfigurePickerConfigModeSection": "Chế độ cấu hình (chưa có UUID trên sóng — nhấn nút beacon; có UUID sau khi ghi hoặc khi beacon phát bình thường)",
+  "patrolPointBeaconConfigurePickerConfigModeBadge": "Cấu hình",
+  "patrolPointBeaconConfigurePickerRescan": "Quét lại",
+  "patrolPointBeaconConfigurePickerCompanyUuid": "Trùng UUID beacon công ty",
+  "patrolPointBeaconConfigurePickerOtherIBeacon": "iBeacon UUID khác",
+  "patrolPointBeaconConfigurePickerRecommended": "Nên chọn",
+  "patrolPointBeaconConfigurePickerOther": "Thiết bị khác gần đó",
+  "patrolPointBeaconConfigurePickerRssi": "RSSI: {rssi} dBm",
+  "@patrolPointBeaconConfigurePickerRssi": {
+    "placeholders": {
+      "rssi": { "type": "int" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerMacLabel": "MAC: {mac}",
+  "@patrolPointBeaconConfigurePickerMacLabel": {
+    "placeholders": {
+      "mac": { "type": "String" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerUuidLabel": "UUID: {uuid}",
+  "@patrolPointBeaconConfigurePickerUuidLabel": {
+    "placeholders": {
+      "uuid": { "type": "String" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerMajorMinorLabel": "Major/Minor: {major}/{minor}",
+  "@patrolPointBeaconConfigurePickerMajorMinorLabel": {
+    "placeholders": {
+      "major": { "type": "String" },
+      "minor": { "type": "String" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerMacRssiLabel": "MAC: {mac} · {rssi} dBm",
+  "patrolPointBeaconConfigurePickerBroadcastNameLabel": "Tên sóng: {name}",
+  "@patrolPointBeaconConfigurePickerBroadcastNameLabel": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "@patrolPointBeaconConfigurePickerMacRssiLabel": {
+    "placeholders": {
+      "mac": { "type": "String" },
+      "rssi": { "type": "int" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerConnectable": "Kết nối được",
+  "patrolPointBeaconConfigurePickerProtocolLabel": "Giao thức: {protocols}",
+  "@patrolPointBeaconConfigurePickerProtocolLabel": {
+    "placeholders": {
+      "protocols": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointBeaconConfigurePickerProtocolUnknown": "Giao thức: chưa nhận diện từ sóng (chọn sau khi kết nối)",
+  "patrolPointBeaconConfigurePickerServicesLabel": "BLE service: {services}",
+  "@patrolPointBeaconConfigurePickerServicesLabel": {
+    "placeholders": {
+      "services": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointBeaconConfigurePickerCheckpointProtocol": "Giao thức điểm tuần tra: {protocol}",
+  "@patrolPointBeaconConfigurePickerCheckpointProtocol": {
+    "placeholders": {
+      "protocol": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointBeaconConfigurePickerConnect": "Kết nối",
+  "patrolPointBeaconSettingsTitle": "Cấu hình beacon",
+  "patrolPointBeaconSettingsHint": "Chỉnh giá trị sẽ ghi lên beacon, rồi nhấn Cập nhật để lập trình thiết bị và lưu điểm tuần tra.",
+  "patrolPointBeaconSettingsDeviceSection": "Thiết bị đã chọn",
+  "patrolPointBeaconSettingsDeviceName": "Tên điểm tuần tra",
+  "patrolPointBeaconSettingsNameHint": "Tên phát Bluetooth (mặc định = tên điểm này)",
+  "patrolPointBeaconSettingsNameHintJoyway": "Tối đa 12 byte UTF-8 (tiếng Việt có dấu được, vd. \"Điểm 1\")",
+  "patrolPointBeaconSettingsNameTooLong": "Tên quá dài so với giới hạn beacon (tối đa 12 byte UTF-8).",
+  "patrolPointBeaconSettingsNewPasswordLabel": "Mật khẩu mới trên beacon",
+  "patrolPointBeaconSettingsNewPasswordHint": "Để trống nếu giữ mật khẩu hiện tại",
+  "patrolPointBeaconSettingsNewPasswordJoywayHint": "Joyway: ghi lên beacon khi nhấn Cập nhật (tối đa 12 ký tự). Để trống nếu không đổi mật khẩu trên thiết bị.",
+  "patrolPointBeaconSettingsShowPassword": "Hiện mật khẩu",
+  "patrolPointBeaconSettingsRssiAt1mLabel": "RSSI tại 1 m (dBm)",
+  "patrolPointBeaconSettingsRssiAt1mHint": "−100 đến 0",
+  "patrolPointBeaconSettingsTxPowerDbmLabel": "Công suất phát TX (dBm)",
+  "patrolPointBeaconSettingsAdv1Section": "Quảng bá 1",
+  "patrolPointBeaconSettingsAdv1IntervalLabel": "Chu kỳ Adv 1 (ms)",
+  "patrolPointBeaconSettingsAdv1TimeLenLabel": "Thời lượng Adv 1 (ms)",
+  "patrolPointBeaconSettingsAdv1NeverStop": "Adv 1 không dừng",
+  "patrolPointBeaconSettingsAdv2Section": "Quảng bá 2",
+  "patrolPointBeaconSettingsAdv2IntervalLabel": "Chu kỳ Adv 2 (ms)",
+  "patrolPointBeaconSettingsAdv2TimeLenLabel": "Thời lượng Adv 2 (ms)",
+  "patrolPointBeaconSettingsAdv2NeverStop": "Adv 2 không dừng",
+  "patrolPointBeaconSettingsButtonSection": "Nút bấm",
+  "patrolPointBeaconSettingsButtonDelayLabel": "Độ trễ bật khi nhấn nút (ms)",
+  "patrolPointBeaconSettingsAdvertiseButtonEvent": "Quảng bá sự kiện nút bấm",
+  "patrolPointBeaconSettingsInvalidRssiAt1m": "RSSI tại 1 m phải từ −100 đến 0 dBm.",
+  "patrolPointBeaconSettingsInvalidAdvInterval": "Chu kỳ phải từ 100–10000 ms.",
+  "patrolPointBeaconSettingsInvalidAdvTimeLen": "Nhập thời lượng hợp lệ (ms).",
+  "patrolPointBeaconSettingsInvalidButtonDelay": "Độ trễ nút phải từ 0–25500 ms.",
+  "patrolPointBeaconSettingsCurrentSection": "Hiện trên sóng",
+  "patrolPointBeaconSettingsTargetSection": "Giá trị sẽ ghi",
+  "patrolPointBeaconSettingsMajorLabel": "Major",
+  "patrolPointBeaconSettingsMinorLabel": "Minor",
+  "patrolPointBeaconSettingsTxPowerLabel": "Công suất phát tại 1 m",
+  "patrolPointBeaconSettingsTxPowerHint": "-59 (mặc định Apple)",
+  "patrolPointBeaconSettingsInvalidTxPower": "Công suất phát phải từ −128 đến 127 dBm.",
+  "patrolPointBeaconSettingsInvalidUuid": "Nhập UUID beacon hợp lệ.",
+  "patrolPointBeaconSettingsInvalidMajor": "Major phải từ 0–65535.",
+  "patrolPointBeaconSettingsInvalidMinor": "Minor phải từ 0–65535.",
+  "patrolPointBeaconSettingsUpdate": "Cập nhật",
   "patrolPointCopyUuidTooltip": "Sao chép UUID",
   "patrolPointUpdateNfcTooltip": "Gán mã NFC cho điểm này",
   "patrolPointUpdateBluetoothTooltip": "Gán mã Bluetooth cho điểm này",
+  "patrolPointChangeBluetoothTooltip": "Cấu hình lại beacon Bluetooth cho điểm này",
   "patrolPointDialogSave": "Lưu",
   "patrolPointNfcDialogTitle": "Mã NFC",
   "patrolPointNfcDialogHint": "Quét thẻ hoặc nhập mã NFC",

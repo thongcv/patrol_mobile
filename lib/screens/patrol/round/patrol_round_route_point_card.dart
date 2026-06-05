@@ -21,7 +21,7 @@ class _RoutePointCard extends StatelessWidget {
         point.qrImage != null && point.qrImage!.trim().isNotEmpty;
     final hasNfc = point.nfc != null && point.nfc!.trim().isNotEmpty;
     final hasBluetooth =
-        point.bluetooth != null && point.bluetooth!.trim().isNotEmpty;
+        point.uuid != null && point.uuid!.trim().isNotEmpty;
     final isScanned = scanned || point.verified == true;
 
     return Container(

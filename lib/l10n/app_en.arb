@@ -360,9 +360,178 @@
   "patrolPointSiteAddressLabel": "Address",
   "patrolPointSiteIdLabel": "Site ID",
   "patrolPointBeaconUuidLabel": "Beacon UUID",
+  "patrolPointBeaconProtocolLabel": "Beacon programming protocol",
+  "patrolPointBeaconProtocolHm10": "HM-10 / FFE0 (AT commands)",
+  "patrolPointBeaconProtocolHm10Hint": "TQ clones, UART service FFE0 · char FFE1",
+  "patrolPointBeaconProtocolNordic": "Nordic nRF52 OEM",
+  "patrolPointBeaconProtocolNordicHint": "21-byte write to advertisement content (7650/7651)",
+  "patrolPointBeaconProtocolJoyway": "Joyway",
+  "patrolPointBeaconProtocolJoywayHint": "Joyway JW1404 — BLE scan, pick beacon, program via UART (hold config button if connect fails)",
+  "patrolPointBeaconProtocolFeasycom": "Feasycom (FeasyBeacon)",
+  "patrolPointBeaconProtocolMinew": "Minew (mBeacon)",
+  "patrolPointBeaconProtocolEddystone": "Eddystone-GATT (FEAA)",
+  "patrolPointBeaconProtocolComingSoon": "Requires vendor SDK — not available in this app yet",
+  "patrolPointBeaconProtocolUnsupported": "This protocol is not supported yet. Choose HM-10, Nordic nRF52, or Joyway.",
+  "patrolPointBeaconProtocolUseCheckpoint": "Continue with checkpoint protocol ({protocol})",
+  "@patrolPointBeaconProtocolUseCheckpoint": {
+    "placeholders": {
+      "protocol": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointCompanyBeaconUuidMissing": "Company beacon UUID is not configured.",
+  "patrolPointIBeaconConfigModeRequired": "No configurable beacon found. Press the beacon button to enter config mode, then try again.",
+  "patrolPointIBeaconConfigureFailed": "Could not program the iBeacon. Try again near the device.",
+  "patrolPointBeaconConfiguring": "Programming beacon…",
+  "patrolPointBeaconConfiguringHint": "Keep the phone close to the device. Do not leave the app.",
+  "patrolPointBeaconLoginVerifying": "Connecting to beacon…",
+  "patrolPointBeaconLoginVerifyingHint": "Checking the password. Stay close to the device.",
+  "patrolPointIBeaconWrongPassword": "Beacon password/PIN was rejected. Check the password and try again.",
+  "patrolPointBeaconLoginDialogTitle": "Log in to beacon",
+  "patrolPointBeaconPasswordDialogTitle": "Beacon password (optional)",
+  "patrolPointBeaconPasswordLabel": "Current password / PIN",
+  "patrolPointBeaconPasswordOptionalHint": "Leave empty if not required",
+  "patrolPointBeaconLoginHm10Hint": "HM-10 / FFE0: enter the current 6-digit PIN to unlock config. Leave empty for factory default (000000) or open config.",
+  "patrolPointBeaconLoginJoywayHint": "Joyway: enter the current password to unlock the beacon (max 12 characters). Leave empty for factory default. Press the config button and stay close.",
+  "patrolPointBeaconPasswordHm10Hint": "HM-10 / FFE0: enter the 6-digit PIN if the module requires it. Leave empty for factory default (000000) or open config.",
+  "patrolPointBeaconPasswordJoywayHint": "Joyway: max 12 characters. This password is saved on the beacon (empty = factory default). If the beacon is new, leave empty once; if it already has a password, enter that password first. Press the config button and stay close.",
+  "patrolPointBeaconPasswordNordicHint": "Nordic nRF52: password is not used for GATT programming in this app — leave empty.",
+  "patrolPointBeaconPasswordRemember": "Remember password on this device",
+  "patrolPointBeaconPasswordContinue": "Continue",
+  "patrolPointBeaconConfigurePickerTitle": "Select beacon to program",
+  "patrolPointBeaconConfigurePickerHint": "Only devices advertising iBeacon (UUID/Major/Minor on air). Select a device and tap Connect — keep the phone close (~1 m).",
+  "patrolPointBeaconConfigurePickerManualMacLabel": "MAC from BLE Scanner",
+  "patrolPointBeaconConfigurePickerManualMacUse": "Use MAC",
+  "patrolPointBeaconConfigurePickerScanning": "Scanning Bluetooth (BLE)…",
+  "patrolPointBeaconConfigurePickerScanningCount": "Scanning… {count} device(s) seen",
+  "@patrolPointBeaconConfigurePickerScanningCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerJoywayFailed": "Could not start Joyway scan. Enable Bluetooth, grant Location and Bluetooth permissions, rebuild the app, then tap Rescan.",
+  "patrolPointBeaconConfigurePickerEmpty": "No iBeacon found. Tap Rescan and keep the phone close to the beacon (~1 m).",
+  "patrolPointBeaconConfigurePickerIBeaconSection": "iBeacon (UUID in advert)",
+  "patrolPointBeaconConfigurePickerLikelyJoywaySection": "Possible Joyway (press beacon button if no iBeacon row)",
+  "patrolPointBeaconConfigurePickerLikelyJoywayBadge": "Joyway?",
+  "patrolPointBeaconConfigurePickerOtherDevicesSection": "Other Bluetooth devices",
+  "patrolPointBeaconConfigurePickerConfigModeSection": "Config mode (no UUID on air — press beacon button; UUID shows after programming or in normal broadcast mode)",
+  "patrolPointBeaconConfigurePickerConfigModeBadge": "Config",
+  "patrolPointBeaconConfigurePickerRescan": "Rescan",
+  "patrolPointBeaconConfigurePickerCompanyUuid": "Company beacon UUID",
+  "patrolPointBeaconConfigurePickerOtherIBeacon": "Other iBeacon (different UUID)",
+  "patrolPointBeaconConfigurePickerRecommended": "Recommended",
+  "patrolPointBeaconConfigurePickerOther": "Other nearby devices",
+  "patrolPointBeaconConfigurePickerRssi": "RSSI: {rssi} dBm",
+  "@patrolPointBeaconConfigurePickerRssi": {
+    "placeholders": {
+      "rssi": { "type": "int" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerMacLabel": "MAC: {mac}",
+  "@patrolPointBeaconConfigurePickerMacLabel": {
+    "placeholders": {
+      "mac": { "type": "String" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerUuidLabel": "UUID: {uuid}",
+  "@patrolPointBeaconConfigurePickerUuidLabel": {
+    "placeholders": {
+      "uuid": { "type": "String" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerMajorMinorLabel": "Major/Minor: {major}/{minor}",
+  "@patrolPointBeaconConfigurePickerMajorMinorLabel": {
+    "placeholders": {
+      "major": { "type": "String" },
+      "minor": { "type": "String" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerMacRssiLabel": "MAC: {mac} · {rssi} dBm",
+  "patrolPointBeaconConfigurePickerBroadcastNameLabel": "Broadcast: {name}",
+  "@patrolPointBeaconConfigurePickerBroadcastNameLabel": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "@patrolPointBeaconConfigurePickerMacRssiLabel": {
+    "placeholders": {
+      "mac": { "type": "String" },
+      "rssi": { "type": "int" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerConnectable": "Connectable",
+  "patrolPointBeaconConfigurePickerProtocolLabel": "Protocol: {protocols}",
+  "@patrolPointBeaconConfigurePickerProtocolLabel": {
+    "placeholders": {
+      "protocols": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointBeaconConfigurePickerProtocolUnknown": "Protocol: not detected from advert (choose after connect)",
+  "patrolPointBeaconConfigurePickerServicesLabel": "BLE services: {services}",
+  "@patrolPointBeaconConfigurePickerServicesLabel": {
+    "placeholders": {
+      "services": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointBeaconConfigurePickerCheckpointProtocol": "Checkpoint protocol: {protocol}",
+  "@patrolPointBeaconConfigurePickerCheckpointProtocol": {
+    "placeholders": {
+      "protocol": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointBeaconConfigurePickerConnect": "Connect",
+  "patrolPointBeaconSettingsTitle": "Beacon settings",
+  "patrolPointBeaconSettingsHint": "Edit the values to write to the beacon, then tap Update to program the device and save this checkpoint.",
+  "patrolPointBeaconSettingsDeviceSection": "Selected device",
+  "patrolPointBeaconSettingsDeviceName": "Checkpoint name",
+  "patrolPointBeaconSettingsNameHint": "BLE broadcast name (defaults to this checkpoint)",
+  "patrolPointBeaconSettingsNameHintJoyway": "Max 12 bytes UTF-8 (Vietnamese OK, e.g. \"Điểm 1\")",
+  "patrolPointBeaconSettingsNameTooLong": "Name is too long for the beacon (max 12 UTF-8 bytes).",
+  "patrolPointBeaconSettingsNewPasswordLabel": "New beacon password",
+  "patrolPointBeaconSettingsNewPasswordHint": "Leave empty to keep current password",
+  "patrolPointBeaconSettingsNewPasswordJoywayHint": "Joyway: written to the beacon when you tap Update (max 12 characters). Leave empty to keep the existing password on the device.",
+  "patrolPointBeaconSettingsShowPassword": "Show password",
+  "patrolPointBeaconSettingsRssiAt1mLabel": "RSSI at 1 m (dBm)",
+  "patrolPointBeaconSettingsRssiAt1mHint": "-100 to 0",
+  "patrolPointBeaconSettingsTxPowerDbmLabel": "TX power (dBm)",
+  "patrolPointBeaconSettingsAdv1Section": "Advertising 1",
+  "patrolPointBeaconSettingsAdv1IntervalLabel": "Adv 1 interval (ms)",
+  "patrolPointBeaconSettingsAdv1TimeLenLabel": "Adv 1 time length (ms)",
+  "patrolPointBeaconSettingsAdv1NeverStop": "Adv 1 never stop",
+  "patrolPointBeaconSettingsAdv2Section": "Advertising 2",
+  "patrolPointBeaconSettingsAdv2IntervalLabel": "Adv 2 interval (ms)",
+  "patrolPointBeaconSettingsAdv2TimeLenLabel": "Adv 2 time length (ms)",
+  "patrolPointBeaconSettingsAdv2NeverStop": "Adv 2 never stop",
+  "patrolPointBeaconSettingsButtonSection": "Button",
+  "patrolPointBeaconSettingsButtonDelayLabel": "Button delay for turning on (ms)",
+  "patrolPointBeaconSettingsAdvertiseButtonEvent": "Advertise button event",
+  "patrolPointBeaconSettingsInvalidRssiAt1m": "RSSI at 1 m must be −100 to 0 dBm.",
+  "patrolPointBeaconSettingsInvalidAdvInterval": "Interval must be 100–10000 ms.",
+  "patrolPointBeaconSettingsInvalidAdvTimeLen": "Enter a valid time length in ms.",
+  "patrolPointBeaconSettingsInvalidButtonDelay": "Button delay must be 0–25500 ms.",
+  "patrolPointBeaconSettingsCurrentSection": "Currently advertising",
+  "patrolPointBeaconSettingsTargetSection": "Values to write",
+  "patrolPointBeaconSettingsMajorLabel": "Major",
+  "patrolPointBeaconSettingsMinorLabel": "Minor",
+  "patrolPointBeaconSettingsTxPowerLabel": "Tx power at 1 m",
+  "patrolPointBeaconSettingsTxPowerHint": "-59 (Apple default)",
+  "patrolPointBeaconSettingsInvalidTxPower": "Tx power must be −128 to 127 dBm.",
+  "patrolPointBeaconSettingsInvalidUuid": "Enter a valid beacon UUID.",
+  "patrolPointBeaconSettingsInvalidMajor": "Major must be 0–65535.",
+  "patrolPointBeaconSettingsInvalidMinor": "Minor must be 0–65535.",
+  "patrolPointBeaconSettingsUpdate": "Update",
   "patrolPointCopyUuidTooltip": "Copy UUID",
   "patrolPointUpdateNfcTooltip": "Assign NFC tag ID to this point",
   "patrolPointUpdateBluetoothTooltip": "Assign Bluetooth ID to this point",
+  "patrolPointChangeBluetoothTooltip": "Reconfigure Bluetooth beacon for this point",
   "patrolPointDialogSave": "Save",
   "patrolPointNfcDialogTitle": "NFC tag ID",
   "patrolPointNfcDialogHint": "Scan a tag or enter the NFC ID",

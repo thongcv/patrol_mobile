@@ -684,6 +684,387 @@ class AppLocalizationsVi extends AppLocalizations {
   String get patrolPointBeaconUuidLabel => 'Beacon UUID';
 
   @override
+  String get patrolPointBeaconProtocolLabel => 'Giao thức cấu hình beacon';
+
+  @override
+  String get patrolPointBeaconProtocolHm10 => 'HM-10 / FFE0 (lệnh AT)';
+
+  @override
+  String get patrolPointBeaconProtocolHm10Hint =>
+      'Clone TQ, UART service FFE0 · char FFE1';
+
+  @override
+  String get patrolPointBeaconProtocolNordic => 'Nordic nRF52 OEM';
+
+  @override
+  String get patrolPointBeaconProtocolNordicHint =>
+      'Ghi 21 byte vào advertisement content (7650/7651)';
+
+  @override
+  String get patrolPointBeaconProtocolJoyway => 'Joyway';
+
+  @override
+  String get patrolPointBeaconProtocolJoywayHint =>
+      'Joyway JW1404 — quét BLE, chọn beacon, ghi qua UART (giữ nút config nếu không kết nối được)';
+
+  @override
+  String get patrolPointBeaconProtocolFeasycom => 'Feasycom (FeasyBeacon)';
+
+  @override
+  String get patrolPointBeaconProtocolMinew => 'Minew (mBeacon)';
+
+  @override
+  String get patrolPointBeaconProtocolEddystone => 'Eddystone-GATT (FEAA)';
+
+  @override
+  String get patrolPointBeaconProtocolComingSoon =>
+      'Cần SDK hãng — chưa hỗ trợ trong app';
+
+  @override
+  String get patrolPointBeaconProtocolUnsupported =>
+      'Giao thức này chưa hỗ trợ. Chọn HM-10, Nordic nRF52 hoặc Joyway.';
+
+  @override
+  String patrolPointBeaconProtocolUseCheckpoint(String protocol) {
+    return 'Tiếp tục với giao thức điểm tuần tra ($protocol)';
+  }
+
+  @override
+  String get patrolPointCompanyBeaconUuidMissing =>
+      'Chưa cấu hình Beacon UUID của công ty.';
+
+  @override
+  String get patrolPointIBeaconConfigModeRequired =>
+      'Không tìm thấy beacon ở chế độ cấu hình. Nhấn nút trên beacon để vào chế độ cấu hình rồi thử lại.';
+
+  @override
+  String get patrolPointIBeaconConfigureFailed =>
+      'Không lập trình được iBeacon. Hãy thử lại khi ở gần thiết bị.';
+
+  @override
+  String get patrolPointBeaconConfiguring => 'Đang lập trình beacon…';
+
+  @override
+  String get patrolPointBeaconConfiguringHint =>
+      'Giữ điện thoại gần thiết bị. Đừng thoát app.';
+
+  @override
+  String get patrolPointBeaconLoginVerifying => 'Đang kết nối beacon…';
+
+  @override
+  String get patrolPointBeaconLoginVerifyingHint =>
+      'Đang kiểm tra mật khẩu. Giữ điện thoại gần thiết bị.';
+
+  @override
+  String get patrolPointIBeaconWrongPassword =>
+      'Mật khẩu/PIN beacon không đúng. Kiểm tra mật khẩu và thử lại.';
+
+  @override
+  String get patrolPointBeaconLoginDialogTitle => 'Đăng nhập beacon';
+
+  @override
+  String get patrolPointBeaconPasswordDialogTitle =>
+      'Mật khẩu beacon (tùy chọn)';
+
+  @override
+  String get patrolPointBeaconPasswordLabel => 'Mật khẩu / PIN hiện tại';
+
+  @override
+  String get patrolPointBeaconPasswordOptionalHint => 'Để trống nếu không cần';
+
+  @override
+  String get patrolPointBeaconLoginHm10Hint =>
+      'HM-10 / FFE0: nhập PIN 6 số hiện tại để mở khóa cấu hình. Để trống nếu mặc định (000000) hoặc không khóa.';
+
+  @override
+  String get patrolPointBeaconLoginJoywayHint =>
+      'Joyway: nhập mật khẩu hiện tại để mở khóa beacon (tối đa 12 ký tự). Để trống nếu mặc định nhà máy. Nhấn nút cấu hình trên beacon, đặt sát máy.';
+
+  @override
+  String get patrolPointBeaconPasswordHm10Hint =>
+      'HM-10 / FFE0: nhập PIN 6 số nếu module yêu cầu. Để trống nếu mặc định (000000) hoặc không khóa.';
+
+  @override
+  String get patrolPointBeaconPasswordJoywayHint =>
+      'Joyway: tối đa 12 ký tự. Mật khẩu này sẽ được lưu lên beacon (để trống = mặc định nhà máy). Beacon mới: để trống lần đầu; beacon đã có mật khẩu: nhập đúng mật khẩu hiện tại. Nhấn nút cấu hình trên beacon, đặt sát máy.';
+
+  @override
+  String get patrolPointBeaconPasswordNordicHint =>
+      'Nordic nRF52: app không dùng mật khẩu khi ghi GATT — để trống.';
+
+  @override
+  String get patrolPointBeaconPasswordRemember =>
+      'Ghi nhớ mật khẩu trên thiết bị này';
+
+  @override
+  String get patrolPointBeaconPasswordContinue => 'Tiếp tục';
+
+  @override
+  String get patrolPointBeaconConfigurePickerTitle => 'Chọn beacon để cấu hình';
+
+  @override
+  String get patrolPointBeaconConfigurePickerHint =>
+      'Chỉ hiện thiết bị quảng bá iBeacon (UUID/Major/Minor trên sóng). Chọn thiết bị rồi bấm Kết nối — giữ điện thoại gần beacon (~1 m).';
+
+  @override
+  String get patrolPointBeaconConfigurePickerManualMacLabel =>
+      'MAC từ BLE Scanner';
+
+  @override
+  String get patrolPointBeaconConfigurePickerManualMacUse => 'Dùng MAC';
+
+  @override
+  String get patrolPointBeaconConfigurePickerScanning =>
+      'Đang quét Bluetooth (BLE)…';
+
+  @override
+  String patrolPointBeaconConfigurePickerScanningCount(int count) {
+    return 'Đang quét… đã thấy $count thiết bị';
+  }
+
+  @override
+  String get patrolPointBeaconConfigurePickerJoywayFailed =>
+      'Không khởi động được quét Joyway. Bật Bluetooth, cấp quyền Vị trí + Bluetooth cho app, build lại app, rồi thử Quét lại.';
+
+  @override
+  String get patrolPointBeaconConfigurePickerEmpty =>
+      'Không thấy iBeacon. Bấm Quét lại và giữ điện thoại gần beacon (~1 m).';
+
+  @override
+  String get patrolPointBeaconConfigurePickerIBeaconSection =>
+      'iBeacon (có UUID trên sóng)';
+
+  @override
+  String get patrolPointBeaconConfigurePickerLikelyJoywaySection =>
+      'Có thể là Joyway (nhấn nút beacon nếu chưa thấy iBeacon)';
+
+  @override
+  String get patrolPointBeaconConfigurePickerLikelyJoywayBadge => 'Joyway?';
+
+  @override
+  String get patrolPointBeaconConfigurePickerOtherDevicesSection =>
+      'Thiết bị Bluetooth khác';
+
+  @override
+  String get patrolPointBeaconConfigurePickerConfigModeSection =>
+      'Chế độ cấu hình (chưa có UUID trên sóng — nhấn nút beacon; có UUID sau khi ghi hoặc khi beacon phát bình thường)';
+
+  @override
+  String get patrolPointBeaconConfigurePickerConfigModeBadge => 'Cấu hình';
+
+  @override
+  String get patrolPointBeaconConfigurePickerRescan => 'Quét lại';
+
+  @override
+  String get patrolPointBeaconConfigurePickerCompanyUuid =>
+      'Trùng UUID beacon công ty';
+
+  @override
+  String get patrolPointBeaconConfigurePickerOtherIBeacon =>
+      'iBeacon UUID khác';
+
+  @override
+  String get patrolPointBeaconConfigurePickerRecommended => 'Nên chọn';
+
+  @override
+  String get patrolPointBeaconConfigurePickerOther => 'Thiết bị khác gần đó';
+
+  @override
+  String patrolPointBeaconConfigurePickerRssi(int rssi) {
+    return 'RSSI: $rssi dBm';
+  }
+
+  @override
+  String patrolPointBeaconConfigurePickerMacLabel(String mac) {
+    return 'MAC: $mac';
+  }
+
+  @override
+  String patrolPointBeaconConfigurePickerUuidLabel(String uuid) {
+    return 'UUID: $uuid';
+  }
+
+  @override
+  String patrolPointBeaconConfigurePickerMajorMinorLabel(
+    String major,
+    String minor,
+  ) {
+    return 'Major/Minor: $major/$minor';
+  }
+
+  @override
+  String patrolPointBeaconConfigurePickerMacRssiLabel(String mac, int rssi) {
+    return 'MAC: $mac · $rssi dBm';
+  }
+
+  @override
+  String patrolPointBeaconConfigurePickerBroadcastNameLabel(String name) {
+    return 'Tên sóng: $name';
+  }
+
+  @override
+  String get patrolPointBeaconConfigurePickerConnectable => 'Kết nối được';
+
+  @override
+  String patrolPointBeaconConfigurePickerProtocolLabel(String protocols) {
+    return 'Giao thức: $protocols';
+  }
+
+  @override
+  String get patrolPointBeaconConfigurePickerProtocolUnknown =>
+      'Giao thức: chưa nhận diện từ sóng (chọn sau khi kết nối)';
+
+  @override
+  String patrolPointBeaconConfigurePickerServicesLabel(String services) {
+    return 'BLE service: $services';
+  }
+
+  @override
+  String patrolPointBeaconConfigurePickerCheckpointProtocol(String protocol) {
+    return 'Giao thức điểm tuần tra: $protocol';
+  }
+
+  @override
+  String get patrolPointBeaconConfigurePickerConnect => 'Kết nối';
+
+  @override
+  String get patrolPointBeaconSettingsTitle => 'Cấu hình beacon';
+
+  @override
+  String get patrolPointBeaconSettingsHint =>
+      'Chỉnh giá trị sẽ ghi lên beacon, rồi nhấn Cập nhật để lập trình thiết bị và lưu điểm tuần tra.';
+
+  @override
+  String get patrolPointBeaconSettingsDeviceSection => 'Thiết bị đã chọn';
+
+  @override
+  String get patrolPointBeaconSettingsDeviceName => 'Tên điểm tuần tra';
+
+  @override
+  String get patrolPointBeaconSettingsNameHint =>
+      'Tên phát Bluetooth (mặc định = tên điểm này)';
+
+  @override
+  String get patrolPointBeaconSettingsNameHintJoyway =>
+      'Tối đa 12 byte UTF-8 (tiếng Việt có dấu được, vd. \"Điểm 1\")';
+
+  @override
+  String get patrolPointBeaconSettingsNameTooLong =>
+      'Tên quá dài so với giới hạn beacon (tối đa 12 byte UTF-8).';
+
+  @override
+  String get patrolPointBeaconSettingsNewPasswordLabel =>
+      'Mật khẩu mới trên beacon';
+
+  @override
+  String get patrolPointBeaconSettingsNewPasswordHint =>
+      'Để trống nếu giữ mật khẩu hiện tại';
+
+  @override
+  String get patrolPointBeaconSettingsNewPasswordJoywayHint =>
+      'Joyway: ghi lên beacon khi nhấn Cập nhật (tối đa 12 ký tự). Để trống nếu không đổi mật khẩu trên thiết bị.';
+
+  @override
+  String get patrolPointBeaconSettingsShowPassword => 'Hiện mật khẩu';
+
+  @override
+  String get patrolPointBeaconSettingsRssiAt1mLabel => 'RSSI tại 1 m (dBm)';
+
+  @override
+  String get patrolPointBeaconSettingsRssiAt1mHint => '−100 đến 0';
+
+  @override
+  String get patrolPointBeaconSettingsTxPowerDbmLabel =>
+      'Công suất phát TX (dBm)';
+
+  @override
+  String get patrolPointBeaconSettingsAdv1Section => 'Quảng bá 1';
+
+  @override
+  String get patrolPointBeaconSettingsAdv1IntervalLabel => 'Chu kỳ Adv 1 (ms)';
+
+  @override
+  String get patrolPointBeaconSettingsAdv1TimeLenLabel =>
+      'Thời lượng Adv 1 (ms)';
+
+  @override
+  String get patrolPointBeaconSettingsAdv1NeverStop => 'Adv 1 không dừng';
+
+  @override
+  String get patrolPointBeaconSettingsAdv2Section => 'Quảng bá 2';
+
+  @override
+  String get patrolPointBeaconSettingsAdv2IntervalLabel => 'Chu kỳ Adv 2 (ms)';
+
+  @override
+  String get patrolPointBeaconSettingsAdv2TimeLenLabel =>
+      'Thời lượng Adv 2 (ms)';
+
+  @override
+  String get patrolPointBeaconSettingsAdv2NeverStop => 'Adv 2 không dừng';
+
+  @override
+  String get patrolPointBeaconSettingsButtonSection => 'Nút bấm';
+
+  @override
+  String get patrolPointBeaconSettingsButtonDelayLabel =>
+      'Độ trễ bật khi nhấn nút (ms)';
+
+  @override
+  String get patrolPointBeaconSettingsAdvertiseButtonEvent =>
+      'Quảng bá sự kiện nút bấm';
+
+  @override
+  String get patrolPointBeaconSettingsInvalidRssiAt1m =>
+      'RSSI tại 1 m phải từ −100 đến 0 dBm.';
+
+  @override
+  String get patrolPointBeaconSettingsInvalidAdvInterval =>
+      'Chu kỳ phải từ 100–10000 ms.';
+
+  @override
+  String get patrolPointBeaconSettingsInvalidAdvTimeLen =>
+      'Nhập thời lượng hợp lệ (ms).';
+
+  @override
+  String get patrolPointBeaconSettingsInvalidButtonDelay =>
+      'Độ trễ nút phải từ 0–25500 ms.';
+
+  @override
+  String get patrolPointBeaconSettingsCurrentSection => 'Hiện trên sóng';
+
+  @override
+  String get patrolPointBeaconSettingsTargetSection => 'Giá trị sẽ ghi';
+
+  @override
+  String get patrolPointBeaconSettingsMajorLabel => 'Major';
+
+  @override
+  String get patrolPointBeaconSettingsMinorLabel => 'Minor';
+
+  @override
+  String get patrolPointBeaconSettingsTxPowerLabel => 'Công suất phát tại 1 m';
+
+  @override
+  String get patrolPointBeaconSettingsTxPowerHint => '-59 (mặc định Apple)';
+
+  @override
+  String get patrolPointBeaconSettingsInvalidTxPower =>
+      'Công suất phát phải từ −128 đến 127 dBm.';
+
+  @override
+  String get patrolPointBeaconSettingsInvalidUuid => 'Nhập UUID beacon hợp lệ.';
+
+  @override
+  String get patrolPointBeaconSettingsInvalidMajor => 'Major phải từ 0–65535.';
+
+  @override
+  String get patrolPointBeaconSettingsInvalidMinor => 'Minor phải từ 0–65535.';
+
+  @override
+  String get patrolPointBeaconSettingsUpdate => 'Cập nhật';
+
+  @override
   String get patrolPointCopyUuidTooltip => 'Sao chép UUID';
 
   @override
@@ -692,6 +1073,10 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get patrolPointUpdateBluetoothTooltip =>
       'Gán mã Bluetooth cho điểm này';
+
+  @override
+  String get patrolPointChangeBluetoothTooltip =>
+      'Cấu hình lại beacon Bluetooth cho điểm này';
 
   @override
   String get patrolPointDialogSave => 'Lưu';

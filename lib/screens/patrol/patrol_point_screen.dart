@@ -10,22 +10,34 @@ import '../../l10n/app_localizations.dart';
 import '../../l10n/patrol_coord_label.dart';
 import '../../models/check_point.dart';
 import '../../services/account_session_store.dart';
+import '../../services/beacon_device_password_store.dart';
 import '../../services/check_point_service.dart';
 import '../../services/patrol_foreground_gps_scan_session.dart';
 import '../../utils/device_location.dart';
 import '../../utils/bluetooth_beacon_reader.dart';
+import '../../utils/beacon_ble_configure_devices.dart';
+import '../../utils/beacon_ble_configure_session.dart';
+import '../../utils/beacon_ble_picker_connect.dart';
+import '../../utils/beacon_ble_session.dart';
+import '../../utils/beacon_name_latin.dart';
+import '../../utils/ibeacon_configurer.dart';
+import '../../utils/joyway_beacon_raw_protocol.dart';
 import '../../utils/nfc_tag_reader.dart';
 import 'patrol_shell.dart';
 
 part 'point/patrol_point_types.dart';
 part 'point/patrol_point_bluetooth_helpers.dart';
-part 'point/patrol_point_bluetooth_dialog.dart';
 part 'point/patrol_point_nfc_dialog.dart';
 part 'point/patrol_point_summary_strip.dart';
 part 'point/patrol_point_error_block.dart';
 part 'point/patrol_point_meta_dialog.dart';
 part 'point/patrol_point_meta_icon.dart';
 part 'point/patrol_point_check_point_card.dart';
+part 'point/patrol_point_beacon_protocol_sheet.dart';
+part 'point/patrol_point_beacon_configure_picker_sheet.dart';
+part 'point/patrol_point_beacon_configure_loading.dart';
+part 'point/patrol_point_beacon_password_dialog.dart';
+part 'point/patrol_point_beacon_settings_sheet.dart';
 
 /// Capture point location — `link`: `patrol-point`.
 /// GET `/api/check-points/me/site`, PUT `/api/check-points` to assign lat/lng/altitude.
@@ -172,7 +184,13 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
           gpsAltitude: server.gpsAltitude ?? payload.gpsAltitude,
           baroAltitude: server.baroAltitude ?? payload.baroAltitude,
           nfc: server.nfc ?? payload.nfc,
-          bluetooth: server.bluetooth ?? payload.bluetooth,
+          uuid: server.uuid ?? payload.uuid,
+          remoteId: server.remoteId ?? payload.remoteId,
+          major: server.major ?? payload.major,
+          minor: server.minor ?? payload.minor,
+          devicePassword: server.devicePassword ?? payload.devicePassword,
+          beaconProtocol: server.beaconProtocol ?? payload.beaconProtocol,
+          rssi: server.rssi ?? payload.rssi,
         );
       }
       final site = _site;
@@ -196,17 +214,6 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
       SnackBar(content: Text(_messageForUpdateFailure(r.failure!, l10nFail))),
     );
     return false;
-  }
-
-  Future<BluetoothReadResult?> _promptBluetoothIdentifier({String? initial}) {
-    final messenger = ScaffoldMessenger.of(context);
-    return showDialog<BluetoothReadResult>(
-      context: context,
-      builder: (ctx) => _BluetoothIdentifierInputDialog(
-        initial: initial,
-        messenger: messenger,
-      ),
-    );
   }
 
   Future<String?> _promptNfcIdentifier({String? initial}) {
@@ -246,24 +253,222 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
 
   Future<void> _applyBluetoothToPoint(CheckPoint point) async {
     final l10n = AppLocalizations.of(context)!;
-    final scanResult = await _promptBluetoothIdentifier(
-      initial: point.bluetooth,
-    );
-    if (scanResult == null || !mounted) return;
-    if (!scanResult.ok) {
+    await BeaconBleConfigureSession.clear();
+    await beaconBleCancelWarmConnect();
+    final beaconUuid = AccountSessionStore.instance.companyBeaconUuid;
+    if (beaconUuid == null || beaconUuid.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.patrolPointIdentifierEmpty)),
+        SnackBar(content: Text(l10n.patrolPointCompanyBeaconUuidMissing)),
       );
+      return;
+    }
+
+    if (!isIBeaconConfigureSupported) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolPointBluetoothUnavailable)),
+      );
+      return;
+    }
+
+    final selected = await _showPatrolBeaconConfigurePickerSheet(context);
+    if (!mounted || selected == null) return;
+
+    final checkpointProtocol = _checkpointBeaconProtocol(point);
+    final picked = await _pickBeaconConfigureProtocol(
+      context,
+      initial:
+          checkpointProtocol ?? BeaconConfigureProtocol.defaultProtocol,
+      checkpointProtocol: checkpointProtocol,
+    );
+    if (!mounted || picked == null) {
+      await BeaconBleConfigureSession.clear();
+      await beaconBleCancelWarmConnect(selected.remoteId);
+      return;
+    }
+    final protocol = picked;
+
+    final storedDevicePassword = await BeaconDevicePasswordStore.read();
+    final passwordLocked = storedDevicePassword?.trim().isNotEmpty == true;
+    var loginPwd = '';
+    while (mounted) {
+      await beaconBleCancelWarmConnect(selected.remoteId);
+      final loginPassword = await _promptBeaconLoginPasswordAfterConnect(
+        context,
+        protocol: protocol,
+      );
+      if (!mounted || loginPassword == null) {
+        await BeaconBleConfigureSession.clear();
+        await beaconBleCancelWarmConnect(selected.remoteId);
+        return;
+      }
+      loginPwd = loginPassword;
+
+      final loginFailure = await _withPatrolBeaconConfigureLoading(
+        context,
+        title: l10n.patrolPointBeaconLoginVerifying,
+        hint: l10n.patrolPointBeaconLoginVerifyingHint,
+        task: () => validateBeaconDeviceLogin(
+          protocol: protocol,
+          targetRemoteId: selected.remoteId,
+          targetRssi: selected.rssi,
+          devicePassword: protocol == BeaconConfigureProtocol.joyway
+              ? loginPwd
+              : (loginPwd.isEmpty ? null : loginPwd),
+        ),
+      );
+
+      if (!mounted) return;
+      if (loginFailure == null) break;
+
+      final msg = _iBeaconConfigureFailureMessage(
+        l10n,
+        loginFailure,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      if (loginFailure != IBeaconConfigureFailure.wrongPassword) return;
+    }
+
+    if (!mounted) return;
+
+    final reconfigure = point.uuid != null && point.uuid!.trim().isNotEmpty;
+    final form = await _showPatrolBeaconSettingsSheet(
+      context,
+      device: selected,
+      protocol: protocol,
+      targetUuid: reconfigure ? point.uuid!.trim() : beaconUuid,
+      targetMajor: reconfigure ? (point.major ?? point.siteId) : point.siteId,
+      targetMinor:
+          reconfigure ? (point.minor ?? point.sequenceOrder) : point.sequenceOrder,
+      pointName: point.name,
+      initialNewBeaconPassword:
+          passwordLocked ? storedDevicePassword : loginPwd,
+      lockNewBeaconPassword: passwordLocked,
+    );
+    if (!mounted || form == null) {
+      await BeaconBleConfigureSession.clear();
       return;
     }
 
     setState(
       () => _updatingFields.add((point.id, _PatrolPointUpdatingKind.bluetooth)),
     );
+
+    late IBeaconConfigureResult configResult;
+    while (mounted) {
+      configResult = await _withPatrolBeaconConfigureLoading(
+        context,
+        task: () => configureNearestIBeacon(
+          IBeaconSettings(
+            uuid: form.uuid,
+            major: form.major,
+            minor: form.minor,
+            txPowerAt1m: form.txPowerAt1m,
+            advertisingName: form.name.isEmpty ? null : form.name,
+          ),
+          protocol: protocol,
+          devicePassword: protocol == BeaconConfigureProtocol.joyway
+              ? loginPwd
+              : (loginPwd.isEmpty ? null : loginPwd),
+          newBeaconPassword: form.newBeaconPassword.isEmpty
+              ? null
+              : form.newBeaconPassword,
+          joywayExtended: form.joywayExtended,
+          targetRemoteId: selected.remoteId,
+          targetRssi: selected.rssi,
+        ),
+      );
+
+      if (!mounted) return;
+
+      if (configResult.ok) break;
+
+      if (configResult.failure != IBeaconConfigureFailure.wrongPassword) {
+        setState(
+          () => _updatingFields.remove(
+            (point.id, _PatrolPointUpdatingKind.bluetooth),
+          ),
+        );
+        final msg = configResult.failure != null
+            ? _iBeaconConfigureFailureMessage(l10n, configResult.failure!)
+            : l10n.patrolPointIBeaconConfigureFailed;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolPointIBeaconWrongPassword)),
+      );
+      await BeaconBleConfigureSession.clear();
+
+      while (mounted) {
+        final loginPassword = await _promptBeaconLoginPasswordAfterConnect(
+          context,
+          protocol: protocol,
+        );
+        if (!mounted || loginPassword == null) {
+          setState(
+            () => _updatingFields.remove(
+              (point.id, _PatrolPointUpdatingKind.bluetooth),
+            ),
+          );
+          await BeaconBleConfigureSession.clear();
+          return;
+        }
+        loginPwd = loginPassword;
+
+        final loginFailure = await _withPatrolBeaconConfigureLoading(
+          context,
+          title: l10n.patrolPointBeaconLoginVerifying,
+          hint: l10n.patrolPointBeaconLoginVerifyingHint,
+          task: () => validateBeaconDeviceLogin(
+            protocol: protocol,
+            targetRemoteId: selected.remoteId,
+            targetRssi: selected.rssi,
+            devicePassword: protocol == BeaconConfigureProtocol.joyway
+                ? loginPwd
+                : (loginPwd.isEmpty ? null : loginPwd),
+          ),
+        );
+
+        if (!mounted) return;
+        if (loginFailure == null) break;
+
+        final loginMsg = _iBeaconConfigureFailureMessage(
+          l10n,
+          loginFailure,
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(loginMsg)),
+        );
+        if (loginFailure != IBeaconConfigureFailure.wrongPassword) {
+          setState(
+            () => _updatingFields.remove(
+              (point.id, _PatrolPointUpdatingKind.bluetooth),
+            ),
+          );
+          return;
+        }
+      }
+    }
+
+    if (!mounted) return;
+
+    final configuredRemote = configResult.remoteId?.trim();
     final ok = await _persistCheckPointUpdate(
       point.copyWith(
-        bluetooth: scanResult.identifier!,
-        rssi: scanResult.beacon?.rssi.toDouble(),
+        uuid: form.uuid,
+        major: form.major,
+        minor: form.minor,
+        remoteId: configuredRemote != null && configuredRemote.isNotEmpty
+            ? configuredRemote
+            : point.remoteId,
+        devicePassword: form.newBeaconPassword.isNotEmpty
+            ? form.newBeaconPassword
+            : loginPwd,
+        beaconProtocol: protocol.storageValue,
+        rssi: configResult.beacon?.rssi.toDouble(),
       ),
       _PatrolPointUpdatingKind.bluetooth,
     );

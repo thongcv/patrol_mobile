@@ -88,20 +88,42 @@ class BluetoothBeaconDetails {
   }
 }
 
-class BluetoothReadResult {
-  const BluetoothReadResult._({this.identifier, this.beacon, this.failure});
+/// `true` requests stopping the active BLE scan session.
+typedef BluetoothBeaconOnHit = bool Function(BluetoothReadResult result);
 
-  const BluetoothReadResult.success(
-    String identifier, {
+class BluetoothReadResult {
+  const BluetoothReadResult._({
+    this.uuid,
+    this.remoteId,
+    this.beacon,
+    this.failure,
+  });
+
+  const BluetoothReadResult.success({
+    String? uuid,
+    String? remoteId,
     BluetoothBeaconDetails? beacon,
-  }) : this._(identifier: identifier, beacon: beacon);
+  }) : this._(uuid: uuid, remoteId: remoteId, beacon: beacon);
 
   const BluetoothReadResult.failure(BluetoothReadFailure reason)
     : this._(failure: reason);
 
-  final String? identifier;
+  /// iBeacon proximity UUID from the advertisement.
+  final String? uuid;
+
+  /// BLE adapter remote id (typically MAC).
+  final String? remoteId;
+
   final BluetoothBeaconDetails? beacon;
   final BluetoothReadFailure? failure;
 
-  bool get ok => identifier != null && identifier!.isNotEmpty;
+  /// Primary id for display / legacy callers (UUID preferred).
+  String? get identifier => uuid ?? remoteId;
+
+  bool get ok {
+    final u = uuid?.trim();
+    if (u != null && u.isNotEmpty) return true;
+    final r = remoteId?.trim();
+    return r != null && r.isNotEmpty;
+  }
 }
