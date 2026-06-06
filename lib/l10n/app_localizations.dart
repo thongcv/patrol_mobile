@@ -1122,6 +1122,36 @@ abstract class AppLocalizations {
   /// **'on target'**
   String get patrolRoundQrMoveOnTarget;
 
+  /// No description provided for @patrolProximityTtsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Distance to checkpoint {distance} meters. {moves}'**
+  String patrolProximityTtsHint(String distance, String moves);
+
+  /// No description provided for @patrolProximityTtsNearCheckpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'You are near the checkpoint, {distance} meters away'**
+  String patrolProximityTtsNearCheckpoint(String distance);
+
+  /// No description provided for @patrolProximityTtsMove.
+  ///
+  /// In en, this message translates to:
+  /// **'move {direction} {distance} meters'**
+  String patrolProximityTtsMove(String direction, String distance);
+
+  /// No description provided for @patrolProximityTtsMoveVertical.
+  ///
+  /// In en, this message translates to:
+  /// **'move {direction} {distance} meters'**
+  String patrolProximityTtsMoveVertical(String direction, String distance);
+
+  /// No description provided for @patrolProximityTtsMoveSeparator.
+  ///
+  /// In en, this message translates to:
+  /// **', '**
+  String get patrolProximityTtsMoveSeparator;
+
   /// No description provided for @patrolRoundSubtitleActive.
   ///
   /// In en, this message translates to:

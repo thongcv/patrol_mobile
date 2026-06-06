@@ -55,6 +55,7 @@ final class PatrolBackgroundRunner {
     PatrolFgsIsolateBridge.attachBackgroundService(_service);
 
     PatrolFgsIsolateBridge.setRelayCheckpointSuccess(_relayCheckpointSuccess);
+    PatrolFgsIsolateBridge.setRelayProximityNavigation(_relayProximityNavigation);
 
     _registerCommands();
 
@@ -262,6 +263,19 @@ final class PatrolBackgroundRunner {
         PatrolFgsInvokeEvents.checkpointSuccess,
 
         <String, dynamic>{'checkpointName': name},
+      );
+    } on MissingPluginException {
+      //
+    } on PlatformException {
+      //
+    }
+  }
+
+  void _relayProximityNavigation(String message) {
+    try {
+      _service.invoke(
+        PatrolFgsInvokeEvents.proximityNavigationHint,
+        <String, dynamic>{'message': message},
       );
     } on MissingPluginException {
       //

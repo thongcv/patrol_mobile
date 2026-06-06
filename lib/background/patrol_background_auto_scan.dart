@@ -8,6 +8,7 @@ import '../services/patrol_tracking_config_store.dart';
 import '../utils/check_point_proximity.dart';
 import '../utils/device_location.dart';
 import '../utils/patrol_checkpoint_success_feedback.dart';
+import '../utils/patrol_proximity_navigation_speech.dart';
 import '../utils/super_gps_service.dart';
 import 'patrol_background_gps_hub.dart';
 import 'patrol_background_isolate_flags.dart';
@@ -176,6 +177,7 @@ class PatrolBackgroundAutoScan {
   }
 
   Future<void> _detachScan() async {
+    PatrolProximityNavigationTts.reset();
     _autoScanActive = false;
     _gpsHub.autoScanHandler = null;
     _scanNeedsBaro = false;
@@ -286,13 +288,20 @@ class PatrolBackgroundAutoScan {
 
     final validateBaro = needsBaroValidation && barometerListening;
     final matchOrder = await PatrolTrackingConfigStore.checkPointMatchOrder();
-    final matched = scanCheckPointsProximity(
+    final scan = scanCheckPointsProximity(
       pending,
       sample,
       validateBaro,
       matchOrder: matchOrder,
-    ).matched;
-    if (matched == null) return;
+    );
+    final matched = scan.matched;
+    if (matched == null) {
+      final snapshot = scan.feedback?.snapshot;
+      if (snapshot != null) {
+        unawaited(PatrolProximityNavigationTts.maybeSpeak(snapshot: snapshot));
+      }
+      return;
+    }
 
     if (!_inFlightCheckpointIds.add(matched.id)) return;
 

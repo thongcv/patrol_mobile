@@ -52,6 +52,9 @@ abstract final class PatrolBackgroundService {
   static void relayCheckpointSuccessToUi(String checkpointName) =>
       PatrolFgsIsolateBridge.relayCheckpointSuccessToUi(checkpointName);
 
+  static void relayProximityNavigationToUi(String message) =>
+      PatrolFgsIsolateBridge.relayProximityNavigationToUi(message);
+
   /// Local mock GPS in FGS — relays to UI via [mockLocationAlert] (same as STOMP).
   static void notifyMockLocationFromFgs() =>
       PatrolFgsIsolateBridge.notifyMockLocationFromFgs();

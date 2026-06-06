@@ -282,6 +282,34 @@
   "patrolRoundQrMoveUp": "up",
   "patrolRoundQrMoveDown": "down",
   "patrolRoundQrMoveOnTarget": "on target",
+  "patrolProximityTtsHint": "Distance to checkpoint {distance} meters. {moves}",
+  "@patrolProximityTtsHint": {
+    "placeholders": {
+      "distance": { "type": "String" },
+      "moves": { "type": "String" }
+    }
+  },
+  "patrolProximityTtsNearCheckpoint": "You are near the checkpoint, {distance} meters away",
+  "@patrolProximityTtsNearCheckpoint": {
+    "placeholders": {
+      "distance": { "type": "String" }
+    }
+  },
+  "patrolProximityTtsMove": "move {direction} {distance} meters",
+  "@patrolProximityTtsMove": {
+    "placeholders": {
+      "direction": { "type": "String" },
+      "distance": { "type": "String" }
+    }
+  },
+  "patrolProximityTtsMoveVertical": "move {direction} {distance} meters",
+  "@patrolProximityTtsMoveVertical": {
+    "placeholders": {
+      "direction": { "type": "String" },
+      "distance": { "type": "String" }
+    }
+  },
+  "patrolProximityTtsMoveSeparator": ", ",
   "patrolRoundSubtitleActive": "{scheduleName} · {statusLabel}",
   "@patrolRoundSubtitleActive": {
     "placeholders": {

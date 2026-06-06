@@ -19,6 +19,7 @@ abstract final class PatrolCheckpointTts {
   static Future<void>? _speakChain;
   static const Duration _dedupeWindow = Duration(seconds: 8);
   static const String _nextRoundDedupeKey = '__next_round_prompt__';
+  static const String _proximityNavDedupePrefix = '__proximity_nav__';
 
   /// Speaks next-round auto-scan prompt (deduped across isolates).
   static Future<bool> speakNextRoundPrompt({
@@ -35,6 +36,29 @@ abstract final class PatrolCheckpointTts {
       started = await _speak(message: text, locale: resolvedLocale);
       if (!started) {
         await _releaseSpeakSlot(_nextRoundDedupeKey);
+      }
+    });
+    _speakChain = future;
+    await future;
+    return started;
+  }
+
+  /// Speaks proximity navigation hint (deduped by message text).
+  static Future<bool> speakProximityNavigation({
+    required String message,
+    Locale? locale,
+  }) async {
+    final text = message.trim();
+    if (text.isEmpty) return false;
+    final slot = '$_proximityNavDedupePrefix:$text';
+    if (!await _tryAcquireSpeakSlot(slot)) return false;
+
+    final resolvedLocale = locale ?? await AppLocaleStore.readLocale();
+    var started = false;
+    final future = (_speakChain ?? Future<void>.value()).then((_) async {
+      started = await _speak(message: text, locale: resolvedLocale);
+      if (!started) {
+        await _releaseSpeakSlot(slot);
       }
     });
     _speakChain = future;

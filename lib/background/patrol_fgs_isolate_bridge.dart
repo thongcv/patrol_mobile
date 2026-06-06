@@ -12,6 +12,7 @@ abstract final class PatrolFgsIsolateBridge {
 
   static ServiceInstance? _backgroundServiceInstance;
   static void Function(String checkpointName)? _relayCheckpointSuccessToUi;
+  static void Function(String message)? _relayProximityNavigationToUi;
 
   /// True while the background-service isolate is running patrol tracking.
   static bool get isBackgroundIsolate => PatrolBackgroundIsolateFlags.active;
@@ -28,6 +29,7 @@ abstract final class PatrolFgsIsolateBridge {
     _backgroundServiceInstance = null;
     PatrolBackgroundIsolateFlags.active = false;
     _relayCheckpointSuccessToUi = null;
+    _relayProximityNavigationToUi = null;
   }
 
   /// Called from [PatrolBackgroundRunner] when a checkpoint is auto-scanned in FGS.
@@ -35,8 +37,15 @@ abstract final class PatrolFgsIsolateBridge {
     _relayCheckpointSuccessToUi = handler;
   }
 
+  static void setRelayProximityNavigation(void Function(String message)? handler) {
+    _relayProximityNavigationToUi = handler;
+  }
+
   static void relayCheckpointSuccessToUi(String checkpointName) =>
       _relayCheckpointSuccessToUi?.call(checkpointName);
+
+  static void relayProximityNavigationToUi(String message) =>
+      _relayProximityNavigationToUi?.call(message);
 
   /// Local mock GPS in FGS — relays to UI via [mockLocationAlert] (same as STOMP).
   static void notifyMockLocationFromFgs() {

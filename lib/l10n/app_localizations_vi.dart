@@ -577,6 +577,29 @@ class AppLocalizationsVi extends AppLocalizations {
   String get patrolRoundQrMoveOnTarget => 'đúng mốc';
 
   @override
+  String patrolProximityTtsHint(String distance, String moves) {
+    return 'Cách mốc $distance mét. $moves';
+  }
+
+  @override
+  String patrolProximityTtsNearCheckpoint(String distance) {
+    return 'Bạn đã ở gần mốc, cách $distance mét';
+  }
+
+  @override
+  String patrolProximityTtsMove(String direction, String distance) {
+    return 'đi $direction $distance mét';
+  }
+
+  @override
+  String patrolProximityTtsMoveVertical(String direction, String distance) {
+    return 'đi $direction $distance mét';
+  }
+
+  @override
+  String get patrolProximityTtsMoveSeparator => ', ';
+
+  @override
   String patrolRoundSubtitleActive(String scheduleName, String statusLabel) {
     return '$scheduleName · $statusLabel';
   }

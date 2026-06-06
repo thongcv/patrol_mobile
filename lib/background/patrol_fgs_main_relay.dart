@@ -73,6 +73,18 @@ abstract final class PatrolFgsMainRelay {
     }
 
     safeRelay(
+      PatrolFgsInvokeEvents.proximityNavigationHint,
+      (payload) {
+        final map = payload is Map
+            ? Map<Object?, Object?>.from(payload as Map)
+            : null;
+        if (map == null) return;
+        final message = (map['message'] as String?)?.trim() ?? '';
+        if (message.isEmpty) return;
+        unawaited(_speakProximityNavigationOnMainIsolate(message));
+      },
+    );
+    safeRelay(
       PatrolFgsInvokeEvents.activeRoundChanged,
       (payload) {
         final map = payload is Map
@@ -122,6 +134,14 @@ abstract final class PatrolFgsMainRelay {
     final locale = await AppLocaleStore.readLocale();
     await PatrolCheckpointTts.speakCheckpoint(
       checkpointName: checkpointName,
+      locale: locale,
+    );
+  }
+
+  static Future<void> _speakProximityNavigationOnMainIsolate(String message) async {
+    final locale = await AppLocaleStore.readLocale();
+    await PatrolCheckpointTts.speakProximityNavigation(
+      message: message,
       locale: locale,
     );
   }

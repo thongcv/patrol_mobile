@@ -14,6 +14,7 @@ abstract final class PatrolFgsInvokeEvents {
   static const tokenRefreshed = 'tokenRefreshed';
 
   static const checkpointSuccess = 'checkpointSuccess';
+  static const proximityNavigationHint = 'proximityNavigationHint';
   static const activeRoundChanged = 'activeRoundChanged';
   static const trackingConfigChanged = 'trackingConfigChanged';
   static const mockLocationAlert = 'mockLocationAlert';

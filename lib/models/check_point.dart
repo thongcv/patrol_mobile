@@ -23,10 +23,6 @@ class CheckPoint {
     this.devicePassword,
     this.beaconProtocol,
     this.description,
-    this.createdBy,
-    this.updatedBy,
-    this.createdDate,
-    this.updatedDate,
     this.verified,
   });
 
@@ -54,10 +50,6 @@ class CheckPoint {
   /// Beacon configure protocol (`hm10_ffe0`, `joyway`, …) from server.
   final String? beaconProtocol;
   final String? description;
-  final String? createdBy;
-  final String? updatedBy;
-  final String? createdDate;
-  final String? updatedDate;
   final bool? verified;
 
   bool get hasCoordinates {
@@ -137,12 +129,6 @@ class CheckPoint {
       devicePassword: pickOptStr(devicePassword, site.devicePassword),
       beaconProtocol: pickOptStr(beaconProtocol, site.beaconProtocol),
       description: pickOptStr(description, site.description),
-      createdBy: preferActive ? (createdBy ?? site.createdBy) : (site.createdBy ?? createdBy),
-      updatedBy: preferActive ? (updatedBy ?? site.updatedBy) : (site.updatedBy ?? updatedBy),
-      createdDate:
-          preferActive ? (createdDate ?? site.createdDate) : (site.createdDate ?? createdDate),
-      updatedDate:
-          preferActive ? (updatedDate ?? site.updatedDate) : (site.updatedDate ?? updatedDate),
       verified: verified,
     );
   }
@@ -171,10 +157,6 @@ class CheckPoint {
     String? devicePassword,
     String? beaconProtocol,
     String? description,
-    String? createdBy,
-    String? updatedBy,
-    String? createdDate,
-    String? updatedDate,
     bool? verified,
   }) {
     return CheckPoint(
@@ -201,10 +183,6 @@ class CheckPoint {
       devicePassword: devicePassword ?? this.devicePassword,
       beaconProtocol: beaconProtocol ?? this.beaconProtocol,
       description: description ?? this.description,
-      createdBy: createdBy ?? this.createdBy,
-      updatedBy: updatedBy ?? this.updatedBy,
-      createdDate: createdDate ?? this.createdDate,
-      updatedDate: updatedDate ?? this.updatedDate,
       verified: verified ?? this.verified,
     );
   }
@@ -234,10 +212,6 @@ class CheckPoint {
       'devicePassword': devicePassword,
       'beaconProtocol': beaconProtocol,
       'description': description,
-      'createdBy': createdBy,
-      'updatedBy': updatedBy,
-      'createdDate': createdDate,
-      'updatedDate': updatedDate,
       if (verified != null) 'verified': verified,
     };
   }
@@ -270,10 +244,6 @@ class CheckPoint {
       beaconProtocol: json['beaconProtocol'] as String? ??
           json['beacon_protocol'] as String?,
       description: json['description'] as String?,
-      createdBy: json['createdBy'] as String?,
-      updatedBy: json['updatedBy'] as String?,
-      createdDate: json['createdDate'] as String?,
-      updatedDate: json['updatedDate'] as String?,
       verified: _readBoolFromJson(json['verified']),
     );
   }

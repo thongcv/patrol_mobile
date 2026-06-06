@@ -135,6 +135,99 @@ class CheckPointProximitySnapshot {
   final bool usesBaroAltitude;
 }
 
+/// Within this distance (m), north/east/altitude hints read as on-target.
+const double kCheckPointOnTargetThresholdM = 0.05;
+
+/// Move direction toward checkpoint (UI maps to localized labels).
+enum CheckPointMoveDirection {
+  onTarget,
+  north,
+  south,
+  east,
+  west,
+  up,
+  down,
+}
+
+CheckPointMoveDirection checkPointNorthSouthMove(double signedNorthM) {
+  if (signedNorthM.abs() < kCheckPointOnTargetThresholdM) {
+    return CheckPointMoveDirection.onTarget;
+  }
+  return signedNorthM > 0
+      ? CheckPointMoveDirection.north
+      : CheckPointMoveDirection.south;
+}
+
+CheckPointMoveDirection checkPointEastWestMove(double signedEastM) {
+  if (signedEastM.abs() < kCheckPointOnTargetThresholdM) {
+    return CheckPointMoveDirection.onTarget;
+  }
+  return signedEastM > 0
+      ? CheckPointMoveDirection.east
+      : CheckPointMoveDirection.west;
+}
+
+CheckPointMoveDirection checkPointAltitudeMove(double signedAltDeltaM) {
+  if (signedAltDeltaM.abs() < kCheckPointOnTargetThresholdM) {
+    return CheckPointMoveDirection.onTarget;
+  }
+  return signedAltDeltaM > 0
+      ? CheckPointMoveDirection.down
+      : CheckPointMoveDirection.up;
+}
+
+/// Slant range when available, otherwise geodesic horizontal distance.
+double checkPointDisplayDistanceM(CheckPointProximitySnapshot snapshot) {
+  final slant = snapshot.slantRangeM;
+  if (slant != null && slant.isFinite) return slant;
+  return snapshot.horizontalM;
+}
+
+/// Axis deltas and move directions derived from [CheckPointProximitySnapshot].
+class CheckPointProximityNavigationHints {
+  const CheckPointProximityNavigationHints({
+    required this.northAbsDeltaM,
+    required this.northMove,
+    required this.eastAbsDeltaM,
+    required this.eastMove,
+    required this.horizontalDistanceM,
+    this.altitudeAbsDeltaM,
+    this.altitudeMove,
+  });
+
+  final double northAbsDeltaM;
+  final CheckPointMoveDirection northMove;
+  final double eastAbsDeltaM;
+  final CheckPointMoveDirection eastMove;
+  final double horizontalDistanceM;
+  final double? altitudeAbsDeltaM;
+  final CheckPointMoveDirection? altitudeMove;
+
+  factory CheckPointProximityNavigationHints.fromSnapshot(
+    CheckPointProximitySnapshot snapshot,
+  ) {
+    final altDelta = snapshot.signedAltitudeDeltaM;
+    CheckPointMoveDirection? altitudeMove;
+    double? altitudeAbsDeltaM;
+    if (snapshot.checkpointAltitude != null &&
+        altDelta != null &&
+        altDelta.isFinite) {
+      altitudeAbsDeltaM = altDelta.abs();
+      altitudeMove = checkPointAltitudeMove(altDelta);
+    }
+
+    return CheckPointProximityNavigationHints(
+      northAbsDeltaM: snapshot.signedNorthToCheckpointM.abs(),
+      northMove: checkPointNorthSouthMove(snapshot.signedNorthToCheckpointM),
+      eastAbsDeltaM: snapshot.signedEastToCheckpointM.abs(),
+      eastMove: checkPointEastWestMove(snapshot.signedEastToCheckpointM),
+      horizontalDistanceM: checkPointDisplayDistanceM(snapshot),
+      altitudeAbsDeltaM: altitudeAbsDeltaM,
+      altitudeMove: altitudeMove,
+    );
+  }
+}
+
 class CheckPointProximityEvaluation {
   const CheckPointProximityEvaluation({required this.result, this.snapshot});
 
@@ -354,7 +447,7 @@ CheckPointProximitySnapshot _buildSnapshot({
 
   double signedNorthToCheckpointM;
   double signedEastToCheckpointM;
-  if (horizontalM < 0.05) {
+  if (horizontalM < kCheckPointOnTargetThresholdM) {
     signedNorthToCheckpointM = 0;
     signedEastToCheckpointM = 0;
   } else {

@@ -581,6 +581,29 @@ class AppLocalizationsEn extends AppLocalizations {
   String get patrolRoundQrMoveOnTarget => 'on target';
 
   @override
+  String patrolProximityTtsHint(String distance, String moves) {
+    return 'Distance to checkpoint $distance meters. $moves';
+  }
+
+  @override
+  String patrolProximityTtsNearCheckpoint(String distance) {
+    return 'You are near the checkpoint, $distance meters away';
+  }
+
+  @override
+  String patrolProximityTtsMove(String direction, String distance) {
+    return 'move $direction $distance meters';
+  }
+
+  @override
+  String patrolProximityTtsMoveVertical(String direction, String distance) {
+    return 'move $direction $distance meters';
+  }
+
+  @override
+  String get patrolProximityTtsMoveSeparator => ', ';
+
+  @override
   String patrolRoundSubtitleActive(String scheduleName, String statusLabel) {
     return '$scheduleName · $statusLabel';
   }

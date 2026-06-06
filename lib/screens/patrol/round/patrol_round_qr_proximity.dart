@@ -57,33 +57,21 @@ _QrScanProximityStatus _qrScanProximityStatus({
 
 String _qrFmtCoord(double value) => value.toStringAsFixed(6);
 
-String _qrFmtDeltaM(double signedM) => signedM.abs().toStringAsFixed(1);
+String _qrFmtDeltaM(double absM) => absM.toStringAsFixed(1);
 
-String _qrFmtDistanceToCheckpointM(CheckPointProximitySnapshot s) {
-  final slant = s.slantRangeM;
-  final distanceM = (slant != null && slant.isFinite) ? slant : s.horizontalM;
-  return distanceM.toStringAsFixed(1);
-}
-
-String _qrNorthMoveDirection(AppLocalizations l10n, double signedNorthM) {
-  if (signedNorthM.abs() < 0.05) return l10n.patrolRoundQrMoveOnTarget;
-  return signedNorthM > 0
-      ? l10n.patrolRoundQrMoveNorth
-      : l10n.patrolRoundQrMoveSouth;
-}
-
-String _qrEastMoveDirection(AppLocalizations l10n, double signedEastM) {
-  if (signedEastM.abs() < 0.05) return l10n.patrolRoundQrMoveOnTarget;
-  return signedEastM > 0
-      ? l10n.patrolRoundQrMoveEast
-      : l10n.patrolRoundQrMoveWest;
-}
-
-String _qrAltMoveDirection(AppLocalizations l10n, double signedAltDeltaM) {
-  if (signedAltDeltaM.abs() < 0.05) return l10n.patrolRoundQrMoveOnTarget;
-  return signedAltDeltaM > 0
-      ? l10n.patrolRoundQrMoveDown
-      : l10n.patrolRoundQrMoveUp;
+String _qrL10nMoveDirection(
+  AppLocalizations l10n,
+  CheckPointMoveDirection direction,
+) {
+  return switch (direction) {
+    CheckPointMoveDirection.onTarget => l10n.patrolRoundQrMoveOnTarget,
+    CheckPointMoveDirection.north => l10n.patrolRoundQrMoveNorth,
+    CheckPointMoveDirection.south => l10n.patrolRoundQrMoveSouth,
+    CheckPointMoveDirection.east => l10n.patrolRoundQrMoveEast,
+    CheckPointMoveDirection.west => l10n.patrolRoundQrMoveWest,
+    CheckPointMoveDirection.up => l10n.patrolRoundQrMoveUp,
+    CheckPointMoveDirection.down => l10n.patrolRoundQrMoveDown,
+  };
 }
 
 class _QrProximityDetailPanel extends StatelessWidget {
@@ -100,6 +88,7 @@ class _QrProximityDetailPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = snapshot;
+    final nav = CheckPointProximityNavigationHints.fromSnapshot(s);
     final altKind =
         s.usesBaroAltitude ? l10n.patrolRoundQrAltKindBaro : l10n.patrolRoundQrAltKindGps;
     final radius = s.allowedRadiusM.toStringAsFixed(0);
@@ -161,19 +150,20 @@ class _QrProximityDetailPanel extends StatelessWidget {
         altitude: s.deviceAltitude,
       ),
       l10n.patrolRoundQrDeltaNorth(
-        _qrFmtDeltaM(s.signedNorthToCheckpointM),
-        _qrNorthMoveDirection(l10n, s.signedNorthToCheckpointM),
+        _qrFmtDeltaM(nav.northAbsDeltaM),
+        _qrL10nMoveDirection(l10n, nav.northMove),
       ),
       l10n.patrolRoundQrDeltaEast(
-        _qrFmtDeltaM(s.signedEastToCheckpointM),
-        _qrEastMoveDirection(l10n, s.signedEastToCheckpointM),
+        _qrFmtDeltaM(nav.eastAbsDeltaM),
+        _qrL10nMoveDirection(l10n, nav.eastMove),
       ),
       l10n.patrolRoundQrDeltaHorizontal(
-        _qrFmtDistanceToCheckpointM(s),
+        _qrFmtDeltaM(nav.horizontalDistanceM),
         radius,
       ),
     ];
 
+    /*
     final horizontalAcc = s.horizontalAccuracyM;
     if (horizontalAcc != null) {
       lines.add(
@@ -187,13 +177,12 @@ class _QrProximityDetailPanel extends StatelessWidget {
         l10n.patrolRoundQrGpsAltitudeAccuracy(gpsAltAcc.toStringAsFixed(0)),
       );
     }
-
-    final altDelta = s.signedAltitudeDeltaM;
-    if (s.checkpointAltitude != null &&
-        altDelta != null &&
-        altDelta.isFinite) {
+    */
+    final altDeltaM = nav.altitudeAbsDeltaM;
+    final altMove = nav.altitudeMove;
+    if (altDeltaM != null && altMove != null) {
       lines.add(
-        '${l10n.patrolRoundQrDeltaAltitude(_qrFmtDeltaM(altDelta), radius)} · ${_qrAltMoveDirection(l10n, altDelta)}',
+        '${l10n.patrolRoundQrDeltaAltitude(_qrFmtDeltaM(altDeltaM), radius)} · ${_qrL10nMoveDirection(l10n, altMove)}',
       );
     }
 

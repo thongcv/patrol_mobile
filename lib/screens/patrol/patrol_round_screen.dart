@@ -30,6 +30,7 @@ import '../../utils/check_point_proximity.dart';
 import '../../utils/device_location.dart';
 import '../../utils/map_pin_image.dart';
 import '../../utils/patrol_map_overlays.dart';
+import '../../utils/patrol_proximity_navigation_speech.dart';
 import '../../utils/nfc_tag_reader.dart';
 import '../../widgets/patrol_google_map.dart';
 import '../../utils/patrol_datetime_format.dart';
@@ -150,7 +151,9 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       if (round != null) {
         unawaited(() async {
           final merged =
-              await PatrolActiveRoundCache.mergeBackgroundVerified(round);
+              await PatrolActiveRoundCache.mergeBackgroundVerifiedIfRunning(
+            round,
+          );
           final awaiting =
               await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm();
           if (!mounted) return;
@@ -206,13 +209,18 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
     final r = await PatrolRoundService.instance.fetchMyActivePatrolRound();
     ActivePatrolRound? active = r.ok ? r.data : null;
-    if (active != null) {
+    final bgAutoScanRunning =
+        await PatrolActiveRoundCache.isBackgroundAutoScanRunning();
+    if (active != null && bgAutoScanRunning) {
       active = await PatrolActiveRoundCache.mergeBackgroundVerified(active);
     }
 
     if (!mounted) return;
     if (r.ok) {
-      await PatrolActiveRoundCache.save(active);
+      await PatrolActiveRoundCache.save(
+        active,
+        preserveLocalVerified: bgAutoScanRunning,
+      );
       if (await PatrolActiveRoundCache.ensureAwaitingNextRoundIfRoundChanged(
         active?.round.id,
       )) {
@@ -482,6 +490,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     _bluetoothScanWatch = null;
   }
   Future<void> _cancelQrScanWait() async {
+    PatrolProximityNavigationTts.reset();
     await _stopQrLocationWatch();
     await _stopBluetoothScanWatch();
     _autoScanStatusNotifier?.dispose();
@@ -499,6 +508,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     });
   }
   Future<void> _finishAutoScanSession({String? message}) async {
+    PatrolProximityNavigationTts.reset();
     await _stopQrLocationWatch();
     await _stopBluetoothScanWatch();
     _autoScanStatusNotifier?.dispose();
@@ -638,6 +648,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
                 }
               : <CheckPoint>[];
           if (ok && remaining.isEmpty) {
+            unawaited(_load(silent: true));
             await _finishAutoScanSession(
               message: l10n.patrolRoundAutoScanComplete,
             );
@@ -1061,6 +1072,12 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
               proximity: feedback.result,
               snapshot: feedback.snapshot,
             );
+            final snapshot = feedback.snapshot;
+            if (snapshot != null) {
+              unawaited(
+                PatrolProximityNavigationTts.maybeSpeak(snapshot: snapshot),
+              );
+            }
           }
           return false;
         }
@@ -1582,12 +1599,9 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       case 'PENDING':
         return l10n.patrolRoundStatusPending;
       case 'IN_PROGRESS':
-      case 'INPROGRESS':
         return l10n.patrolRoundStatusInProgress;
       case 'COMPLETED':
-      case 'DONE':
         return l10n.patrolRoundStatusCompleted;
-      case 'CANCELLED':
       case 'CANCELED':
         return l10n.patrolRoundStatusCancelled;
       default:
@@ -1768,7 +1782,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
               loading: _refreshing,
               onReload: () => unawaited(_load(silent: true)),
               qrScanBusy: _manualScanKind == _RoundManualScanKind.qr,
-              onQrScan: _isRoundActive(data.round.status)
+              onQrScan: _isRoundActive(data.round.detailStatus)
                   ? () {
                       final current = _active;
                       if (current == null) return;
@@ -1776,7 +1790,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
                     }
                   : null,
               nfcScanBusy: _manualScanKind == _RoundManualScanKind.nfc,
-              onNfcScan: _isRoundActive(data.round.status) && isNfcScanSupported
+              onNfcScan: _isRoundActive(data.round.detailStatus) && isNfcScanSupported
                   ? () {
                       final current = _active;
                       if (current == null) return;
@@ -1785,7 +1799,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
                   : null,
               autoScanBusy:
                   _autoScanActive && _autoScanKind == _RoundAutoScanKind.gps,
-              onAutoScan: _isRoundActive(data.round.status)
+              onAutoScan: _isRoundActive(data.round.detailStatus)
                   ? () {
                       final current = _active;
                       if (current == null) return;
@@ -1794,7 +1808,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
                   : null,
               autoScanBluetoothBusy: _autoScanActive &&
                   _autoScanKind == _RoundAutoScanKind.bluetooth,
-              onAutoScanBluetooth: _isRoundActive(data.round.status) &&
+              onAutoScanBluetooth: _isRoundActive(data.round.detailStatus) &&
                       isBluetoothScanSupported
                   ? () {
                       final current = _active;
@@ -1826,7 +1840,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
               ...data.checkPoints.map(
                 (p) => Padding(
                   key: ValueKey(
-                    'route-${p.id}-${p.verified}-${p.updatedDate}-'
+                    'route-${p.id}-${p.verified}-'
                     '${p.latitude}-${p.longitude}-${p.name}-$_reloadToken',
                   ),
                   padding: const EdgeInsets.only(bottom: 10),

@@ -218,6 +218,14 @@ abstract final class PatrolActiveRoundCache {
     return mergeVerifiedCheckPoints(active, cached.checkPoints);
   }
 
+  /// Chỉ merge verified từ cache khi FGS auto-scan đang chạy; không thì tin GET active.
+  static Future<ActivePatrolRound> mergeBackgroundVerifiedIfRunning(
+    ActivePatrolRound active,
+  ) async {
+    if (!await isBackgroundAutoScanRunning()) return active;
+    return mergeBackgroundVerified(active);
+  }
+
   static ActivePatrolRound mergeVerifiedCheckPoints(
     ActivePatrolRound active,
     List<CheckPoint> verifiedSource,
@@ -271,7 +279,10 @@ abstract final class PatrolActiveRoundCache {
     );
   }
 
-  static Future<void> save(ActivePatrolRound? active) async {
+  static Future<void> save(
+    ActivePatrolRound? active, {
+    bool preserveLocalVerified = true,
+  }) async {
     final prefs = await _prefs();
     if (active == null) {
       await prefs.remove(StorageKeys.patrolTrackActiveRoundSnapshot);
@@ -285,7 +296,9 @@ abstract final class PatrolActiveRoundCache {
       await setBackgroundAutoScanArmed(false);
       await setBackgroundAutoScanRunning(false);
     }
-    final merged = await preservingLocalVerified(active);
+    final merged = preserveLocalVerified
+        ? await preservingLocalVerified(active)
+        : active;
     final next = (
       roundId: merged.round.id,
       checkPoints: merged.checkPoints,
