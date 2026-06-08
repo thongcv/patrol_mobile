@@ -151,7 +151,39 @@ abstract final class PatrolActiveRoundCache {
       await prefs.remove(
         StorageKeys.patrolTrackAwaitingNextRoundAutoScanConfirm,
       );
+      await clearNextRoundPromptOffer(prefs: prefs);
     }
+  }
+
+  /// Once per active round while [awaiting] — blocks repeat notify/TTS on UI sync.
+  static Future<bool> tryAcquireNextRoundPromptOffer() async {
+    if (!await isAwaitingNextRoundAutoScanConfirm()) return false;
+    final cached = await load();
+    final roundId = cached?.roundId ?? 0;
+    if (roundId <= 0) return false;
+
+    final prefs = await _prefs(reload: true);
+    final offeredRoundId =
+        prefs.getInt(StorageKeys.patrolTrackNextRoundPromptOfferRoundId) ?? 0;
+    if (offeredRoundId == roundId) return false;
+
+    await prefs.setInt(
+      StorageKeys.patrolTrackNextRoundPromptOfferRoundId,
+      roundId,
+    );
+    await prefs.setInt(
+      StorageKeys.patrolTrackNextRoundPromptShownAtMs,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+    return true;
+  }
+
+  static Future<void> clearNextRoundPromptOffer({
+    SharedPreferences? prefs,
+  }) async {
+    final p = prefs ?? await _prefs();
+    await p.remove(StorageKeys.patrolTrackNextRoundPromptOfferRoundId);
+    await p.remove(StorageKeys.patrolTrackNextRoundPromptShownAtMs);
   }
 
   static Future<int?> lastAutoScanConfirmedRoundId({bool reload = true}) async {

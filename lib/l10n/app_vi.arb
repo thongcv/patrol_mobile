@@ -462,5 +462,6 @@
   "patrolBackgroundNextRoundBody": "Đã đến vòng tuần tra tiếp theo. Chọn Xác nhận để tự động quét điểm, hoặc Hủy.",
   "patrolBackgroundNextRoundActionOk": "Xác nhận",
   "patrolBackgroundNextRoundActionCancel": "Hủy",
-  "patrolBackgroundNextRoundConfirmed": "Đã xác nhận — bắt đầu quét điểm tự động."
+  "patrolBackgroundNextRoundConfirmed": "Đã xác nhận — bắt đầu quét điểm tự động.",
+  "patrolBackgroundRoundCompleted": "Đã kết thúc vòng tuần tra của bạn."
 }

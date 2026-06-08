@@ -676,7 +676,7 @@ class _PatrolBeaconSettingsSheetState extends State<_PatrolBeaconSettingsSheet> 
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<int>(
-                          value: _txPowerDbm,
+                          initialValue: _txPowerDbm,
                           dropdownColor: PatrolShellColors.surfaceElevated,
                           style: const TextStyle(color: Colors.white),
                           decoration: _fieldDecoration(

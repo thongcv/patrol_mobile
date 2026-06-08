@@ -1267,4 +1267,8 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get patrolBackgroundNextRoundConfirmed =>
       'Đã xác nhận — bắt đầu quét điểm tự động.';
+
+  @override
+  String get patrolBackgroundRoundCompleted =>
+      'Đã kết thúc vòng tuần tra của bạn.';
 }

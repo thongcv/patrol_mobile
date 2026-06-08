@@ -82,7 +82,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       ValueNotifier(const _RouteMapUpdate(seq: 0));
   StreamSubscription<ActivePatrolRound?>? _activeRoundSocketSub;
   StreamSubscription<CheckPoint>? _checkpointVerifiedSub;
-  late final VoidCallback _fgsAutoScanRunningListener;
+  late final VoidCallback _fgsAutoScanUiListener;
 
   // --- Scan flows (QR → NFC → auto GPS → auto Bluetooth) ---
   int? _scanningCheckpointId;
@@ -95,9 +95,8 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   ValueNotifier<_QrScanProximityStatus>? _autoScanStatusNotifier;
   /// `true` when user paused FGS scan (header radar or any of the four scan buttons).
   bool _preferManualScan = false;
-  /// FGS held for next-round notification confirm — radar shows off until user confirms.
-  bool _awaitingNextRoundAutoScanConfirm = false;
-
+  /// Login / STOMP tracking config — header radar hidden when false.
+  bool _backgroundAutoScanConfigured = false;
   /// Clears in-memory scan UI — embedded / re-open must not reuse a prior session.
   void _resetStaleForegroundScanUiState() {
     _preferManualScan = false;
@@ -122,12 +121,14 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   @override
   void initState() {
     super.initState();
-    _fgsAutoScanRunningListener = () {
+    _fgsAutoScanUiListener = () {
       if (!mounted) return;
       setState(() {});
     };
     PatrolBackgroundAutoScanUiState.running
-        .addListener(_fgsAutoScanRunningListener);
+        .addListener(_fgsAutoScanUiListener);
+    PatrolBackgroundAutoScanUiState.awaitingNextRoundConfirm
+        .addListener(_fgsAutoScanUiListener);
     // Release stale manual-scan suppression from any prior screen session.
     unawaited(PatrolRealtimeTrackCoordinator.setRoundScanBusy(false));
     unawaited(_syncFgsAutoScanRunningFromPrefs());
@@ -142,6 +143,10 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
           _refreshing = false;
           _failure = null;
         });
+        final active = _active;
+        if (active != null && !_hasUnscannedCheckPoints(active)) {
+          unawaited(_load(silent: true));
+        }
         unawaited(_syncAwaitingNextRoundConfirmFromPrefs());
       },
     );
@@ -157,9 +162,9 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
           final awaiting =
               await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm();
           if (!mounted) return;
+          PatrolBackgroundAutoScanUiState.setAwaitingNextRoundConfirm(awaiting);
           setState(() {
             _applyLoadedActiveRound(merged, fromRefresh: false);
-            _awaitingNextRoundAutoScanConfirm = awaiting;
             _loading = false;
             _refreshing = false;
             _failure = null;
@@ -174,7 +179,9 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   @override
   void dispose() {
     PatrolBackgroundAutoScanUiState.running
-        .removeListener(_fgsAutoScanRunningListener);
+        .removeListener(_fgsAutoScanUiListener);
+    PatrolBackgroundAutoScanUiState.awaitingNextRoundConfirm
+        .removeListener(_fgsAutoScanUiListener);
     TopToast.hide();
     _activeRoundSocketSub?.cancel();
     _checkpointVerifiedSub?.cancel();
@@ -224,14 +231,14 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       if (await PatrolActiveRoundCache.ensureAwaitingNextRoundIfRoundChanged(
         active?.round.id,
       )) {
-        unawaited(PatrolBackgroundService.syncNextRoundAutoScanHoldIfAwaiting());
+        unawaited(PatrolBackgroundService.offerNextRoundAutoScanIfAwaiting());
       }
       final awaiting =
           await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm();
       if (!mounted) return;
+      PatrolBackgroundAutoScanUiState.setAwaitingNextRoundConfirm(awaiting);
       setState(() {
         _applyLoadedActiveRound(active, fromRefresh: silent);
-        _awaitingNextRoundAutoScanConfirm = awaiting;
         _loading = false;
         _refreshing = false;
         _failure = null;
@@ -387,7 +394,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   /// Radar header — mirrors FGS listener attached and not soft-paused.
   bool get _backgroundFgsScanEnabled =>
       PatrolBackgroundAutoScanUiState.running.value &&
-      !_awaitingNextRoundAutoScanConfirm;
+      !PatrolBackgroundAutoScanUiState.awaitingNextRoundConfirm.value;
 
   /// FGS auto-scan pause — only [_preferManualScan]; scan UI flags do not resume FGS.
   bool get _backgroundFgsScanPaused => _preferManualScan;
@@ -395,6 +402,13 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   Future<void> _syncFgsAutoScanRunningFromPrefs() async {
     final running = await PatrolActiveRoundCache.isBackgroundAutoScanRunning();
     PatrolBackgroundAutoScanUiState.setRunning(running);
+  }
+
+  Future<void> _syncBackgroundAutoScanConfiguredFromPrefs() async {
+    final enabled = await PatrolTrackingConfigStore.backgroundAutoScanEnabled();
+    if (!mounted) return;
+    if (_backgroundAutoScanConfigured == enabled) return;
+    setState(() => _backgroundAutoScanConfigured = enabled);
   }
 
   Future<void> _syncAwaitingNextRoundConfirmFromPrefs() async {
@@ -406,8 +420,9 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     } else {
       await _syncFgsAutoScanRunningFromPrefs();
     }
-    if (_awaitingNextRoundAutoScanConfirm == awaiting) return;
-    setState(() => _awaitingNextRoundAutoScanConfirm = awaiting);
+    PatrolBackgroundAutoScanUiState.setAwaitingNextRoundConfirm(awaiting);
+    if (!mounted) return;
+    setState(() {});
   }
 
   /// Pauses FGS background auto-scan ([_preferManualScan]); emit vị trí không đổi.
@@ -423,9 +438,11 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
   /// After [_load] — hold next-round prompt or sync manual-scan busy; never auto-start FGS scan.
   Future<void> _applyFgsScanPolicyAfterRoundDataLoaded() async {
+    await _syncBackgroundAutoScanConfiguredFromPrefs();
+    if (!mounted) return;
     await _syncAwaitingNextRoundConfirmFromPrefs();
     if (!mounted) return;
-    if (_awaitingNextRoundAutoScanConfirm) {
+    if (PatrolBackgroundAutoScanUiState.awaitingNextRoundConfirm.value) {
       unawaited(PatrolBackgroundService.syncNextRoundAutoScanHoldIfAwaiting());
       return;
     }
@@ -452,10 +469,20 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
   Future<void> _onToggleBackgroundFgsScan() async {
     final l10n = AppLocalizations.of(context)!;
-    if (_awaitingNextRoundAutoScanConfirm) {
+    await _syncAwaitingNextRoundConfirmFromPrefs();
+    if (!mounted) return;
+    if (PatrolBackgroundAutoScanUiState.awaitingNextRoundConfirm.value) {
+      await PatrolActiveRoundSync.confirmNextRoundAutoScanFromUser();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.patrolBackgroundNextRoundBody)),
+      await _syncAwaitingNextRoundConfirmFromPrefs();
+      if (!mounted) return;
+      _resumeBackgroundFgsScan();
+      await _syncFgsAutoScanRunningFromPrefs();
+      if (!mounted) return;
+      setState(() {});
+      context.showTopToast(
+        l10n.patrolBackgroundNextRoundConfirmed,
+        duration: const Duration(milliseconds: 800),
       );
       return;
     }
@@ -1666,6 +1693,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
         children: [
           if (data != null &&
               _failure == null &&
+              _backgroundAutoScanConfigured &&
               _hasUnscannedCheckPoints(data))
             IconButton.filledTonal(
               key: ValueKey(

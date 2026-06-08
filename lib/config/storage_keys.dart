@@ -44,6 +44,9 @@ abstract final class StorageKeys {
   /// When next-round confirm notification was posted (expiry / re-show).
   static const patrolTrackNextRoundPromptShownAtMs =
       'patrol_track_next_round_prompt_shown_at_ms';
+  /// Active round id for which next-round heads-up + TTS was already offered.
+  static const patrolTrackNextRoundPromptOfferRoundId =
+      'patrol_track_next_round_prompt_offer_round_id';
   static const patrolTrackActiveRoundSnapshot = 'patrol_track_active_round_snapshot';
   /// Monotonic counter bumped on each [PatrolActiveRoundCache] write — FGS dedupes reload.
   static const patrolTrackActiveRoundRevision = 'patrol_track_active_round_revision';

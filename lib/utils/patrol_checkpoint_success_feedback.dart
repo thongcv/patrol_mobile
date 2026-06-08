@@ -14,6 +14,25 @@ abstract final class PatrolCheckpointSuccessFeedback {
 
   static const MethodChannel _vibrationChannel = MethodChannel('vibration');
 
+  /// Notification + TTS when background auto-scan completes every checkpoint.
+  static Future<void> notifyRoundCompleted() async {
+    developer.log(
+      'Patrol round fully scanned in background',
+      name: 'PatrolCheckpointSuccessFeedback',
+    );
+    try {
+      await PatrolBackgroundService.showRoundCompletedNotification();
+    } catch (_) {}
+
+    final locale = await AppLocaleStore.readLocale();
+    final spoke = await PatrolCheckpointTts.speakRoundCompleted(locale: locale);
+    if (!spoke && PatrolBackgroundService.isBackgroundIsolate) {
+      PatrolBackgroundService.relayCheckpointSuccessToUi(
+        PatrolCheckpointTts.roundCompletedRelayToken,
+      );
+    }
+  }
+
   /// Two short pulses and a notification with [checkpointName].
   static Future<void> notify({required String checkpointName}) async {
     final name = checkpointName.trim();

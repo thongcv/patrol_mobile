@@ -18,8 +18,35 @@ abstract final class PatrolCheckpointTts {
   static final FlutterTts _tts = FlutterTts();
   static Future<void>? _speakChain;
   static const Duration _dedupeWindow = Duration(seconds: 8);
+  /// Matches next-round confirm visibility — blocks repeat TTS on sync races.
+  static const Duration _nextRoundDedupeWindow = Duration(minutes: 20);
   static const String _nextRoundDedupeKey = '__next_round_prompt__';
+  /// Sentinel relayed via [PatrolFgsInvokeEvents.checkpointSuccess] when FGS TTS fails.
+  static const String roundCompletedRelayToken = '__round_completed__';
+  static const String _roundCompletedDedupeKey = roundCompletedRelayToken;
   static const String _proximityNavDedupePrefix = '__proximity_nav__';
+
+  /// Speaks round-completed message when background auto-scan finishes all points.
+  static Future<bool> speakRoundCompleted({Locale? locale}) async {
+    final resolvedLocale = locale ?? await AppLocaleStore.readLocale();
+    final message = lookupAppLocalizations(
+      resolvedLocale,
+    ).patrolBackgroundRoundCompleted;
+    final text = message.trim();
+    if (text.isEmpty) return false;
+    if (!await _tryAcquireSpeakSlot(_roundCompletedDedupeKey)) return false;
+
+    var started = false;
+    final future = (_speakChain ?? Future<void>.value()).then((_) async {
+      started = await _speak(message: text, locale: resolvedLocale);
+      if (!started) {
+        await _releaseSpeakSlot(_roundCompletedDedupeKey);
+      }
+    });
+    _speakChain = future;
+    await future;
+    return started;
+  }
 
   /// Speaks next-round auto-scan prompt (deduped across isolates).
   static Future<bool> speakNextRoundPrompt({
@@ -28,7 +55,12 @@ abstract final class PatrolCheckpointTts {
   }) async {
     final text = message.trim();
     if (text.isEmpty) return false;
-    if (!await _tryAcquireSpeakSlot(_nextRoundDedupeKey)) return false;
+    if (!await _tryAcquireSpeakSlot(
+      _nextRoundDedupeKey,
+      window: _nextRoundDedupeWindow,
+    )) {
+      return false;
+    }
 
     final resolvedLocale = locale ?? await AppLocaleStore.readLocale();
     var started = false;
@@ -93,14 +125,18 @@ abstract final class PatrolCheckpointTts {
     return started;
   }
 
-  static Future<bool> _tryAcquireSpeakSlot(String checkpointName) async {
+  static Future<bool> _tryAcquireSpeakSlot(
+    String checkpointName, {
+    Duration? window,
+  }) async {
+    final dedupeWindow = window ?? _dedupeWindow;
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload();
     final lastName = prefs.getString(StorageKeys.patrolCheckpointTtsLastName);
     final lastAtMs = prefs.getInt(StorageKeys.patrolCheckpointTtsLastAtMs) ?? 0;
     final now = DateTime.now().millisecondsSinceEpoch;
     if (lastName == checkpointName &&
-        now - lastAtMs < _dedupeWindow.inMilliseconds) {
+        now - lastAtMs < dedupeWindow.inMilliseconds) {
       return false;
     }
     await prefs.setString(StorageKeys.patrolCheckpointTtsLastName, checkpointName);

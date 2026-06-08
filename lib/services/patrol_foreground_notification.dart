@@ -491,7 +491,7 @@ abstract final class PatrolForegroundNotification {
           ongoing: true,
           autoCancel: false,
           fullScreenIntent: true,
-          onlyAlertOnce: false,
+          onlyAlertOnce: true,
           showWhen: true,
           when: postedAt.millisecondsSinceEpoch,
           enableVibration: true,

@@ -88,6 +88,45 @@ abstract final class PatrolFgsNotifications {
     );
   }
 
+  /// Updates the patrol notification when every checkpoint in the round is scanned.
+  static Future<void> showRoundCompletedNotification({
+    required int foregroundNotificationId,
+    required Future<bool> Function() isRunningSafe,
+  }) async {
+    final l10n = await l10nFromPrefs();
+    final title = l10n.patrolBackgroundNotificationTitle;
+    final body = l10n.patrolBackgroundRoundCompleted;
+
+    final bg = PatrolFgsIsolateBridge.backgroundServiceInstance;
+    if (bg is AndroidServiceInstance) {
+      await bg.setForegroundNotificationInfo(title: title, content: body);
+      await _showCheckpointAlertNotification(title: title, body: body);
+      _schedulePatrolNotificationRevert(
+        foregroundNotificationId: foregroundNotificationId,
+        isRunningSafe: isRunningSafe,
+        android: bg,
+      );
+      return;
+    }
+
+    if (!PatrolFgsIsolateBridge.isBackgroundIsolate &&
+        !await isRunningSafe()) {
+      return;
+    }
+
+    await _showCheckpointAlertNotification(title: title, body: body);
+    await showForegroundNotification(
+      notificationId: foregroundNotificationId,
+      title: title,
+      body: body,
+      checkpointPulse: true,
+    );
+    _schedulePatrolNotificationRevert(
+      foregroundNotificationId: foregroundNotificationId,
+      isRunningSafe: isRunningSafe,
+    );
+  }
+
   /// Default FGS / patrol notification text (after checkpoint pulse or next-round prompt).
   static Future<void> revertForegroundNotificationToPatrolDefault({
     int? foregroundNotificationId,

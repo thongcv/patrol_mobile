@@ -39,6 +39,7 @@ abstract final class PatrolBackgroundService {
   static Future<void>? _startTrackingFuture;
   static Future<void>? _refreshPatrolTrackingChain;
   static DateTime? _lastBackgroundRefreshInvoke;
+  static DateTime? _lastSyncNextRoundHoldInvoke;
   static void Function()? get relayFgsMockLocationAlert =>
       PatrolFgsRelayState.relayFgsMockLocationAlert;
 
@@ -69,6 +70,13 @@ abstract final class PatrolBackgroundService {
   ) =>
       PatrolFgsNotifications.showCheckpointScannedNotification(
         checkpointName,
+        foregroundNotificationId: foregroundNotificationId,
+        isRunningSafe: isRunningSafe,
+      );
+
+  /// Updates the patrol notification when background auto-scan completes the round.
+  static Future<void> showRoundCompletedNotification() =>
+      PatrolFgsNotifications.showRoundCompletedNotification(
         foregroundNotificationId: foregroundNotificationId,
         isRunningSafe: isRunningSafe,
       );
@@ -449,21 +457,42 @@ abstract final class PatrolBackgroundService {
     await _invoke(service, PatrolFgsInvokeEvents.confirmNextRoundAutoScan);
   }
 
-  /// UI / notification action — dismiss next-round prompt without auto-scan.
-  /// Re-hold FGS auto-scan + next-round notification when prefs say [awaiting].
+  /// Re-hold FGS auto-scan when prefs say [awaiting] — no repeat notify/TTS.
   static Future<void> syncNextRoundAutoScanHoldIfAwaiting() async {
     if (!await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
       return;
     }
-    if (!await _awaitConfigured()) return;
-    final service = _service;
+    final now = DateTime.now();
+    final last = _lastSyncNextRoundHoldInvoke;
+    if (last != null && now.difference(last) < const Duration(seconds: 3)) {
+      return;
+    }
+    _lastSyncNextRoundHoldInvoke = now;
+    final service = await _serviceReadyForNextRoundInvoke();
     if (service == null) return;
+    await _invoke(service, PatrolFgsInvokeEvents.syncNextRoundAutoScanHold);
+  }
+
+  /// First heads-up + TTS for the current round (deduped in FGS).
+  static Future<void> offerNextRoundAutoScanIfAwaiting() async {
+    if (!await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      return;
+    }
+    final service = await _serviceReadyForNextRoundInvoke();
+    if (service == null) return;
+    await _invoke(service, PatrolFgsInvokeEvents.offerNextRoundAutoScan);
+  }
+
+  static Future<FlutterBackgroundService?> _serviceReadyForNextRoundInvoke() async {
+    if (!await _awaitConfigured()) return null;
+    final service = _service;
+    if (service == null) return null;
     if (!await _isServiceRunning(service)) {
       await _ensureBackgroundServiceRunning(service);
       await _waitForServiceRunning(service);
     }
-    if (!await _isServiceRunning(service)) return;
-    await _invoke(service, PatrolFgsInvokeEvents.syncNextRoundAutoScanHold);
+    if (!await _isServiceRunning(service)) return null;
+    return service;
   }
 
   static Future<void> invokeCancelNextRoundAutoScan() async {

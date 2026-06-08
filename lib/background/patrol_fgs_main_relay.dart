@@ -76,7 +76,7 @@ abstract final class PatrolFgsMainRelay {
       PatrolFgsInvokeEvents.proximityNavigationHint,
       (payload) {
         final map = payload is Map
-            ? Map<Object?, Object?>.from(payload as Map)
+            ? Map<Object?, Object?>.from(payload)
             : null;
         if (map == null) return;
         final message = (map['message'] as String?)?.trim() ?? '';
@@ -128,10 +128,31 @@ abstract final class PatrolFgsMainRelay {
         PatrolBackgroundAutoScanUiState.setRunning(running);
       },
     );
+    safeRelay(
+      PatrolFgsInvokeEvents.awaitingNextRoundAutoScanConfirm,
+      (payload) {
+        final map = payload is Map
+            ? Map<String, dynamic>.from(payload)
+            : null;
+        final awaiting = map?['awaiting'] == true;
+        PatrolBackgroundAutoScanUiState.setAwaitingNextRoundConfirm(awaiting);
+        if (!awaiting) {
+          unawaited(PatrolActiveRoundCache.isBackgroundAutoScanRunning().then(
+            PatrolBackgroundAutoScanUiState.setRunning,
+          ));
+        } else {
+          PatrolBackgroundAutoScanUiState.setRunning(false);
+        }
+      },
+    );
   }
 
   static Future<void> _speakCheckpointOnMainIsolate(String checkpointName) async {
     final locale = await AppLocaleStore.readLocale();
+    if (checkpointName == PatrolCheckpointTts.roundCompletedRelayToken) {
+      await PatrolCheckpointTts.speakRoundCompleted(locale: locale);
+      return;
+    }
     await PatrolCheckpointTts.speakCheckpoint(
       checkpointName: checkpointName,
       locale: locale,

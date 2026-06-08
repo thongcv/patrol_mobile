@@ -16,7 +16,7 @@ class ApiRequestHeaders {
 
   static const String xClientOs = 'x-client-os';
 
-
+  static const String xClientPlatform = 'x-client-platform';
 
   /// Same as Web frontend / Java backend `x-off-set`.
 
@@ -32,7 +32,7 @@ class ApiRequestHeaders {
 
   static String get defaultClientOs => _clientOs;
 
-
+  static String get defaultClientPlatform => _clientPlatform;
 
   /// JSON headers for POST refresh (no Bearer from prefs).
 
@@ -41,6 +41,8 @@ class ApiRequestHeaders {
         'Accept-Language': defaultAcceptLanguage,
 
         xClientOs: defaultClientOs,
+
+        xClientPlatform: defaultClientPlatform,
 
         xOffSet: getClientOffset(),
 
@@ -119,6 +121,37 @@ class ApiRequestHeaders {
       case TargetPlatform.fuchsia:
 
         return 'fuchsia';
+
+    }
+
+  }
+
+  static String get _clientPlatform {
+
+    if (kIsWeb) return 'WEB';
+
+    switch (defaultTargetPlatform) {
+
+      case TargetPlatform.android:
+      case TargetPlatform.iOS:
+
+        return 'MOBILE';
+
+      case TargetPlatform.macOS:
+
+        return 'MACOS';
+
+      case TargetPlatform.windows:
+
+        return 'WINDOWS';
+
+      case TargetPlatform.linux:
+
+        return 'LINUX';
+
+      case TargetPlatform.fuchsia:
+
+        return 'FUCHSIA';
 
     }
 

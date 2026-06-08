@@ -2262,6 +2262,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Confirmed — background auto-scan started.'**
   String get patrolBackgroundNextRoundConfirmed;
+
+  /// No description provided for @patrolBackgroundRoundCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Your patrol round has ended.'**
+  String get patrolBackgroundRoundCompleted;
 }
 
 class _AppLocalizationsDelegate

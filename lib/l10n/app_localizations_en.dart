@@ -1273,4 +1273,7 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get patrolBackgroundNextRoundConfirmed =>
       'Confirmed — background auto-scan started.';
+
+  @override
+  String get patrolBackgroundRoundCompleted => 'Your patrol round has ended.';
 }

@@ -222,10 +222,6 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
         child: SafeArea(
           child: Stack(
             children: [
-              LanguageToggleBar(
-                locale: widget.locale,
-                onLocaleChanged: widget.onLocaleChanged,
-              ),
               Center(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -374,6 +370,10 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
                     ),
                   ),
                 ),
+              ),
+              LanguageToggleBar(
+                locale: widget.locale,
+                onLocaleChanged: widget.onLocaleChanged,
               ),
             ],
           ),

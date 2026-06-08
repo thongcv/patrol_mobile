@@ -46,6 +46,7 @@ final class PatrolBackgroundRunner {
   Future<void>? _refreshChain;
   Future<void>? _confirmNextRoundChain;
   Future<void>? _cancelNextRoundChain;
+  Future<void>? _offerNextRoundChain;
 
   Timer? _prefsPollTimer;
 
@@ -85,18 +86,49 @@ final class PatrolBackgroundRunner {
     // Block main-isolate `afterRoundPersist` reload racing this callback.
     await PatrolActiveRoundSync.clearBackgroundAutoScanArmed();
     await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(true);
+    PatrolFgsIsolateBridge.notifyAwaitingNextRoundAutoScanConfirm(true);
     await _autoScan.holdForNextRoundConfirm();
-    await _offerNextRoundAutoScanPrompt();
+    await _enqueueOfferNextRoundAutoScanPrompt();
   }
 
-  /// Notify + TTS — only from STOMP [onRoundSynced], not app open / refresh.
+  Future<void> _enqueueOfferNextRoundAutoScanPrompt() {
+    _offerNextRoundChain =
+        (_offerNextRoundChain ?? Future<void>.value()).then(
+      (_) => _offerNextRoundAutoScanPrompt(),
+    );
+    return _offerNextRoundChain!;
+  }
+
+  /// Notify + TTS — once per round while [awaiting]; not on UI re-sync.
   Future<void> _offerNextRoundAutoScanPrompt() async {
+    if (!await PatrolActiveRoundCache.tryAcquireNextRoundPromptOffer()) {
+      return;
+    }
     _stopNextRoundConfirmExpiryTimer();
     await PatrolActiveRoundCache.clearConfirmNextRoundAutoScan();
     await PatrolActiveRoundCache.takeCancelNextRoundAutoScan();
     await PatrolFgsNotifications.showNextRoundAutoScanPrompt();
     _startNextRoundConfirmPoll();
     _startNextRoundConfirmExpiryTimer();
+  }
+
+  /// Re-hold auto-scan when UI opens — no repeat heads-up / TTS.
+  Future<void> _syncNextRoundAutoScanHoldOnly() async {
+    if (!await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      return;
+    }
+    if (await PatrolActiveRoundCache.load() == null) {
+      await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(false);
+      await PatrolForegroundNotification.cancelNextRoundConfirm();
+      return;
+    }
+    await _autoScan.holdForNextRoundConfirm();
+    if (_nextRoundConfirmPollTimer == null) {
+      _startNextRoundConfirmPoll();
+    }
+    if (_nextRoundConfirmExpiryTimer == null) {
+      _startNextRoundConfirmExpiryTimer();
+    }
   }
 
   /// Reload auto-scan after round cache changed (no notification).
@@ -179,6 +211,7 @@ final class PatrolBackgroundRunner {
     await PatrolActiveRoundCache.takeConfirmNextRoundAutoScan();
     await PatrolForegroundNotification.cancelNextRoundConfirm();
     await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(false);
+    PatrolFgsIsolateBridge.notifyAwaitingNextRoundAutoScanConfirm(false);
     await PatrolActiveRoundCache.markAutoScanConfirmedForCurrentRound();
     await PatrolActiveRoundCache.setPendingFgsReloadAfterRound(false);
     await PatrolFgsNotifications.revertForegroundNotificationToPatrolDefault();
@@ -222,6 +255,7 @@ final class PatrolBackgroundRunner {
     await PatrolActiveRoundCache.takeCancelNextRoundAutoScan();
     await PatrolForegroundNotification.cancelNextRoundConfirm();
     await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(false);
+    PatrolFgsIsolateBridge.notifyAwaitingNextRoundAutoScanConfirm(false);
     // Cancel means "do not start auto-scan for this next round".
     // Do not write "last confirmed round id" here; that would break the
     // next-round awaiting logic and can cause auto-scan to resume later.
@@ -232,16 +266,7 @@ final class PatrolBackgroundRunner {
   }
 
   Future<void> _syncNextRoundAutoScanHoldFromPrefs() async {
-    if (!await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
-      return;
-    }
-    if (await PatrolActiveRoundCache.load() == null) {
-      await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(false);
-      await PatrolForegroundNotification.cancelNextRoundConfirm();
-      return;
-    }
-    await _autoScan.holdForNextRoundConfirm();
-    await _offerNextRoundAutoScanPrompt();
+    await _syncNextRoundAutoScanHoldOnly();
   }
 
   Future<void> _onTrackingConfigUpdatedFromStomp() async {
@@ -335,6 +360,10 @@ final class PatrolBackgroundRunner {
 
     _safeListen(PatrolFgsInvokeEvents.syncNextRoundAutoScanHold, (_) {
       if (!_shuttingDown) unawaited(_syncNextRoundAutoScanHoldFromPrefs());
+    });
+
+    _safeListen(PatrolFgsInvokeEvents.offerNextRoundAutoScan, (_) {
+      if (!_shuttingDown) unawaited(_enqueueOfferNextRoundAutoScanPrompt());
     });
 
     _safeListen(PatrolFgsInvokeEvents.setForegroundScanRelay, (payload) {

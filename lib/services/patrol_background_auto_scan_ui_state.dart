@@ -6,8 +6,17 @@ abstract final class PatrolBackgroundAutoScanUiState {
 
   static final ValueNotifier<bool> running = ValueNotifier<bool>(false);
 
+  /// Next-round notification confirm pending — radar off until user confirms or cancels.
+  static final ValueNotifier<bool> awaitingNextRoundConfirm =
+      ValueNotifier<bool>(false);
+
   static void setRunning(bool value) {
     if (running.value == value) return;
     running.value = value;
+  }
+
+  static void setAwaitingNextRoundConfirm(bool value) {
+    if (awaitingNextRoundConfirm.value == value) return;
+    awaitingNextRoundConfirm.value = value;
   }
 }

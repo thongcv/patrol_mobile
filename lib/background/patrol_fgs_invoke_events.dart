@@ -8,8 +8,10 @@ abstract final class PatrolFgsInvokeEvents {
   static const resumeAutoScan = 'resumeAutoScan';
   static const confirmNextRoundAutoScan = 'confirmNextRoundAutoScan';
   static const cancelNextRoundAutoScan = 'cancelNextRoundAutoScan';
-  /// Main / prefs — re-hold auto-scan and show next-round prompt when [awaiting] is latched.
+  /// Main / prefs — re-hold auto-scan when [awaiting] (no notify/TTS).
   static const syncNextRoundAutoScanHold = 'syncNextRoundAutoScanHold';
+  /// First offer for current round — heads-up + TTS (deduped).
+  static const offerNextRoundAutoScan = 'offerNextRoundAutoScan';
   static const setForegroundScanRelay = 'setForegroundScanRelay';
   static const tokenRefreshed = 'tokenRefreshed';
 
@@ -22,4 +24,6 @@ abstract final class PatrolFgsInvokeEvents {
   static const positionUpdate = 'positionUpdate';
   static const scanGpsSample = 'scanGpsSample';
   static const backgroundAutoScanRunning = 'backgroundAutoScanRunning';
+  static const awaitingNextRoundAutoScanConfirm =
+      'awaitingNextRoundAutoScanConfirm';
 }

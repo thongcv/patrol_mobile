@@ -18,7 +18,10 @@ class SuperGpsStreamOptions {
     this.enableBarometer = false,
   });
 
+  /// Desired Geolocator poll interval (Android [AndroidSettings.intervalDuration]).
   final int updateIntervalMs;
+
+  /// Minimum wall-clock gap between stream emits (Geolocator has no fastestInterval).
   final int minUpdateIntervalMs;
   final int minUpdateDistanceMeters;
   final bool enableBarometer;
@@ -96,6 +99,7 @@ class SuperGpsEngine {
   var _running = false;
   SuperGpsStreamOptions _streamOptions = SuperGpsStreamOptions.defaults;
   var _streamGeneration = 0;
+  var _lastStreamEmitWallMs = 0;
 
   SuperGpsStreamOptions get streamOptions => _streamOptions;
 
@@ -194,6 +198,7 @@ class SuperGpsEngine {
     final generation = _streamGeneration;
     _kalman.reset();
     _fixGate.reset();
+    _lastStreamEmitWallMs = 0;
 
     final wantBaro =
         _streamOptions.enableBarometer && await isBarometerHardwareSupported();
@@ -247,6 +252,7 @@ class SuperGpsEngine {
     await _positionSub?.cancel();
     _positionSub = null;
     _running = false;
+    _lastStreamEmitWallMs = 0;
     await _barometer.stop();
     _kalman.reset();
     _fixGate.reset();
@@ -294,6 +300,17 @@ class SuperGpsEngine {
   }
 
   void _emitFiltered(Position location) {
+    if (_running) {
+      final minGap = _streamOptions.minUpdateIntervalMs;
+      if (minGap > 0) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        if (_lastStreamEmitWallMs > 0 &&
+            now - _lastStreamEmitWallMs < minGap) {
+          return;
+        }
+        _lastStreamEmitWallMs = now;
+      }
+    }
     final event = _buildEvent(
       location,
       includeBarometer:

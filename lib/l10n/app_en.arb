@@ -640,5 +640,6 @@
   "patrolBackgroundNextRoundBody": "The next patrol round is ready. Tap Confirm to auto-scan, or Cancel.",
   "patrolBackgroundNextRoundActionOk": "Confirm",
   "patrolBackgroundNextRoundActionCancel": "Cancel",
-  "patrolBackgroundNextRoundConfirmed": "Confirmed — background auto-scan started."
+  "patrolBackgroundNextRoundConfirmed": "Confirmed — background auto-scan started.",
+  "patrolBackgroundRoundCompleted": "Your patrol round has ended."
 }

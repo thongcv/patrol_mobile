@@ -7,6 +7,7 @@ import '../models/active_patrol_round.dart';
 import '../background/patrol_background_service.dart';
 import '../services/patrol_background_auto_scan_ui_state.dart';
 import 'patrol_active_round_cache.dart';
+import 'patrol_foreground_notification.dart';
 
 import 'patrol_round_service.dart';
 
@@ -34,7 +35,7 @@ abstract final class PatrolActiveRoundSync {
     );
     if (awaitingLatch) {
       await PatrolActiveRoundCache.setBackgroundAutoScanArmed(false);
-      unawaited(PatrolBackgroundService.syncNextRoundAutoScanHoldIfAwaiting());
+      unawaited(PatrolBackgroundService.offerNextRoundAutoScanIfAwaiting());
     }
     return r;
   }
@@ -49,7 +50,15 @@ abstract final class PatrolActiveRoundSync {
     }
   }
 
-  /// User tapped confirm on next-round notification or header radar on.
+  /// Next-round notification **Xác nhận** or header radar while [awaiting].
+  static Future<void> confirmNextRoundAutoScanFromUser() async {
+    PatrolBackgroundAutoScanUiState.setAwaitingNextRoundConfirm(false);
+    await PatrolBackgroundService.invokeConfirmNextRoundAutoScan();
+    await PatrolActiveRoundCache.signalConfirmNextRoundAutoScan();
+    await PatrolForegroundNotification.cancelNextRoundConfirm();
+  }
+
+  /// User armed background auto-scan (not while next-round [awaiting]).
   static Future<bool> armBackgroundAutoScanByUser() async {
     if (await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
       return false;

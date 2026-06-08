@@ -93,6 +93,10 @@ class _PatrolInterceptors extends Interceptor {
             ApiRequestHeaders.xOffSet,
             () => ApiRequestHeaders.getClientOffset(),
           );
+          headers.putIfAbsent(
+            ApiRequestHeaders.xClientPlatform,
+            () => ApiRequestHeaders.defaultClientPlatform,
+          );
 
           if (!headers.containsKey('Authorization') &&
               bearer != null &&

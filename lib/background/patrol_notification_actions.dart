@@ -5,6 +5,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../background/patrol_background_service.dart';
 import '../services/patrol_active_round_cache.dart';
+import '../services/patrol_active_round_sync.dart';
+import '../services/patrol_background_auto_scan_ui_state.dart';
 import '../services/patrol_foreground_notification.dart';
 import '../utils/patrol_background_plugin_registrant.dart';
 
@@ -27,6 +29,7 @@ abstract final class PatrolNotificationActions {
     if (actionId == null || actionId.isEmpty) return;
 
     if (_isCancelAction(actionId)) {
+      PatrolBackgroundAutoScanUiState.setAwaitingNextRoundConfirm(false);
       await PatrolActiveRoundCache.signalCancelNextRoundAutoScan();
       await PatrolBackgroundService.invokeCancelNextRoundAutoScan();
       await PatrolForegroundNotification.cancelNextRoundConfirm();
@@ -35,10 +38,7 @@ abstract final class PatrolNotificationActions {
 
     if (!_isConfirmAction(actionId)) return;
 
-    // Fire direct FGS command first; prefs signal remains as fallback.
-    await PatrolBackgroundService.invokeConfirmNextRoundAutoScan();
-    await PatrolActiveRoundCache.signalConfirmNextRoundAutoScan();
-    await PatrolForegroundNotification.cancelNextRoundConfirm();
+    await PatrolActiveRoundSync.confirmNextRoundAutoScanFromUser();
   }
 
   static bool _isConfirmAction(String actionId) =>

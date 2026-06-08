@@ -366,6 +366,7 @@ class PatrolBackgroundAutoScan {
     final snapshot = _activeRoundSnapshot;
     if (snapshot == null) return;
     if (_eligibleCheckPoints(snapshot.checkPoints).isNotEmpty) return;
+    await PatrolCheckpointSuccessFeedback.notifyRoundCompleted();
     _resetAfterRoundFullyScanned();
     await PatrolActiveRoundSync.disarmBackgroundAutoScanOnRoundEnd();
     await stop();

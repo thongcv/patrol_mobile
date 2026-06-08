@@ -277,6 +277,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: _HomeTabContent(
                               theme: theme,
                               l10n: l10n,
+                              locale: widget.locale,
                               me: me,
                               emergencyPhone: _emergencyPhoneRaw(me),
                               emergencySubtitle: () {
@@ -381,7 +382,7 @@ class _HomeEmbeddedPatrolShell extends StatelessWidget {
   final VoidCallback onClose;
 
   String get _barTitle {
-    final n = menu.name?.trim();
+    final n = menu.name?.forLocale(locale);
     if (n != null && n.isNotEmpty) return n;
     final l = menu.link?.trim();
     if (l != null && l.isNotEmpty) return l;
@@ -427,7 +428,7 @@ class _HomeEmbeddedPatrolShell extends StatelessWidget {
         Expanded(
           child: PatrolMenuRouter.embeddedPatrolBody(
             link: menu.link,
-            menuTitle: menu.name ?? '',
+            menuTitle: menu.name?.forLocale(locale) ?? '',
             locale: locale,
             onLocaleChanged: onLocaleChanged,
           ),
@@ -596,6 +597,7 @@ class _HomeTabContent extends StatelessWidget {
   const _HomeTabContent({
     required this.theme,
     required this.l10n,
+    required this.locale,
     required this.me,
     required this.emergencyPhone,
     required this.emergencySubtitle,
@@ -607,6 +609,7 @@ class _HomeTabContent extends StatelessWidget {
 
   final TextTheme theme;
   final AppLocalizations l10n;
+  final Locale locale;
   final AccountMe me;
   final String? emergencyPhone;
   final String? emergencySubtitle;
@@ -652,6 +655,7 @@ class _HomeTabContent extends StatelessWidget {
                                 aspectRatio: 0.88,
                                 child: _WhiteMenuCard(
                                   menu: menu,
+                                  locale: locale,
                                   theme: theme,
                                   onTap: () => onMenuTap(menu),
                                 ),
@@ -698,6 +702,7 @@ class _HomeTabContent extends StatelessWidget {
 class _WhiteMenuCard extends StatelessWidget {
   const _WhiteMenuCard({
     required this.menu,
+    required this.locale,
     required this.theme,
     required this.onTap,
   });
@@ -705,6 +710,7 @@ class _WhiteMenuCard extends StatelessWidget {
   static const double _radius = 24;
 
   final Menu menu;
+  final Locale locale;
   final TextTheme theme;
   final VoidCallback onTap;
 
@@ -712,9 +718,9 @@ class _WhiteMenuCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = patrolMenuCardStyleForLink(menu.link);
     final icon = patrolMenuIcon(menu.icon);
-    final title = menu.name?.trim().isNotEmpty == true
-        ? menu.name!.trim()
-        : '—';
+    final localizedName = menu.name?.forLocale(locale);
+    final title =
+        localizedName != null && localizedName.isNotEmpty ? localizedName : '—';
     final borderRadius = BorderRadius.circular(_radius);
 
     return DecoratedBox(

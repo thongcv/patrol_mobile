@@ -127,10 +127,6 @@ class _LoginScreenState extends State<LoginScreen> {
         child: SafeArea(
           child: Stack(
             children: [
-              LanguageToggleBar(
-                locale: widget.locale,
-                onLocaleChanged: widget.onLocaleChanged,
-              ),
               Center(
                 child: SingleChildScrollView(
                   clipBehavior: Clip.none,
@@ -300,6 +296,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: Colors.white.withValues(alpha: 0.35),
                   ),
                 ),
+              ),
+              LanguageToggleBar(
+                locale: widget.locale,
+                onLocaleChanged: widget.onLocaleChanged,
               ),
             ],
           ),

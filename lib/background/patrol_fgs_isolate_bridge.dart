@@ -94,6 +94,19 @@ abstract final class PatrolFgsIsolateBridge {
     }
   }
 
+  static void notifyAwaitingNextRoundAutoScanConfirm(bool awaiting) {
+    try {
+      _backgroundServiceInstance?.invoke(
+        PatrolFgsInvokeEvents.awaitingNextRoundAutoScanConfirm,
+        {'awaiting': awaiting},
+      );
+    } on MissingPluginException {
+      //
+    } on PlatformException {
+      //
+    }
+  }
+
   static void notifyScanGpsSampleFromFgs(SuperGpsEvent event) {
     final position = event.position;
     if (position.isMocked) return;

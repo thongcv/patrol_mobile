@@ -1,4 +1,5 @@
 import '../http/api_response.dart';
+import 'localized_name.dart';
 
 class Menu {
   Menu({
@@ -16,7 +17,7 @@ class Menu {
   final int id;
   final int? parentId;
   final String? icon;
-  final String? name;
+  final LocalizedName? name;
   final String? link;
   final int? ordered;
   final bool? servYn;
@@ -31,7 +32,12 @@ class Menu {
       id: jsonInt(json['id']) ?? 0,
       parentId: jsonInt(json['parentId']),
       icon: jsonStr(json['icon']),
-      name: jsonStr(json['name']),
+      name: () {
+        final raw = json['name'];
+        if (raw == null) return null;
+        final localized = LocalizedName.fromJson(raw);
+        return localized.isEmpty ? null : localized;
+      }(),
       link: jsonStr(json['link']),
       ordered: jsonInt(json['ordered']),
       servYn: jsonBool(json['servYn']),
