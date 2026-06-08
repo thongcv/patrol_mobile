@@ -131,8 +131,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
-          builder: (_) => LoginScreen(
-            locale: widget.locale,
+          builder: (ctx) => LoginScreen(
+            locale: Localizations.localeOf(ctx),
             onLocaleChanged: widget.onLocaleChanged,
           ),
         ),

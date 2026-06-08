@@ -372,7 +372,6 @@ class _LocationGateScreenState extends State<LocationGateScreen> {
                 ),
               ),
               LanguageToggleBar(
-                locale: widget.locale,
                 onLocaleChanged: widget.onLocaleChanged,
               ),
             ],

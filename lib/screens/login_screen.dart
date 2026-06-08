@@ -54,8 +54,8 @@ class _LoginScreenState extends State<LoginScreen> {
     if (r.ok) {
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
-          builder: (_) => HomeScreen(
-            locale: widget.locale,
+          builder: (ctx) => HomeScreen(
+            locale: Localizations.localeOf(ctx),
             onLocaleChanged: widget.onLocaleChanged,
           ),
         ),
@@ -298,7 +298,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               LanguageToggleBar(
-                locale: widget.locale,
                 onLocaleChanged: widget.onLocaleChanged,
               ),
             ],

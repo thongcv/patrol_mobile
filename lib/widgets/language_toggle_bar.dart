@@ -7,17 +7,15 @@ import '../l10n/app_localizations.dart';
 class LanguageToggleBar extends StatelessWidget {
   const LanguageToggleBar({
     super.key,
-    required this.locale,
     required this.onLocaleChanged,
   });
 
-  final Locale locale;
   final ValueChanged<Locale> onLocaleChanged;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final isVi = locale.languageCode == 'vi';
+    final isVi = Localizations.localeOf(context).languageCode == 'vi';
     return Positioned(
       top: 8,
       right: 16,

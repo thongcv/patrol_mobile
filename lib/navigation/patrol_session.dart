@@ -73,8 +73,8 @@ abstract final class PatrolSession {
     if (nav == null || locale == null || onLoc == null) return;
 
     final login = MaterialPageRoute<void>(
-      builder: (_) => LoginScreen(
-        locale: locale,
+      builder: (ctx) => LoginScreen(
+        locale: _currentLocale?.call() ?? Localizations.localeOf(ctx),
         onLocaleChanged: onLoc,
       ),
     );

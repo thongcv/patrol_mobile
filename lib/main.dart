@@ -34,7 +34,8 @@ Future<void> main() async {
   } catch (_) {
   }
   await AccountSessionStore.instance.loadFromPrefs();
-  runApp(const PatrolMobileApp());
+  final initialLocale = await AppLocaleStore.readLocale();
+  runApp(PatrolMobileApp(initialLocale: initialLocale));
 }
 
 Future<void> _initializeFirebase() async {
@@ -60,7 +61,9 @@ Future<void> _setupFirebaseMessaging() async {
 }
 
 class PatrolMobileApp extends StatefulWidget {
-  const PatrolMobileApp({super.key});
+  const PatrolMobileApp({super.key, required this.initialLocale});
+
+  final Locale initialLocale;
 
   @override
   State<PatrolMobileApp> createState() => _PatrolMobileAppState();
@@ -68,12 +71,13 @@ class PatrolMobileApp extends StatefulWidget {
 
 class _PatrolMobileAppState extends State<PatrolMobileApp>
     with WidgetsBindingObserver {
-  Locale _locale = AppLocaleStore.defaultLocale;
+  late Locale _locale;
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
     super.initState();
+    _locale = widget.initialLocale;
     WidgetsBinding.instance.addObserver(this);
     // Configure FGS once after first frame (plugins ready; not on socket path).
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -81,7 +85,6 @@ class _PatrolMobileAppState extends State<PatrolMobileApp>
       await PatrolBackgroundService.processPendingNotificationActions();
       await PatrolBackgroundService.ensureCheckpointTtsRelayAttached();
     });
-    unawaited(_restoreLocale());
     PatrolSession.attach(
       navigatorKey: _navigatorKey,
       currentLocale: () => _locale,
@@ -96,13 +99,8 @@ class _PatrolMobileAppState extends State<PatrolMobileApp>
     );
   }
 
-  Future<void> _restoreLocale() async {
-    final saved = await AppLocaleStore.readLocale();
-    if (!mounted) return;
-    setState(() => _locale = saved);
-  }
-
   void _onLocaleChanged(Locale locale) {
+    if (_locale == locale) return;
     setState(() => _locale = locale);
     unawaited(AppLocaleStore.saveLocale(locale));
   }
