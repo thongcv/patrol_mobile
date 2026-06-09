@@ -3,7 +3,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../config/access_token_payload.dart';
 import '../config/app_config.dart';
 import '../config/storage_keys.dart';
 import '../http/api_failure.dart';
@@ -51,22 +50,19 @@ class AuthService {
         if (data == null) {
           return ApiResult.failure(ApiFailure.badResponse(res));
         }
-        final accessToken = AccessTokenPayload.persistableBlobFromApiEnvelope(data);
-        final bearer = accessToken != null
-            ? AccessTokenPayload.bearerJwtFromAuthMap(accessToken)
-            : null;
-        if (accessToken != null && bearer != null && bearer.isNotEmpty) {
-          await PatrolTrackingConfigStore.save(
-            PatrolTrackingConfig.fromLoginEnvelope(data),
-          );
-          await BeaconDevicePasswordStore.saveFromLoginEnvelope(data);
-          await PatrolActiveRoundSync.clearBackgroundAutoScanArmed();
-          await AccountSessionStore.instance.storeAccessToken(accessToken);
-          return ApiResult.success(
-            LoginSuccess(token: bearer, accessToken: accessToken),
-          );
+        if (!await AccountSessionStore.instance.hasStoredSession()) {
+          return ApiResult.failure(ApiFailure.badResponse(res));
         }
-        return ApiResult.failure(ApiFailure.badResponse(res));
+        await PatrolTrackingConfigStore.save(
+          PatrolTrackingConfig.fromLoginEnvelope(data),
+        );
+        await BeaconDevicePasswordStore.saveFromLoginEnvelope(data);
+        await PatrolActiveRoundSync.clearBackgroundAutoScanArmed();
+        await AccountSessionStore.instance.notifySessionAuthenticated();
+        final bearer = await AccountSessionStore.instance.getStoredAccessToken();
+        return ApiResult.success(
+          LoginSuccess(token: bearer ?? ''),
+        );
       }
       return ApiResult.failure(
         apiFailureFromHttpResponse(statusCode: status, body: res),
@@ -155,8 +151,7 @@ class AuthService {
 }
 
 class LoginSuccess {
-  const LoginSuccess({required this.token, this.accessToken});
+  const LoginSuccess({required this.token});
 
   final String token;
-  final Map<String, dynamic>? accessToken;
 }

@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/access_token_payload.dart';
 import '../config/storage_keys.dart';
+import '../http/patrol_cookie_jar.dart';
 import '../models/account_me.dart';
 import '../navigation/patrol_session.dart';
 import '../background/patrol_background_isolate_flags.dart';
@@ -13,7 +13,7 @@ import 'beacon_device_password_store.dart';
 import 'patrol_track_token_sync.dart';
 import 'patrol_tracking_config_store.dart';
 
-/// Login session + company beacon UUID: RAM (foreground) + SharedPreferences.
+/// Login session + company beacon UUID: cookies (auth) + SharedPreferences (profile).
 class AccountSessionStore {
   AccountSessionStore._();
 
@@ -30,43 +30,21 @@ class AccountSessionStore {
   /// Read from RAM after [applyFromAccountMe] or [loadFromPrefs].
   String? get companyBeaconUuid => _normalized(_companyBeaconUuid);
 
-  Future<String?> getStoredAccessToken() async {
-    final p = await _preferences;
-    return AccessTokenPayload.getAccessTokenStored(
-      p.getString(StorageKeys.accessToken),
-    );
-  }
+  /// JWT value from `access_token` cookie (fingerprint / accountId; REST+STOMP use cookies).
+  Future<String?> getStoredAccessToken() => PatrolCookieJar.getAccessToken();
 
-  Future<bool> hasStoredSession() async {
-    final token = await getStoredAccessToken();
-    return token != null && token.isNotEmpty;
-  }
+  Future<bool> hasStoredSession() => PatrolCookieJar.hasSession();
 
-  /// `accountId` / guard id from stored JWT (does not call `/accounts/me`).
+  /// `accountId` / guard id from JWT in `access_token` cookie.
   Future<String?> getStoredAccountId() async {
     final bearer = await getStoredAccessToken();
     if (bearer == null || bearer.isEmpty) return null;
     return AccessTokenPayload.accountIdFromJwt(bearer);
   }
 
-  Future<Map<String, dynamic>?> getStoredAccessTokenObject() async {
-    final p = await _preferences;
-    return AccessTokenPayload.mapFromStored(
-      p.getString(StorageKeys.accessToken),
-    );
-  }
-
-  /// Body `token` for POST refresh.
-  Future<Object?> refreshTokenForRequestBody() async {
-    final p = await _preferences;
-    return AccessTokenPayload.refreshTokenForRequestBody(
-      p.getString(StorageKeys.accessToken),
-    );
-  }
-
-  Future<void> storeAccessToken(Map<String, dynamic> accessToken) async {
-    final p = await _preferences;
-    await p.setString(StorageKeys.accessToken, jsonEncode(accessToken));
+  /// After login — BE already set cookies; notify listeners + STOMP.
+  Future<void> notifySessionAuthenticated() async {
+    await _clearLegacyPrefsToken();
     PatrolSession.notifyAuthStored();
     unawaited(_reconnectStompAfterTokenStored());
   }
@@ -88,8 +66,8 @@ class AccountSessionStore {
   }
 
   Future<void> clearAccessToken() async {
-    final p = await _preferences;
-    await p.remove(StorageKeys.accessToken);
+    await PatrolCookieJar.clear();
+    await _clearLegacyPrefsToken();
     PatrolSession.notifySessionEnded();
   }
 
@@ -143,9 +121,13 @@ class AccountSessionStore {
     }
   }
 
+  Future<void> _clearLegacyPrefsToken() async {
+    final p = await _preferences;
+    await p.remove(StorageKeys.accessToken);
+  }
+
   static String? _normalized(String? raw) {
     final s = raw?.trim();
     return (s == null || s.isEmpty) ? null : s;
   }
 }
-

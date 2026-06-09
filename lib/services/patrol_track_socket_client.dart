@@ -10,7 +10,7 @@ import '../config/app_config.dart';
 
 import '../models/patrol_location_track_payload.dart';
 
-import 'account_session_store.dart';
+import '../http/patrol_cookie_jar.dart';
 
 import 'patrol_active_round_sync.dart';
 
@@ -173,9 +173,8 @@ class PatrolTrackSocketClient {
 
     if (url.isEmpty) return;
 
-    final bearer = await AccountSessionStore.instance.getStoredAccessToken();
-
-    if (bearer == null || bearer.isEmpty) return;
+    final auth = await PatrolCookieJar.stompAuthHeaders();
+    if (auth == null) return;
 
     _connecting = true;
 
@@ -190,16 +189,8 @@ class PatrolTrackSocketClient {
         config: StompConfig.sockJS(
           url: url,
           reconnectDelay: const Duration(seconds: 5),
-          webSocketConnectHeaders: <String, dynamic>{
-            'Authorization': 'Bearer $bearer',
-          },
-          stompConnectHeaders: <String, String>{
-            'Authorization': 'Bearer $bearer',
-
-            'accept-version': '1.1,1.2',
-
-            'heart-beat': '0,0',
-          },
+          webSocketConnectHeaders: auth.webSocketConnectHeaders,
+          stompConnectHeaders: auth.stompConnectHeaders,
 
           onConnect: (frame) => _onStompConnect(client, frame),
 

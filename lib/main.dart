@@ -9,6 +9,7 @@ import 'l10n/app_localizations.dart';
 import 'firebase_options.dart';
 import 'navigation/patrol_session.dart';
 import 'screens/location_gate_screen.dart';
+import 'http/patrol_dio.dart';
 import 'services/account_session_store.dart';
 import 'services/app_locale_store.dart';
 import 'services/patrol_active_round_coordinator.dart';
@@ -33,6 +34,7 @@ Future<void> main() async {
     }
   } catch (_) {
   }
+  await PatrolDio.ensureReady();
   await AccountSessionStore.instance.loadFromPrefs();
   final initialLocale = await AppLocaleStore.readLocale();
   runApp(PatrolMobileApp(initialLocale: initialLocale));

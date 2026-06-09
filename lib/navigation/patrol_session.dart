@@ -23,7 +23,7 @@ abstract final class PatrolSession {
 
   static Stream<void> get authStoredChanges => _authStored.stream;
 
-  /// Token expired / refresh failed — [LocationGateScreen] listens to show login again.
+  /// Session ended (401 / logout) — [LocationGateScreen] listens to show login again.
   static Stream<void> get sessionEnded => _sessionEnded.stream;
 
   static void attach({
@@ -60,7 +60,7 @@ abstract final class PatrolSession {
   static bool isUnauthorized(ApiFailure? failure) =>
       failure?.kind == ApiFailureKind.unauthorized;
 
-  /// Clears stack and navigates to [LoginScreen] (e.g. refresh token failed).
+  /// Clears stack and navigates to [LoginScreen] (e.g. session expired).
   static void navigateToLoginReplaceAll() {
     notifySessionEnded();
     WidgetsBinding.instance.addPostFrameCallback((_) => _pushLoginRoute());

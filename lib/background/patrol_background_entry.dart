@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
+import '../http/patrol_cookie_jar.dart';
 import '../utils/patrol_background_plugin_registrant.dart';
 import '../services/patrol_foreground_notification.dart';
 import 'patrol_background_constants.dart';
@@ -62,6 +63,8 @@ Future<void> _runPatrolBackground(ServiceInstance service) async {
   if (service is AndroidServiceInstance) {
     await service.setAsForegroundService();
   }
+
+  await PatrolCookieJar.ensureInitialized();
 
   final runner = PatrolBackgroundRunner(service);
   runner.prepare();

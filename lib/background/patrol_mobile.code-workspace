@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		}
+	],
+	"settings": {
+		"kotlin.languageServer.enabled": true,
+		"kotlin.languageServer.transport": "stdio",
+		"java.import.gradle.enabled": false
+	}
+}

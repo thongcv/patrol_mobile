@@ -34,7 +34,7 @@ class ApiRequestHeaders {
 
   static String get defaultClientPlatform => _clientPlatform;
 
-  /// JSON headers for POST refresh (no Bearer from prefs).
+  /// JSON `Content-Type` headers for POST bodies.
 
   static Map<String, String> jsonOnlyHeaders() => {
 
