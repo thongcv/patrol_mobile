@@ -60,6 +60,12 @@ abstract final class PatrolActiveRoundCoordinator {
     unawaited(syncFromServer());
   }
 
+  /// Seeds coordinator round id after [PatrolRoundScreen] GET — avoids redundant
+  /// [syncFromServer] that would reload FGS auto-scan.
+  static void noteActiveRoundFromUiLoad(ActivePatrolRound? active) {
+    _lastEmitted = active;
+  }
+
   /// FGS đã cập nhật cache (auto-scan / STOMP).
   ///
   /// [payload] `checkPoint` — auto-scan verified one point → [checkpointVerifiedChanges].
@@ -132,10 +138,13 @@ abstract final class PatrolActiveRoundCoordinator {
       return;
     }
     if (PatrolRealtimeTrackService.instance.isSessionTracking) {
+      final bgAutoScanArmed =
+          await PatrolActiveRoundCache.isBackgroundAutoScanArmed();
+      final bgAutoScanRunning =
+          await PatrolActiveRoundCache.isBackgroundAutoScanRunning();
       await PatrolRealtimeTrackCoordinator.syncTrackingAfterRoundPersisted(
         force: true,
-        reloadBackgroundAutoScan:
-            await PatrolActiveRoundCache.isBackgroundAutoScanRunning(),
+        reloadBackgroundAutoScan: bgAutoScanArmed || bgAutoScanRunning,
       );
     }
 

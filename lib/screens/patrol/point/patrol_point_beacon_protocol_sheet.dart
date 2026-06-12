@@ -113,37 +113,46 @@ class _PatrolBeaconConfigureProtocolDialogState
                 ),
                 const SizedBox(height: 12),
               ],
-              for (final protocol in BleConfigureDeviceEntry.pickerManualProtocols)
-                RadioListTile<BeaconConfigureProtocol>(
-                  value: protocol,
-                  groupValue: _selected,
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() => _selected = value);
-                  },
-                  activeColor: PatrolShellColors.accent,
-                  dense: true,
-                  visualDensity: VisualDensity.compact,
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    _beaconProtocolTitle(l10n, protocol),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      height: 1.2,
-                    ),
-                  ),
-                  subtitle: Text(
-                    _beaconProtocolSubtitle(l10n, protocol) ?? '',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.55),
-                      fontSize: 11,
-                      height: 1.25,
-                    ),
-                  ),
+              RadioGroup<BeaconConfigureProtocol>(
+                groupValue: _selected,
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _selected = value);
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final protocol
+                        in BleConfigureDeviceEntry.pickerManualProtocols)
+                      RadioListTile<BeaconConfigureProtocol>(
+                        value: protocol,
+                        activeColor: PatrolShellColors.accent,
+                        dense: true,
+                        visualDensity: VisualDensity.compact,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          _beaconProtocolTitle(l10n, protocol),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            height: 1.2,
+                          ),
+                        ),
+                        subtitle: Text(
+                          _beaconProtocolSubtitle(l10n, protocol) ?? '',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.55),
+                            fontSize: 11,
+                            height: 1.25,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
+              ),
             ],
           ),
         ),

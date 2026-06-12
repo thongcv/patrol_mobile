@@ -12,7 +12,6 @@ import '../navigation/patrol_session.dart';
 import '../services/account_service.dart';
 import '../services/account_session_store.dart';
 import '../services/auth_service.dart';
-import '../services/patrol_realtime_track_coordinator.dart';
 import 'login_screen.dart';
 
 abstract final class _PatrolUi {
@@ -126,7 +125,6 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         return;
       }
-      await PatrolRealtimeTrackCoordinator.onSessionEnded();
       await AccountSessionStore.instance.clearToken();
       if (!mounted) return;
       Navigator.of(context).pushReplacement(

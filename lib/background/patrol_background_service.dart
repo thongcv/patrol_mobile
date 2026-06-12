@@ -450,10 +450,8 @@ abstract final class PatrolBackgroundService {
 
   /// UI / notification action — start FGS auto-scan for the new round.
   static Future<void> invokeConfirmNextRoundAutoScan() async {
-    if (!await _awaitConfigured()) return;
-    final service = _service;
+    final service = await _serviceReadyForNextRoundInvoke();
     if (service == null) return;
-    if (!await _isServiceRunning(service)) return;
     await _invoke(service, PatrolFgsInvokeEvents.confirmNextRoundAutoScan);
   }
 

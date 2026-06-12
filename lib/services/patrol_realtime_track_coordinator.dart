@@ -77,10 +77,13 @@ abstract final class PatrolRealtimeTrackCoordinator {
     if (await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
       await PatrolBackgroundService.syncNextRoundAutoScanHoldIfAwaiting();
     } else {
+      final bgAutoScanArmed =
+          await PatrolActiveRoundCache.isBackgroundAutoScanArmed();
+      final bgAutoScanRunning =
+          await PatrolActiveRoundCache.isBackgroundAutoScanRunning();
       await syncTrackingAfterRoundPersisted(
         force: true,
-        reloadBackgroundAutoScan:
-            await PatrolActiveRoundCache.isBackgroundAutoScanArmed(),
+        reloadBackgroundAutoScan: bgAutoScanArmed || bgAutoScanRunning,
       );
     }
     _promptBackgroundLocationIfNeeded();

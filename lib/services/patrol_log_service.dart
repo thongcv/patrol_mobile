@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:dio/dio.dart';
 
 import '../config/app_config.dart';
@@ -105,7 +107,13 @@ class PatrolLogService {
       return ApiResult.success(null);
     } on DioException catch (e) {
       return ApiResult.failure(apiFailureFromDioException(e));
-    } catch (_) {
+    } catch (e, st) {
+      developer.log(
+        'Error creating patrol log',
+        name: 'PatrolLogService',
+        error: e,
+        stackTrace: st,
+      );
       return ApiResult.failure(ApiFailure.network());
     }
   }

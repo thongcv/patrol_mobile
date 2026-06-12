@@ -219,6 +219,12 @@ abstract final class PatrolActiveRoundCache {
       return false;
     }
     if (last != roundId) {
+      // FGS is already auto-scanning — user accepted this round; do not disarm on UI open.
+      if (await isBackgroundAutoScanArmed() &&
+          await isBackgroundAutoScanRunning()) {
+        await setLastAutoScanConfirmedRoundId(roundId);
+        return false;
+      }
       await setBackgroundAutoScanArmed(false);
       await setAwaitingNextRoundAutoScanConfirm(true);
       return true;

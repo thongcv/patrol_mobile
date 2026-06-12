@@ -2,7 +2,6 @@ import 'account_session_store.dart';
 import '../background/patrol_background_service.dart';
 import 'patrol_active_round_cache.dart';
 import 'patrol_active_round_coordinator.dart';
-import 'patrol_active_round_sync.dart';
 import 'patrol_realtime_track_coordinator.dart';
 import 'patrol_session_listen.dart';
 import '../utils/device_location.dart';
@@ -63,10 +62,9 @@ abstract final class PatrolStartupCoordinator {
         !await PatrolBackgroundLocationReadiness.isRecentlyVerifiedAcrossIsolates()) {
       return;
     }
-    // Main may have cleared this in [startSessionTracking]; FGS must not read a stale `true`
-    // left from a killed mid-scan session (PatrolRoundScreen may not mount yet).
+    // Stale `foregroundScanBusy` from a killed mid-manual-scan session — do not clear
+    // [backgroundAutoScanArmed]; that stops an in-progress FGS auto-scan on Home open.
     await PatrolActiveRoundCache.setForegroundScanBusy(false);
-    await PatrolActiveRoundSync.clearBackgroundAutoScanArmed();
     await PatrolActiveRoundCoordinator.bootstrapAuthenticatedSession();
     // Round prefs first; tracking bootstrap ends with syncTrackingAfterRoundPersisted(force).
     await PatrolRealtimeTrackCoordinator.bootstrapAuthenticatedSession();
@@ -76,6 +74,9 @@ abstract final class PatrolStartupCoordinator {
       } else {
         await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(false);
       }
+    } else if (await PatrolActiveRoundCache.isBackgroundAutoScanArmed() &&
+        !await PatrolActiveRoundCache.isBackgroundAutoScanRunning()) {
+      await PatrolRealtimeTrackCoordinator.triggerBackgroundAutoScan();
     }
   }
 }

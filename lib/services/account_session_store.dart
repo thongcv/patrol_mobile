@@ -68,10 +68,10 @@ class AccountSessionStore {
   Future<void> clearAccessToken() async {
     await PatrolCookieJar.clear();
     await _clearLegacyPrefsToken();
-    PatrolSession.notifySessionEnded();
   }
 
   Future<void> clearToken() async {
+    PatrolSession.notifySessionEnded();
     await clearAccessToken();
     await PatrolTrackingConfigStore.clear();
     await BeaconDevicePasswordStore.clear();

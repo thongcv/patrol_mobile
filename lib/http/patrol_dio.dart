@@ -54,8 +54,9 @@ abstract final class PatrolDio {
 
   static Dio _createApi() {
     final dio = _newDio();
-    PatrolCookieJar.attachTo(dio);
+    // CookieManager last → saves Set-Cookie before 401 interceptor on response.
     dio.interceptors.add(_PatrolInterceptors());
+    PatrolCookieJar.attachTo(dio);
     syncBaseUrls(dio: dio);
     return dio;
   }
@@ -63,27 +64,44 @@ abstract final class PatrolDio {
 
 class _PatrolInterceptors extends Interceptor {
   @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    final headers = options.headers;
+  void onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
+    try {
+      final headers = options.headers;
 
-    headers.putIfAbsent(
-      'Accept-Language',
-      () => ApiRequestHeaders.defaultAcceptLanguage,
-    );
-    headers.putIfAbsent(
-      ApiRequestHeaders.xClientOs,
-      () => ApiRequestHeaders.defaultClientOs,
-    );
-    headers.putIfAbsent(
-      ApiRequestHeaders.xOffSet,
-      () => ApiRequestHeaders.getClientOffset(),
-    );
-    headers.putIfAbsent(
-      ApiRequestHeaders.xClientPlatform,
-      () => ApiRequestHeaders.defaultClientPlatform,
-    );
+      headers.putIfAbsent(
+        'Accept-Language',
+        () => ApiRequestHeaders.defaultAcceptLanguage,
+      );
+      headers.putIfAbsent(
+        ApiRequestHeaders.xClientOs,
+        () => ApiRequestHeaders.defaultClientOs,
+      );
+      headers.putIfAbsent(
+        ApiRequestHeaders.xOffSet,
+        () => ApiRequestHeaders.getClientOffset(),
+      );
+      headers.putIfAbsent(
+        ApiRequestHeaders.xClientPlatform,
+        () => ApiRequestHeaders.defaultClientPlatform,
+      );
 
-    handler.next(options);
+      await PatrolCookieJar.applyRestAuthHeaders(options);
+      handler.next(options);
+    } catch (e, st) {
+      handler.reject(
+        DioException(
+          requestOptions: options,
+          type: DioExceptionType.unknown,
+          error: e,
+          stackTrace: st,
+          message: 'Failed to attach auth headers.',
+        ),
+        true,
+      );
+    }
   }
 
   /// Login 401 = wrong credentials — stay on login screen, do not clear session.

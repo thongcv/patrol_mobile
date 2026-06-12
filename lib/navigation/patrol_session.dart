@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../screens/login_screen.dart';
 import '../services/account_session_store.dart';
-import '../services/patrol_realtime_track_coordinator.dart';
 import '../http/api_failure.dart';
 
 /// Routes to login and notifies on new token — equivalent to Web `location`/CustomEvent.
@@ -50,9 +49,26 @@ abstract final class PatrolSession {
     if (!_sessionEnded.isClosed) _sessionEnded.add(null);
   }
 
+  static Future<void>? _endSessionInFlight;
+
   /// Invalid session (401/403): clears token and navigates to login.
   static Future<void> endSessionAndNavigateToLogin() async {
-    await PatrolRealtimeTrackCoordinator.onSessionEnded();
+    final inFlight = _endSessionInFlight;
+    if (inFlight != null) {
+      return inFlight;
+    }
+    final future = _endSessionAndNavigateToLoginImpl();
+    _endSessionInFlight = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_endSessionInFlight, future)) {
+        _endSessionInFlight = null;
+      }
+    }
+  }
+
+  static Future<void> _endSessionAndNavigateToLoginImpl() async {
     await AccountSessionStore.instance.clearToken();
     navigateToLoginReplaceAll();
   }
@@ -62,7 +78,6 @@ abstract final class PatrolSession {
 
   /// Clears stack and navigates to [LoginScreen] (e.g. session expired).
   static void navigateToLoginReplaceAll() {
-    notifySessionEnded();
     WidgetsBinding.instance.addPostFrameCallback((_) => _pushLoginRoute());
   }
 

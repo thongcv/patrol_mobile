@@ -255,6 +255,7 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
     final l10n = AppLocalizations.of(context)!;
     await BeaconBleConfigureSession.clear();
     await beaconBleCancelWarmConnect();
+    if (!mounted) return;
     final beaconUuid = AccountSessionStore.instance.companyBeaconUuid;
     if (beaconUuid == null || beaconUuid.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -270,6 +271,7 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
       return;
     }
 
+    if (!mounted) return;
     final selected = await _showPatrolBeaconConfigurePickerSheet(context);
     if (!mounted || selected == null) return;
 
@@ -292,6 +294,7 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
     var loginPwd = '';
     while (mounted) {
       await beaconBleCancelWarmConnect(selected.remoteId);
+      if (!mounted) return;
       final loginPassword = await _promptBeaconLoginPasswordAfterConnect(
         context,
         protocol: protocol,
@@ -355,6 +358,7 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
 
     late IBeaconConfigureResult configResult;
     while (mounted) {
+      if (!mounted) return;
       configResult = await _withPatrolBeaconConfigureLoading(
         context,
         task: () => configureNearestIBeacon(
@@ -403,6 +407,7 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
       await BeaconBleConfigureSession.clear();
 
       while (mounted) {
+        if (!mounted) return;
         final loginPassword = await _promptBeaconLoginPasswordAfterConnect(
           context,
           protocol: protocol,

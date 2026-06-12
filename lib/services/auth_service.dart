@@ -11,6 +11,7 @@ import '../http/api_result.dart';
 import '../http/patrol_api_endpoints.dart';
 import '../http/patrol_dio.dart';
 import '../models/patrol_tracking_config.dart';
+import 'account_service.dart';
 import 'account_session_store.dart';
 import 'beacon_device_password_store.dart';
 import 'patrol_tracking_config_store.dart';
@@ -58,6 +59,14 @@ class AuthService {
         );
         await BeaconDevicePasswordStore.saveFromLoginEnvelope(data);
         await PatrolActiveRoundSync.clearBackgroundAutoScanArmed();
+        // BE sets `XSRF-TOKEN` on GET /accounts/me — bootstrap before STOMP/patrol APIs.
+        final me = await AccountService.instance.fetchMe();
+        if (!me.ok) {
+          final failure = me.failure;
+          if (failure?.kind == ApiFailureKind.unauthorized) {
+            return ApiResult.failure(failure!);
+          }
+        }
         await AccountSessionStore.instance.notifySessionAuthenticated();
         final bearer = await AccountSessionStore.instance.getStoredAccessToken();
         return ApiResult.success(

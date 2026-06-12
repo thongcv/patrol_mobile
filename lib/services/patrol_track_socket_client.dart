@@ -11,6 +11,7 @@ import '../config/app_config.dart';
 import '../models/patrol_location_track_payload.dart';
 
 import '../http/patrol_cookie_jar.dart';
+import '../http/patrol_dio.dart';
 
 import 'patrol_active_round_sync.dart';
 
@@ -173,6 +174,8 @@ class PatrolTrackSocketClient {
 
     if (url.isEmpty) return;
 
+    await PatrolDio.ensureReady();
+
     final auth = await PatrolCookieJar.stompAuthHeaders();
     if (auth == null) return;
 
@@ -303,6 +306,7 @@ class PatrolTrackSocketClient {
 
   Future<void> _syncActiveRoundInFgs() async {
     try {
+      await PatrolDio.ensureReady();
       final r = await PatrolActiveRoundSync.fetchAndPersist();
       if (!r.ok) return;
 

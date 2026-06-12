@@ -53,9 +53,33 @@ abstract final class PatrolActiveRoundSync {
   /// Next-round notification **Xác nhận** or header radar while [awaiting].
   static Future<void> confirmNextRoundAutoScanFromUser() async {
     PatrolBackgroundAutoScanUiState.setAwaitingNextRoundConfirm(false);
+    // User confirmed background scan — release round-screen manual-scan gate first.
+    await PatrolActiveRoundCache.setForegroundScanBusy(false);
     await PatrolBackgroundService.invokeConfirmNextRoundAutoScan();
     await PatrolActiveRoundCache.signalConfirmNextRoundAutoScan();
+    await _waitForNextRoundConfirmProcessed();
     await PatrolForegroundNotification.cancelNextRoundConfirm();
+  }
+
+  /// [invoke] is fire-and-forget — wait for FGS poll/handler, else finish on main.
+  static Future<void> _waitForNextRoundConfirmProcessed() async {
+    for (var i = 0; i < 30; i++) {
+      if (!await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    if (!await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      return;
+    }
+    await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(false);
+    await PatrolActiveRoundCache.markAutoScanConfirmedForCurrentRound();
+    if (!await armBackgroundAutoScanByUser()) return;
+    await PatrolBackgroundService.resumeBackgroundAutoScan();
+    await PatrolBackgroundService.refreshPatrolTracking(
+      startIfNotRunning: true,
+      afterRoundPersist: true,
+    );
   }
 
   /// User armed background auto-scan (not while next-round [awaiting]).
@@ -72,6 +96,7 @@ abstract final class PatrolActiveRoundSync {
       return false;
     }
     await PatrolActiveRoundCache.setBackgroundAutoScanArmed(true);
+    await PatrolActiveRoundCache.markAutoScanConfirmedForCurrentRound();
     return true;
   }
 
