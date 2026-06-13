@@ -83,7 +83,7 @@ abstract final class PatrolRealtimeTrackCoordinator {
           await PatrolActiveRoundCache.isBackgroundAutoScanRunning();
       await syncTrackingAfterRoundPersisted(
         force: true,
-        reloadBackgroundAutoScan: bgAutoScanArmed || bgAutoScanRunning,
+        reloadBackgroundAutoScan: bgAutoScanArmed && !bgAutoScanRunning,
       );
     }
     _promptBackgroundLocationIfNeeded();

@@ -142,9 +142,10 @@ abstract final class PatrolActiveRoundCoordinator {
           await PatrolActiveRoundCache.isBackgroundAutoScanArmed();
       final bgAutoScanRunning =
           await PatrolActiveRoundCache.isBackgroundAutoScanRunning();
+      // FGS already reloads on STOMP; only nudge main→FGS when armed but stopped.
       await PatrolRealtimeTrackCoordinator.syncTrackingAfterRoundPersisted(
         force: true,
-        reloadBackgroundAutoScan: bgAutoScanArmed || bgAutoScanRunning,
+        reloadBackgroundAutoScan: bgAutoScanArmed && !bgAutoScanRunning,
       );
     }
 

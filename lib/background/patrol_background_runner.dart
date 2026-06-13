@@ -83,12 +83,17 @@ final class PatrolBackgroundRunner {
 
   Future<void> _handleActiveRoundSyncedFromStomp() async {
     if (await PatrolActiveRoundCache.load() == null) return;
-    // Block main-isolate `afterRoundPersist` reload racing this callback.
-    await PatrolActiveRoundSync.clearBackgroundAutoScanArmed();
-    await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(true);
-    PatrolFgsIsolateBridge.notifyAwaitingNextRoundAutoScanConfirm(true);
-    await _autoScan.holdForNextRoundConfirm();
-    await _enqueueOfferNextRoundAutoScanPrompt();
+    // [PatrolActiveRoundSync.fetchAndPersist] already ran
+    // [ensureAwaitingNextRoundIfRoundChanged] — only latch awaiting on a real round
+    // transition. Do not force awaiting/disarm on every STOMP push (same-round
+    // checkpoint updates would undo a user confirm and block auto-scan).
+    if (await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      PatrolFgsIsolateBridge.notifyAwaitingNextRoundAutoScanConfirm(true);
+      await _autoScan.holdForNextRoundConfirm();
+      await _enqueueOfferNextRoundAutoScanPrompt();
+      return;
+    }
+    await _reloadAutoScanAfterRoundSilently();
   }
 
   Future<void> _enqueueOfferNextRoundAutoScanPrompt() {
@@ -210,9 +215,9 @@ final class PatrolBackgroundRunner {
     _stopNextRoundConfirmExpiryTimer();
     await PatrolActiveRoundCache.takeConfirmNextRoundAutoScan();
     await PatrolForegroundNotification.cancelNextRoundConfirm();
+    await PatrolActiveRoundCache.markAutoScanConfirmedForCurrentRound();
     await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(false);
     PatrolFgsIsolateBridge.notifyAwaitingNextRoundAutoScanConfirm(false);
-    await PatrolActiveRoundCache.markAutoScanConfirmedForCurrentRound();
     await PatrolActiveRoundCache.setPendingFgsReloadAfterRound(false);
     await PatrolFgsNotifications.revertForegroundNotificationToPatrolDefault();
     await PatrolActiveRoundSync.armBackgroundAutoScanByUser();
