@@ -238,8 +238,7 @@ class PatrolBackgroundAutoScan {
 
     _gpsHub.autoScanHandler = _onGpsEvent;
     await _gpsHub.ensureRunning(scanWantsBarometer: _scanNeedsBaro);
-    _autoScanActive =
-        _gpsHub.hasAutoScanHandler && _gpsHub.isListening;
+    _autoScanActive = _gpsHub.hasAutoScanHandler && _gpsHub.isListening;
     await _publishRunningState();
   }
 
