@@ -1,4 +1,4 @@
-import '../models/beacon_configure_protocol.dart';
+import '../../models/beacon_configure_protocol.dart';
 import 'ibeacon_configurer_types.dart';
 import 'joyway_beacon_raw_protocol.dart';
 

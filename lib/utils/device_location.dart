@@ -335,17 +335,7 @@ Future<String?> ensurePatrolBackgroundLocationReady() async {
   }
 
   if (permission == LocationPermission.whileInUse) {
-    final upgraded = await Geolocator.requestPermission();
-    if (upgraded != LocationPermission.denied &&
-        upgraded != LocationPermission.deniedForever) {
-      permission = upgraded;
-    }
-    if (permission == LocationPermission.whileInUse) {
-      final bg = await Permission.locationAlways.request();
-      if (bg.isGranted) {
-        permission = await _patrolLocationPermissionQuick();
-      }
-    }
+    permission = await _upgradePatrolLocationToAlways(permission);
   }
 
   if (permission == LocationPermission.denied ||
@@ -359,6 +349,31 @@ Future<String?> ensurePatrolBackgroundLocationReady() async {
 
   PatrolBackgroundLocationReadiness.markReady();
   return null;
+}
+
+/// iOS: second [Geolocator.requestPermission] may show "Always".
+/// Android: foreground dialog never offers "Always" — open app settings instead.
+Future<LocationPermission> _upgradePatrolLocationToAlways(
+  LocationPermission permission,
+) async {
+  if (permission != LocationPermission.whileInUse) return permission;
+
+  final isIos = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+  if (isIos) {
+    final upgraded = await Geolocator.requestPermission();
+    if (upgraded != LocationPermission.denied &&
+        upgraded != LocationPermission.deniedForever) {
+      return upgraded;
+    }
+    return permission;
+  }
+
+  final bg = await Permission.locationAlways.request();
+  if (bg.isGranted) {
+    return _patrolLocationPermissionQuick();
+  }
+  await Geolocator.openAppSettings();
+  return _patrolLocationPermissionQuick();
 }
 
 /// `true` when patrol needs "Always" / background location but only has while-in-use.

@@ -32,6 +32,7 @@
   "dndPolicyPermissionDenied": "Do Not Disturb access was not granted. Allow SPS Patrol to modify notification policy so next-round popups can break through silent mode.",
   "openLocationSettings": "Open location settings",
   "openAppSettings": "Open app settings",
+  "openDndPolicySettings": "Open Do Not Disturb settings",
   "retry": "Try again",
   "grantPermission": "Grant permission",
   "toastApiNotConfigured": "API URL not configured.",
@@ -170,14 +171,14 @@
   "patrolRoundQrPhotoRemove": "Remove photo",
   "patrolRoundQrPhotoSkip": "Continue without photo",
   "patrolRoundCancel": "Cancel",
-  "patrolRoundQrOutOfRange": "You are about {distance} m from the checkpoint (allowed {radius} m). Move closer to the saved location.",
+  "patrolRoundQrOutOfRange": "Move about {distance} m closer to enter the allowed zone (radius {radius} m).",
   "@patrolRoundQrOutOfRange": {
     "placeholders": {
       "distance": { "type": "String" },
       "radius": { "type": "String" }
     }
   },
-  "patrolRoundQrAltitudeOutOfRange": "Altitude does not match the saved checkpoint (difference {distance} m, allowed {radius} m).",
+  "patrolRoundQrAltitudeOutOfRange": "Adjust altitude by about {distance} m (radius {radius} m).",
   "@patrolRoundQrAltitudeOutOfRange": {
     "placeholders": {
       "distance": { "type": "String" },
@@ -249,7 +250,7 @@
       "direction": { "type": "String" }
     }
   },
-  "patrolRoundQrDeltaHorizontal": "Distance to checkpoint: {delta} m (max {radius} m)",
+  "patrolRoundQrDeltaHorizontal": "Move closer by: {delta} m (radius {radius} m)",
   "@patrolRoundQrDeltaHorizontal": {
     "placeholders": {
       "delta": { "type": "String" },
@@ -268,7 +269,7 @@
       "accuracy": { "type": "String" }
     }
   },
-  "patrolRoundQrDeltaAltitude": "Δ altitude: {delta} m (max {radius} m)",
+  "patrolRoundQrDeltaAltitude": "Adjust altitude by: {delta} m (radius {radius} m)",
   "@patrolRoundQrDeltaAltitude": {
     "placeholders": {
       "delta": { "type": "String" },
@@ -337,6 +338,7 @@
   "patrolPointGpsServiceOff": "Location services are off.",
   "patrolPointGpsDenied": "Location permission denied.",
   "patrolPointGpsError": "Could not read position.",
+  "patrolPointGpsMocked": "Mock location detected. Disable fake GPS to assign coordinates.",
   "patrolPointCountSummary": "{count} points total",
   "@patrolPointCountSummary": {
     "placeholders": {

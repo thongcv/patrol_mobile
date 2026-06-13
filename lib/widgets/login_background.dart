@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
 /// Full-screen background like FE: image + gradient overlay.
@@ -15,8 +13,8 @@ class LoginBackground extends StatelessWidget {
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
     colors: [
-      Color(0x260F172A),
-      Color(0x590F172A),
+      Color(0x080F172A),
+      Color(0x180F172A),
     ],
   );
 
@@ -29,6 +27,8 @@ class LoginBackground extends StatelessWidget {
           child: Image.asset(
             'assets/images/bg-login.png',
             fit: BoxFit.cover,
+            width: double.infinity,
+            height: double.infinity,
             alignment: Alignment.center,
             filterQuality: FilterQuality.high,
           ),
@@ -66,12 +66,24 @@ class GlassCard extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 380),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(_radius),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 35,
-            offset: const Offset(0, 20),
+            color: Colors.black.withValues(alpha: 0.5),
+            blurRadius: 52,
+            spreadRadius: -6,
+            offset: const Offset(0, 28),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.28),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+          BoxShadow(
+            color: const Color(0x402563EB),
+            blurRadius: 36,
+            spreadRadius: -10,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -81,11 +93,27 @@ class GlassCard extends StatelessWidget {
           Positioned.fill(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(_radius),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-                child: const DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Color(0x59141C28),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.08),
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(_radius),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.white.withValues(alpha: 0.14),
+                      Colors.white.withValues(alpha: 0.03),
+                      Colors.transparent,
+                    ],
+                    stops: const [0, 0.22, 0.55],
                   ),
                 ),
               ),

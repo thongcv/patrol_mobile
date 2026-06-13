@@ -223,6 +223,7 @@ final class PatrolBackgroundRunner {
     await PatrolActiveRoundSync.armBackgroundAutoScanByUser();
     await _autoScan.resume();
     await _autoScan.reloadAfterRoundPersist();
+    await PatrolActiveRoundCache.signalNextRoundConfirmHandled();
   }
 
   /// Chỉ gỡ pause foreground — không xác nhận notify vòng mới.

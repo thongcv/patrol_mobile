@@ -61,6 +61,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
 
     if (PatrolSession.isUnauthorized(r.failure)) {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
       await PatrolSession.endSessionAndNavigateToLogin();
       return;
     }

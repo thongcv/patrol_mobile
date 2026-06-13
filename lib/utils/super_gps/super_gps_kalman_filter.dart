@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-/// Local position filter (north/east around anchor) — less jitter when walking.
+/// Local position filter (north/east around anchor + altitude) — less jitter when walking.
 class SuperGpsKalmanFilter {
   bool _initialized = false;
   double _anchorLat = 0;
@@ -8,6 +8,9 @@ class SuperGpsKalmanFilter {
   double _northM = 0;
   double _eastM = 0;
   double _varianceM2 = -1;
+  bool _altitudeInitialized = false;
+  double _altitudeM = 0;
+  double _altitudeVarianceM2 = -1;
   int _lastTimestampMs = 0;
 
   void reset() {
@@ -17,15 +20,20 @@ class SuperGpsKalmanFilter {
     _northM = 0;
     _eastM = 0;
     _varianceM2 = -1;
+    _altitudeInitialized = false;
+    _altitudeM = 0;
+    _altitudeVarianceM2 = -1;
     _lastTimestampMs = 0;
   }
 
-  ({double lat, double lng}) process({
+  ({double lat, double lng, double? altitude}) process({
     required double latitude,
     required double longitude,
     required double accuracyM,
     required double speedMps,
     required int timestampMs,
+    double? altitudeM,
+    double? altitudeAccuracyM,
   }) {
     final speed = speedMps < 0 ? 0.0 : speedMps;
     final measurementVarianceM2 = math.max(accuracyM, _rMinM);
@@ -39,7 +47,13 @@ class SuperGpsKalmanFilter {
       _varianceM2 = math.min(measurementVarianceM2Sq, _varianceMaxM2);
       _lastTimestampMs = timestampMs;
       _initialized = true;
-      return (lat: latitude, lng: longitude);
+      final initAlt = _processAltitude(
+        altitudeM: altitudeM,
+        altitudeAccuracyM: altitudeAccuracyM,
+        dtSec: 0,
+        speed: speed,
+      );
+      return (lat: latitude, lng: longitude, altitude: initAlt);
     }
 
     final dtSec = ((timestampMs - _lastTimestampMs).clamp(0, 1 << 31) / 1000.0)
@@ -77,7 +91,64 @@ class SuperGpsKalmanFilter {
 
     final outLat = _anchorLat + _northM / metersPerDegLat;
     final outLng = _anchorLng + _eastM / metersPerDegLng;
-    return (lat: outLat, lng: outLng);
+    final outAlt = _processAltitude(
+      altitudeM: altitudeM,
+      altitudeAccuracyM: altitudeAccuracyM,
+      dtSec: dtSec,
+      speed: speed,
+    );
+    return (lat: outLat, lng: outLng, altitude: outAlt);
+  }
+
+  double? _processAltitude({
+    required double? altitudeM,
+    required double? altitudeAccuracyM,
+    required double dtSec,
+    required double speed,
+  }) {
+    if (altitudeM == null || !altitudeM.isFinite) {
+      return _altitudeInitialized ? _altitudeM : null;
+    }
+
+    final measurementVarianceM2 = math.max(
+      altitudeAccuracyM != null &&
+              altitudeAccuracyM.isFinite &&
+              altitudeAccuracyM > 0
+          ? altitudeAccuracyM
+          : _rMinAltM,
+      _rMinAltM,
+    );
+    final measurementVarianceM2Sq =
+        measurementVarianceM2 * measurementVarianceM2;
+
+    if (!_altitudeInitialized) {
+      _altitudeM = altitudeM;
+      _altitudeVarianceM2 =
+          math.min(measurementVarianceM2Sq, _varianceMaxAltM2);
+      _altitudeInitialized = true;
+      return altitudeM;
+    }
+
+    final processNoiseM2 = speed < _stationarySpeedMps
+        ? _processNoiseStationaryAltM2PerS * dtSec
+        : _processNoiseMovingAltM2PerS * dtSec;
+    _altitudeVarianceM2 =
+        math.min(_altitudeVarianceM2 + processNoiseM2, _varianceMaxAltM2);
+
+    final innovAltM = altitudeM - _altitudeM;
+    var effectiveMeasVar = measurementVarianceM2Sq;
+    final gateM = _outlierSigma * math.sqrt(_altitudeVarianceM2) +
+        _outlierSigma * math.sqrt(measurementVarianceM2Sq);
+    if (innovAltM.abs() > gateM && innovAltM.abs() > _rMinAltM) {
+      effectiveMeasVar = measurementVarianceM2Sq * _outlierInflate;
+    }
+
+    final gain =
+        _altitudeVarianceM2 / (_altitudeVarianceM2 + effectiveMeasVar);
+    _altitudeM += gain * innovAltM;
+    _altitudeVarianceM2 =
+        math.max((1.0 - gain) * _altitudeVarianceM2, _varianceMinAltM2);
+    return _altitudeM;
   }
 
   static double _metersPerDegreeLng(double latitude) {
@@ -94,4 +165,9 @@ class SuperGpsKalmanFilter {
   static const double _maxDtSec = 5.0;
   static const double _outlierSigma = 3.0;
   static const double _outlierInflate = 4.0;
+  static const double _rMinAltM = 8.0;
+  static const double _varianceMaxAltM2 = 400.0;
+  static const double _varianceMinAltM2 = 1.0;
+  static const double _processNoiseStationaryAltM2PerS = 0.08;
+  static const double _processNoiseMovingAltM2PerS = 1.2;
 }

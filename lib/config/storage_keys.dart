@@ -33,6 +33,9 @@ abstract final class StorageKeys {
   /// User tapped confirm on next-round notification (any isolate → FGS poll).
   static const patrolTrackConfirmNextRoundAutoScanAtMs =
       'patrol_track_confirm_next_round_auto_scan_at_ms';
+  /// FGS or main fallback finished next-round confirm (arm + resume + reload).
+  static const patrolTrackNextRoundConfirmHandledAtMs =
+      'patrol_track_next_round_confirm_handled_at_ms';
   static const patrolTrackCancelNextRoundAutoScanAtMs =
       'patrol_track_cancel_next_round_auto_scan_at_ms';
   /// FGS holds auto-scan until user taps confirm on next-round notification.

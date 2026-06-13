@@ -1,10 +1,10 @@
-import '../models/beacon_configure_protocol.dart';
+import '../../models/beacon_configure_protocol.dart';
 import 'ibeacon_configurer_stub.dart'
     if (dart.library.io) 'ibeacon_configurer_mobile.dart' as impl;
 import 'ibeacon_configurer_types.dart';
 import 'joyway_beacon_raw_protocol.dart';
 
-export '../models/beacon_configure_protocol.dart';
+export '../../models/beacon_configure_protocol.dart';
 export 'ibeacon_configurer_types.dart';
 export 'joyway_beacon_raw_protocol.dart' show JoywayBeaconExtendedSettings;
 

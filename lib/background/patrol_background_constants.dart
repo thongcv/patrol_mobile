@@ -7,4 +7,9 @@ abstract final class PatrolBackgroundConstants {
 
   /// Next-round confirm notification stays until action or this elapses.
   static const Duration nextRoundConfirmVisibleDuration = Duration(minutes: 20);
+
+  /// UI / notification isolate waits for FGS confirm handler (cross-isolate prefs latch).
+  static const Duration nextRoundConfirmWaitTimeout = Duration(seconds: 2);
+  static const Duration nextRoundConfirmWaitPollInterval =
+      Duration(milliseconds: 25);
 }

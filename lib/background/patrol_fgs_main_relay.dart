@@ -5,6 +5,7 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 
 import '../services/app_locale_store.dart';
 import '../services/patrol_active_round_coordinator.dart';
+import '../services/patrol_active_round_sync.dart';
 import '../services/patrol_foreground_gps_scan_session.dart';
 import '../services/patrol_realtime_track_coordinator.dart';
 import '../services/patrol_background_auto_scan_ui_state.dart';
@@ -137,6 +138,7 @@ abstract final class PatrolFgsMainRelay {
         final awaiting = map?['awaiting'] == true;
         PatrolBackgroundAutoScanUiState.setAwaitingNextRoundConfirm(awaiting);
         if (!awaiting) {
+          PatrolActiveRoundSync.notifyNextRoundConfirmRelayWake();
           unawaited(PatrolActiveRoundCache.isBackgroundAutoScanRunning().then(
             PatrolBackgroundAutoScanUiState.setRunning,
           ));

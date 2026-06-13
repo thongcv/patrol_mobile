@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
-import '../models/beacon_configure_protocol.dart';
+import '../../models/beacon_configure_protocol.dart';
 import 'beacon_ble_picker_connect.dart';
 import 'beacon_ble_configure_session.dart';
 import 'beacon_ble_session.dart';

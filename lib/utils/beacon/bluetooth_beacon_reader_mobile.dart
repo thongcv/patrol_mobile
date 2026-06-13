@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../services/account_session_store.dart';
+import '../../services/account_session_store.dart';
 import 'beacon_ble_session.dart';
 import 'bluetooth_beacon_reader_types.dart';
 

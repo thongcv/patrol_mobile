@@ -110,6 +110,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get openAppSettings => 'Open app settings';
 
   @override
+  String get openDndPolicySettings => 'Open Do Not Disturb settings';
+
+  @override
   String get retry => 'Try again';
 
   @override
@@ -447,12 +450,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String patrolRoundQrOutOfRange(String distance, String radius) {
-    return 'You are about $distance m from the checkpoint (allowed $radius m). Move closer to the saved location.';
+    return 'Move about $distance m closer to enter the allowed zone (radius $radius m).';
   }
 
   @override
   String patrolRoundQrAltitudeOutOfRange(String distance, String radius) {
-    return 'Altitude does not match the saved checkpoint (difference $distance m, allowed $radius m).';
+    return 'Adjust altitude by about $distance m (radius $radius m).';
   }
 
   @override
@@ -541,7 +544,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String patrolRoundQrDeltaHorizontal(String delta, String radius) {
-    return 'Distance to checkpoint: $delta m (max $radius m)';
+    return 'Move closer by: $delta m (radius $radius m)';
   }
 
   @override
@@ -556,7 +559,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String patrolRoundQrDeltaAltitude(String delta, String radius) {
-    return 'Δ altitude: $delta m (max $radius m)';
+    return 'Adjust altitude by: $delta m (radius $radius m)';
   }
 
   @override
@@ -657,6 +660,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get patrolPointGpsError => 'Could not read position.';
+
+  @override
+  String get patrolPointGpsMocked =>
+      'Mock location detected. Disable fake GPS to assign coordinates.';
 
   @override
   String patrolPointCountSummary(int count) {

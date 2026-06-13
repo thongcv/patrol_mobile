@@ -1,4 +1,4 @@
-import '../models/beacon_configure_protocol.dart';
+import '../../models/beacon_configure_protocol.dart';
 import 'beacon_ble_session.dart';
 import 'hm10_beacon_configurer.dart';
 import 'ibeacon_configurer_types.dart';

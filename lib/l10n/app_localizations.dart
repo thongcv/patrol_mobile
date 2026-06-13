@@ -290,6 +290,12 @@ abstract class AppLocalizations {
   /// **'Open app settings'**
   String get openAppSettings;
 
+  /// No description provided for @openDndPolicySettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Do Not Disturb settings'**
+  String get openDndPolicySettings;
+
   /// No description provided for @retry.
   ///
   /// In en, this message translates to:
@@ -923,13 +929,13 @@ abstract class AppLocalizations {
   /// No description provided for @patrolRoundQrOutOfRange.
   ///
   /// In en, this message translates to:
-  /// **'You are about {distance} m from the checkpoint (allowed {radius} m). Move closer to the saved location.'**
+  /// **'Move about {distance} m closer to enter the allowed zone (radius {radius} m).'**
   String patrolRoundQrOutOfRange(String distance, String radius);
 
   /// No description provided for @patrolRoundQrAltitudeOutOfRange.
   ///
   /// In en, this message translates to:
-  /// **'Altitude does not match the saved checkpoint (difference {distance} m, allowed {radius} m).'**
+  /// **'Adjust altitude by about {distance} m (radius {radius} m).'**
   String patrolRoundQrAltitudeOutOfRange(String distance, String radius);
 
   /// No description provided for @patrolRoundQrNoCheckpointGps.
@@ -1059,7 +1065,7 @@ abstract class AppLocalizations {
   /// No description provided for @patrolRoundQrDeltaHorizontal.
   ///
   /// In en, this message translates to:
-  /// **'Distance to checkpoint: {delta} m (max {radius} m)'**
+  /// **'Move closer by: {delta} m (radius {radius} m)'**
   String patrolRoundQrDeltaHorizontal(String delta, String radius);
 
   /// No description provided for @patrolRoundQrGpsAccuracy.
@@ -1077,7 +1083,7 @@ abstract class AppLocalizations {
   /// No description provided for @patrolRoundQrDeltaAltitude.
   ///
   /// In en, this message translates to:
-  /// **'Δ altitude: {delta} m (max {radius} m)'**
+  /// **'Adjust altitude by: {delta} m (radius {radius} m)'**
   String patrolRoundQrDeltaAltitude(String delta, String radius);
 
   /// No description provided for @patrolRoundQrMoveNorth.
@@ -1253,6 +1259,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not read position.'**
   String get patrolPointGpsError;
+
+  /// No description provided for @patrolPointGpsMocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Mock location detected. Disable fake GPS to assign coordinates.'**
+  String get patrolPointGpsMocked;
 
   /// No description provided for @patrolPointCountSummary.
   ///

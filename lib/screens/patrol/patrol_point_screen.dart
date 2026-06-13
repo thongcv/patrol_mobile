@@ -14,15 +14,15 @@ import '../../services/beacon_device_password_store.dart';
 import '../../services/check_point_service.dart';
 import '../../services/patrol_foreground_gps_scan_session.dart';
 import '../../utils/device_location.dart';
-import '../../utils/bluetooth_beacon_reader.dart';
-import '../../utils/beacon_ble_configure_devices.dart';
-import '../../utils/beacon_ble_configure_session.dart';
-import '../../utils/beacon_ble_picker_connect.dart';
-import '../../utils/beacon_ble_session.dart';
-import '../../utils/beacon_name_latin.dart';
-import '../../utils/ibeacon_configurer.dart';
-import '../../utils/joyway_beacon_raw_protocol.dart';
-import '../../utils/nfc_tag_reader.dart';
+import '../../utils/beacon/bluetooth_beacon_reader.dart';
+import '../../utils/beacon/beacon_ble_configure_devices.dart';
+import '../../utils/beacon/beacon_ble_configure_session.dart';
+import '../../utils/beacon/beacon_ble_picker_connect.dart';
+import '../../utils/beacon/beacon_ble_session.dart';
+import '../../utils/beacon/beacon_name_latin.dart';
+import '../../utils/beacon/ibeacon_configurer.dart';
+import '../../utils/beacon/joyway_beacon_raw_protocol.dart';
+import '../../utils/nfc/nfc_tag_reader.dart';
 import 'patrol_shell.dart';
 
 part 'point/patrol_point_types.dart';
@@ -511,6 +511,17 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
         _ => l10n.patrolPointUpdateNeedGps,
       };
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      return;
+    }
+
+    if (gps.position!.isMocked) {
+      setState(
+        () => _updatingFields.remove((point.id, _PatrolPointUpdatingKind.gps)),
+      );
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolPointGpsMocked)),
+      );
       return;
     }
 

@@ -91,8 +91,7 @@ String formatProximityNavigationSpeech(
     required String Function(String direction, String distance) formatter,
   }) {
     if (move == CheckPointMoveDirection.onTarget) return;
-    final meters = _speechMeters(absDeltaM);
-    moves.add(formatter(_directionWord(l10n, move), meters.toString()));
+    moves.add(formatter(_directionWord(l10n, move), formatPatrolDistanceM(absDeltaM)));
   }
 
   addAxisMove(
@@ -114,12 +113,12 @@ String formatProximityNavigationSpeech(
     moves.add(
       l10n.patrolProximityTtsMoveVertical(
         _directionWord(l10n, altMove),
-        _speechMeters(altDeltaM).toString(),
+        formatPatrolDistanceM(altDeltaM),
       ),
     );
   }
 
-  final distance = _speechMeters(nav.horizontalDistanceM).toString();
+  final distance = formatPatrolDistanceM(nav.horizontalDistanceM);
   if (moves.isEmpty) {
     return l10n.patrolProximityTtsNearCheckpoint(distance);
   }
@@ -127,11 +126,6 @@ String formatProximityNavigationSpeech(
     distance,
     moves.join(l10n.patrolProximityTtsMoveSeparator),
   );
-}
-
-int _speechMeters(double absM) {
-  final rounded = absM.round();
-  return rounded < 1 ? 1 : rounded;
 }
 
 String _directionWord(AppLocalizations l10n, CheckPointMoveDirection direction) {

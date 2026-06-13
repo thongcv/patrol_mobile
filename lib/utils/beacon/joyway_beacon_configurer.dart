@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
-import '../models/beacon_configure_protocol.dart';
+import '../../models/beacon_configure_protocol.dart';
 import 'beacon_ble_picker_connect.dart';
 import 'beacon_ble_configure_session.dart';
 import 'beacon_ble_session.dart';

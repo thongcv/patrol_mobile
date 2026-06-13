@@ -252,8 +252,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                           ),
                                   ),
                                 ),
-                                const SizedBox(height: 22),
-                                _PortalLine(l10n: l10n, theme: theme),
                               ],
                             ),
                           ],
@@ -282,18 +280,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                     ],
-                  ),
-                ),
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 12,
-                child: Text(
-                  l10n.copyright,
-                  textAlign: TextAlign.center,
-                  style: theme.labelSmall?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.35),
                   ),
                 ),
               ),
@@ -326,8 +312,9 @@ class _Header extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.05),
+            color: Colors.white.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -398,6 +385,13 @@ class _Header extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.05,
                   fontSize: 18,
+                  shadows: [
+                    Shadow(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 8),
@@ -405,8 +399,15 @@ class _Header extends StatelessWidget {
                 width: 40,
                 height: 2,
                 decoration: BoxDecoration(
-                  color: const Color(0x803B82F6),
+                  color: const Color(0xB33B82F6),
                   borderRadius: BorderRadius.circular(4),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0x663B82F6),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 8),
@@ -508,6 +509,16 @@ class _LoginForm extends StatelessWidget {
           label: busy ? l10n.submitLoading : l10n.submit,
           onPressed: busy ? null : onSubmit,
         ),
+        const SizedBox(height: 16),
+        Text(
+          l10n.copyright,
+          textAlign: TextAlign.center,
+          style: theme.labelSmall?.copyWith(
+            color: Colors.white.withValues(alpha: 0.32),
+            fontSize: 9.5,
+            letterSpacing: 0.04,
+          ),
+        ),
       ],
     );
   }
@@ -590,6 +601,16 @@ class _ForgotForm extends StatelessWidget {
           label: busy ? l10n.forgotSubmitLoading : l10n.forgotSubmit,
           onPressed: busy ? null : onSubmit,
         ),
+        const SizedBox(height: 16),
+        Text(
+          l10n.copyright,
+          textAlign: TextAlign.center,
+          style: theme.labelSmall?.copyWith(
+            color: Colors.white.withValues(alpha: 0.32),
+            fontSize: 9.5,
+            letterSpacing: 0.04,
+          ),
+        ),
       ],
     );
   }
@@ -618,7 +639,18 @@ class _GlassField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: TextField(
       controller: controller,
       obscureText: obscure,
       enabled: enabled,
@@ -630,7 +662,7 @@ class _GlassField extends StatelessWidget {
         isDense: true,
         prefixIcon: Padding(
           padding: const EdgeInsets.only(left: 14, right: 8),
-          child: Icon(icon, size: 18, color: Colors.white.withValues(alpha: 0.38)),
+          child: Icon(icon, size: 18, color: Colors.white.withValues(alpha: 0.5)),
         ),
         prefixIconConstraints: const BoxConstraints(minWidth: 44, minHeight: 44),
         hintText: hint,
@@ -639,21 +671,22 @@ class _GlassField extends StatelessWidget {
           fontSize: 13.5,
         ),
         filled: true,
-        fillColor: const Color(0x80151F32),
-        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+        fillColor: Colors.black.withValues(alpha: 0.22),
+        contentPadding: const EdgeInsets.symmetric(vertical: 15, horizontal: 16),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.32)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24),
-          borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 1.2),
+          borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 1.8),
         ),
         disabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24),
           borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
         ),
       ),
+    ),
     );
   }
 }
@@ -676,19 +709,21 @@ class _GradientButton extends StatelessWidget {
       opacity: disabled ? 0.55 : 1,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF2563EB), Color(0xFF1E40AF)],
-            begin: Alignment(-0.35, 0),
-            end: Alignment(1, 0.2),
-          ),
+          color: const Color(0xFF2563EB),
           borderRadius: BorderRadius.circular(24),
           boxShadow: disabled
               ? null
               : [
                   BoxShadow(
-                    color: const Color(0x592563EB),
-                    blurRadius: 14,
-                    offset: const Offset(0, 4),
+                    color: const Color(0x802563EB),
+                    blurRadius: 22,
+                    spreadRadius: -2,
+                    offset: const Offset(0, 8),
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
                   ),
                 ],
         ),
@@ -698,14 +733,15 @@ class _GradientButton extends StatelessWidget {
             onTap: onPressed,
             borderRadius: BorderRadius.circular(24),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 13),
+              padding: const EdgeInsets.symmetric(vertical: 14),
               child: Center(
                 child: Text(
                   label,
                   style: theme.labelLarge?.copyWith(
                     color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.18,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.22,
+                    fontSize: 13.5,
                   ),
                 ),
               ),
@@ -713,46 +749,6 @@ class _GradientButton extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _PortalLine extends StatelessWidget {
-  const _PortalLine({required this.l10n, required this.theme});
-
-  final AppLocalizations l10n;
-  final TextTheme theme;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        Container(
-          height: 1,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Colors.transparent,
-                Colors.white.withValues(alpha: 0.15),
-                Colors.transparent,
-              ],
-            ),
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          color: const Color(0x59141C28),
-          child: Text(
-            l10n.portalLabel,
-            style: theme.labelSmall?.copyWith(
-              color: Colors.white.withValues(alpha: 0.38),
-              letterSpacing: 0.14,
-              fontSize: 9,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

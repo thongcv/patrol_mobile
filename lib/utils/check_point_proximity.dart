@@ -138,6 +138,12 @@ class CheckPointProximitySnapshot {
 /// Within this distance (m), north/east/altitude hints read as on-target.
 const double kCheckPointOnTargetThresholdM = 0.05;
 
+/// Formats distance (m) for UI and TTS — one decimal, no rounding to integer.
+String formatPatrolDistanceM(double absM) {
+  if (absM < kCheckPointOnTargetThresholdM) return '0';
+  return absM.toStringAsFixed(1);
+}
+
 /// Move direction toward checkpoint (UI maps to localized labels).
 enum CheckPointMoveDirection {
   onTarget,
@@ -183,7 +189,28 @@ double checkPointDisplayDistanceM(CheckPointProximitySnapshot snapshot) {
   return snapshot.horizontalM;
 }
 
+/// Remaining distance (m) after subtracting [allowedRadiusM] from a scalar delta.
+double navigationRemainingM(double absDeltaM, double allowedRadiusM) {
+  final remaining = absDeltaM - allowedRadiusM;
+  return remaining > 0 ? remaining : 0;
+}
+
+CheckPointMoveDirection _navigationAxisMove(
+  double signedDeltaM,
+  double allowedRadiusM,
+  CheckPointMoveDirection Function(double) axisMove,
+) {
+  final remaining = navigationRemainingM(signedDeltaM.abs(), allowedRadiusM);
+  if (remaining < kCheckPointOnTargetThresholdM) {
+    return CheckPointMoveDirection.onTarget;
+  }
+  return axisMove(signedDeltaM);
+}
+
 /// Axis deltas and move directions derived from [CheckPointProximitySnapshot].
+///
+/// Distances are measured to the edge of [CheckPointProximitySnapshot.allowedRadiusM],
+/// not the checkpoint center.
 class CheckPointProximityNavigationHints {
   const CheckPointProximityNavigationHints({
     required this.northAbsDeltaM,
@@ -206,22 +233,43 @@ class CheckPointProximityNavigationHints {
   factory CheckPointProximityNavigationHints.fromSnapshot(
     CheckPointProximitySnapshot snapshot,
   ) {
+    final radius = snapshot.allowedRadiusM;
+    final horizontalM = snapshot.horizontalM;
+
+    var signedNorthM = snapshot.signedNorthToCheckpointM;
+    var signedEastM = snapshot.signedEastToCheckpointM;
+    if (horizontalM > radius && horizontalM.isFinite) {
+      final factor = (horizontalM - radius) / horizontalM;
+      signedNorthM *= factor;
+      signedEastM *= factor;
+    } else {
+      signedNorthM = 0;
+      signedEastM = 0;
+    }
+
     final altDelta = snapshot.signedAltitudeDeltaM;
     CheckPointMoveDirection? altitudeMove;
     double? altitudeAbsDeltaM;
     if (snapshot.checkpointAltitude != null &&
         altDelta != null &&
         altDelta.isFinite) {
-      altitudeAbsDeltaM = altDelta.abs();
-      altitudeMove = checkPointAltitudeMove(altDelta);
+      altitudeAbsDeltaM = navigationRemainingM(altDelta.abs(), radius);
+      altitudeMove = _navigationAxisMove(
+        altDelta,
+        radius,
+        checkPointAltitudeMove,
+      );
     }
 
     return CheckPointProximityNavigationHints(
-      northAbsDeltaM: snapshot.signedNorthToCheckpointM.abs(),
-      northMove: checkPointNorthSouthMove(snapshot.signedNorthToCheckpointM),
-      eastAbsDeltaM: snapshot.signedEastToCheckpointM.abs(),
-      eastMove: checkPointEastWestMove(snapshot.signedEastToCheckpointM),
-      horizontalDistanceM: checkPointDisplayDistanceM(snapshot),
+      northAbsDeltaM: signedNorthM.abs(),
+      northMove: checkPointNorthSouthMove(signedNorthM),
+      eastAbsDeltaM: signedEastM.abs(),
+      eastMove: checkPointEastWestMove(signedEastM),
+      horizontalDistanceM: navigationRemainingM(
+        checkPointDisplayDistanceM(snapshot),
+        radius,
+      ),
       altitudeAbsDeltaM: altitudeAbsDeltaM,
       altitudeMove: altitudeMove,
     );

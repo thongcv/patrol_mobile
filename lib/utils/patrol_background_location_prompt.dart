@@ -30,13 +30,21 @@ Future<void> showPatrolBackgroundLocationPromptIfNeeded(
           FilledButton(
             onPressed: () async {
               Navigator.of(dialogContext).pop();
-              await ensurePatrolBackgroundLocationReady();
-              PatrolBackgroundLocationReadiness.markReady();
-              unawaited(PatrolRealtimeTrackCoordinator.refreshTracking());
-              if (!context.mounted) return;
-              if (await patrolNeedsBackgroundLocationUpgrade()) {
+              var permission = await Geolocator.checkPermission();
+              if (permission == LocationPermission.whileInUse ||
+                  permission == LocationPermission.deniedForever) {
                 await Geolocator.openAppSettings();
+              } else {
+                await ensurePatrolBackgroundLocationReady();
+                permission = await Geolocator.checkPermission();
+                if (permission == LocationPermission.whileInUse) {
+                  await Geolocator.openAppSettings();
+                }
               }
+              if (!await patrolNeedsBackgroundLocationUpgrade()) {
+                PatrolBackgroundLocationReadiness.markReady();
+              }
+              unawaited(PatrolRealtimeTrackCoordinator.refreshTracking());
             },
             child: Text(l10n.patrolBackgroundLocationGrantAlways),
           ),

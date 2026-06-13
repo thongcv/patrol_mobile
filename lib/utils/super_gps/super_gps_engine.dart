@@ -333,10 +333,20 @@ class SuperGpsEngine {
           : _oneShotBestAccuracyM,
       speedMps: location.speed >= 0 ? location.speed : 0,
       timestampMs: location.timestamp.millisecondsSinceEpoch,
+      altitudeM: location.altitude.isFinite ? location.altitude : null,
+      altitudeAccuracyM:
+          location.altitudeAccuracy.isFinite && location.altitudeAccuracy > 0
+          ? location.altitudeAccuracy
+          : null,
     );
 
     return SuperGpsEvent(
-      position: _filteredPosition(location, filtered.lat, filtered.lng),
+      position: _filteredPosition(
+        location,
+        filtered.lat,
+        filtered.lng,
+        filtered.altitude,
+      ),
       barometricAltitude:
           includeBarometer ? _barometer.latestAltitudeM : null,
       barometerHardwareSupported: _barometer.hasHardwareSupport,
@@ -347,13 +357,14 @@ class SuperGpsEngine {
     Position raw,
     double lat,
     double lng,
+    double? filteredAltitudeM,
   ) {
     return Position(
       latitude: lat,
       longitude: lng,
       timestamp: raw.timestamp,
       accuracy: raw.accuracy,
-      altitude: raw.altitude,
+      altitude: filteredAltitudeM ?? raw.altitude,
       altitudeAccuracy: raw.altitudeAccuracy,
       heading: raw.heading,
       headingAccuracy: raw.headingAccuracy,

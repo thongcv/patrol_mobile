@@ -91,6 +91,7 @@ flutter:
     - assets/images/bg-login.png
     - assets/images/logo-transparent.png
     - assets/images/ic_notification_logo.png
+    - google_fonts/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

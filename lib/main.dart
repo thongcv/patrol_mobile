@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'l10n/app_localizations.dart';
 import 'firebase_options.dart';
 import 'navigation/patrol_session.dart';
@@ -17,27 +18,57 @@ import 'background/patrol_background_service.dart';
 import 'services/patrol_realtime_track_coordinator.dart';
 import 'services/patrol_startup_coordinator.dart';
 
+const Duration _kMainBootstrapTimeout = Duration(seconds: 5);
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Avoid blocking the first Flutter frame on fonts.googleapis.com (offline / slow CDN).
+  GoogleFonts.config.allowRuntimeFetching = false;
+
+  unawaited(_bootstrapFirebaseAndMessaging());
+
+  Locale initialLocale = AppLocaleStore.defaultLocale;
   try {
-    await _initializeFirebase();
-    if (Firebase.apps.isNotEmpty) {
-      // Do not register [FirebaseMessaging.onBackgroundMessage] unless you handle
-      // data-only pushes in a top-level handler. Registration spins a second Flutter
-      // engine on Android; [GeneratedPluginRegistrant] then loads
-      // flutter_background_service_android (main-isolate only) and logs duplicate
-      // isolate warnings on hot restart while FGS is running.
-      FirebaseMessaging.instance.onTokenRefresh.listen(
-        AccountSessionStore.instance.cacheDevicePushToken,
-      );
-      unawaited(_setupFirebaseMessaging());
-    }
+    initialLocale = await AppLocaleStore.readLocale().timeout(
+      _kMainBootstrapTimeout,
+      onTimeout: () => AppLocaleStore.defaultLocale,
+    );
   } catch (_) {
+    //
   }
-  await PatrolDio.ensureReady();
-  await AccountSessionStore.instance.loadFromPrefs();
-  final initialLocale = await AppLocaleStore.readLocale();
+
+  try {
+    await PatrolDio.ensureReady().timeout(_kMainBootstrapTimeout);
+  } on TimeoutException {
+    //
+  } catch (_) {
+    //
+  }
+
+  try {
+    await AccountSessionStore.instance.loadFromPrefs().timeout(
+      _kMainBootstrapTimeout,
+    );
+  } on TimeoutException {
+    //
+  } catch (_) {
+    //
+  }
+
   runApp(PatrolMobileApp(initialLocale: initialLocale));
+}
+
+Future<void> _bootstrapFirebaseAndMessaging() async {
+  try {
+    await _initializeFirebase().timeout(_kMainBootstrapTimeout);
+    if (Firebase.apps.isEmpty) return;
+    FirebaseMessaging.instance.onTokenRefresh.listen(
+      AccountSessionStore.instance.cacheDevicePushToken,
+    );
+    unawaited(_setupFirebaseMessaging());
+  } catch (_) {
+    //
+  }
 }
 
 Future<void> _initializeFirebase() async {

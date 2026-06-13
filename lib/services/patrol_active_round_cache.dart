@@ -113,6 +113,32 @@ abstract final class PatrolActiveRoundCache {
     return true;
   }
 
+  static Future<void> clearNextRoundConfirmHandled({
+    SharedPreferences? prefs,
+  }) async {
+    final p = prefs ?? await _prefs();
+    await p.remove(StorageKeys.patrolTrackNextRoundConfirmHandledAtMs);
+  }
+
+  /// Written when next-round confirm handler finishes (FGS isolate or main fallback).
+  static Future<void> signalNextRoundConfirmHandled() async {
+    final prefs = await _prefs();
+    await prefs.setInt(
+      StorageKeys.patrolTrackNextRoundConfirmHandledAtMs,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  /// Returns `true` once when confirm handler finished (clears the key).
+  static Future<bool> takeNextRoundConfirmHandled() async {
+    final prefs = await _prefs(reload: true);
+    final ms =
+        prefs.getInt(StorageKeys.patrolTrackNextRoundConfirmHandledAtMs) ?? 0;
+    if (ms == 0) return false;
+    await prefs.remove(StorageKeys.patrolTrackNextRoundConfirmHandledAtMs);
+    return true;
+  }
+
   static Future<void> signalCancelNextRoundAutoScan() async {
     final prefs = await _prefs();
     await prefs.setInt(
@@ -143,6 +169,7 @@ abstract final class PatrolActiveRoundCache {
   static Future<void> setAwaitingNextRoundAutoScanConfirm(bool awaiting) async {
     final prefs = await _prefs();
     if (awaiting) {
+      await clearNextRoundConfirmHandled(prefs: prefs);
       await prefs.setBool(
         StorageKeys.patrolTrackAwaitingNextRoundAutoScanConfirm,
         true,

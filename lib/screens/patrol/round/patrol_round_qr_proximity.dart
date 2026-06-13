@@ -23,6 +23,7 @@ _QrScanProximityStatus _qrScanProximityStatus({
     );
   }
 
+  final nav = CheckPointProximityNavigationHints.fromSnapshot(snapshot);
   final radius = snapshot.allowedRadiusM.toStringAsFixed(0);
 
   switch (proximity.issue) {
@@ -34,14 +35,17 @@ _QrScanProximityStatus _qrScanProximityStatus({
       );
     case CheckPointProximityIssue.baroAltitudeOutOfRange:
     case CheckPointProximityIssue.gpsAltitudeOutOfRange:
-      final dist = proximity.distanceM?.toStringAsFixed(0) ?? '—';
+      final dist = nav.altitudeAbsDeltaM != null
+          ? formatPatrolDistanceM(nav.altitudeAbsDeltaM!)
+          : proximity.distanceM != null
+              ? formatPatrolDistanceM(proximity.distanceM!)
+              : '—';
       return _QrScanProximityStatus(
         headline: l10n.patrolRoundQrAltitudeOutOfRange(dist, radius),
         snapshot: snapshot,
       );
     case CheckPointProximityIssue.horizontalOutOfRange:
-      final dist = (snapshot.slantRangeM ?? snapshot.horizontalM)
-          .toStringAsFixed(0);
+      final dist = formatPatrolDistanceM(nav.horizontalDistanceM);
       return _QrScanProximityStatus(
         headline: l10n.patrolRoundQrOutOfRange(dist, radius),
         snapshot: snapshot,
@@ -56,8 +60,6 @@ _QrScanProximityStatus _qrScanProximityStatus({
 }
 
 String _qrFmtCoord(double value) => value.toStringAsFixed(6);
-
-String _qrFmtDeltaM(double absM) => absM.toStringAsFixed(1);
 
 String _qrL10nMoveDirection(
   AppLocalizations l10n,
@@ -149,40 +151,41 @@ class _QrProximityDetailPanel extends StatelessWidget {
         lng: s.deviceLng,
         altitude: s.deviceAltitude,
       ),
-      l10n.patrolRoundQrDeltaNorth(
-        _qrFmtDeltaM(nav.northAbsDeltaM),
-        _qrL10nMoveDirection(l10n, nav.northMove),
-      ),
-      l10n.patrolRoundQrDeltaEast(
-        _qrFmtDeltaM(nav.eastAbsDeltaM),
-        _qrL10nMoveDirection(l10n, nav.eastMove),
-      ),
-      l10n.patrolRoundQrDeltaHorizontal(
-        _qrFmtDeltaM(nav.horizontalDistanceM),
-        radius,
-      ),
     ];
 
-    /*
-    final horizontalAcc = s.horizontalAccuracyM;
-    if (horizontalAcc != null) {
+    if (nav.northMove != CheckPointMoveDirection.onTarget) {
       lines.add(
-        l10n.patrolRoundQrGpsAccuracy(horizontalAcc.toStringAsFixed(0)),
+        l10n.patrolRoundQrDeltaNorth(
+          formatPatrolDistanceM(nav.northAbsDeltaM),
+          _qrL10nMoveDirection(l10n, nav.northMove),
+        ),
+      );
+    }
+    if (nav.eastMove != CheckPointMoveDirection.onTarget) {
+      lines.add(
+        l10n.patrolRoundQrDeltaEast(
+          formatPatrolDistanceM(nav.eastAbsDeltaM),
+          _qrL10nMoveDirection(l10n, nav.eastMove),
+        ),
+      );
+    }
+    if (nav.horizontalDistanceM >= kCheckPointOnTargetThresholdM) {
+      lines.add(
+        l10n.patrolRoundQrDeltaHorizontal(
+          formatPatrolDistanceM(nav.horizontalDistanceM),
+          radius,
+        ),
       );
     }
 
-    final gpsAltAcc = s.gpsAltitudeAccuracyM;
-    if (gpsAltAcc != null && !s.usesBaroAltitude) {
-      lines.add(
-        l10n.patrolRoundQrGpsAltitudeAccuracy(gpsAltAcc.toStringAsFixed(0)),
-      );
-    }
-    */
     final altDeltaM = nav.altitudeAbsDeltaM;
     final altMove = nav.altitudeMove;
-    if (altDeltaM != null && altMove != null) {
+    if (altMove != null &&
+        altMove != CheckPointMoveDirection.onTarget &&
+        altDeltaM != null &&
+        altDeltaM >= kCheckPointOnTargetThresholdM) {
       lines.add(
-        '${l10n.patrolRoundQrDeltaAltitude(_qrFmtDeltaM(altDeltaM), radius)} · ${_qrL10nMoveDirection(l10n, altMove)}',
+        '${l10n.patrolRoundQrDeltaAltitude(formatPatrolDistanceM(altDeltaM), radius)} · ${_qrL10nMoveDirection(l10n, altMove)}',
       );
     }
 

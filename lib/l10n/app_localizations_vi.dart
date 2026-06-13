@@ -110,6 +110,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get openAppSettings => 'Mở cài đặt ứng dụng';
 
   @override
+  String get openDndPolicySettings => 'Mở cài đặt Không làm phiền';
+
+  @override
   String get retry => 'Thử lại';
 
   @override
@@ -443,12 +446,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String patrolRoundQrOutOfRange(String distance, String radius) {
-    return 'Bạn đang cách điểm khoảng $distance m (cho phép $radius m). Hãy di chuyển đến gần vị trí điểm đã lưu.';
+    return 'Cần đi thêm khoảng $distance m để vào vùng (bán kính $radius m).';
   }
 
   @override
   String patrolRoundQrAltitudeOutOfRange(String distance, String radius) {
-    return 'Độ cao không khớp với điểm đã lưu (lệch $distance m, cho phép $radius m).';
+    return 'Độ cao cần chỉnh thêm $distance m (bán kính $radius m).';
   }
 
   @override
@@ -537,7 +540,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String patrolRoundQrDeltaHorizontal(String delta, String radius) {
-    return 'Cách vị trí mốc: $delta m (tối đa $radius m)';
+    return 'Cần đi thêm: $delta m (bán kính $radius m)';
   }
 
   @override
@@ -552,7 +555,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String patrolRoundQrDeltaAltitude(String delta, String radius) {
-    return 'Lệch độ cao: $delta m (tối đa $radius m)';
+    return 'Độ cao cần chỉnh thêm: $delta m (bán kính $radius m)';
   }
 
   @override
@@ -653,6 +656,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get patrolPointGpsError => 'Không đọc được vị trí.';
+
+  @override
+  String get patrolPointGpsMocked =>
+      'Phát hiện GPS giả. Tắt ứng dụng giả lập vị trí để gán tọa độ.';
 
   @override
   String patrolPointCountSummary(int count) {
