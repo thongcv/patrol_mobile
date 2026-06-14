@@ -53,11 +53,13 @@ abstract final class StorageKeys {
   static const patrolTrackActiveRoundSnapshot = 'patrol_track_active_round_snapshot';
   /// Monotonic counter bumped on each [PatrolActiveRoundCache] write — FGS dedupes reload.
   static const patrolTrackActiveRoundRevision = 'patrol_track_active_round_revision';
+  /// Cached `round.expectedStartTime` / `expectedEndTime` for emit gating (FGS + main).
+  static const patrolTrackShiftWindow = 'patrol_track_shift_window';
 
   /// UI locale `languageCode` (`vi` / `en`) — chosen on login, read in background isolate.
   static const appLocaleLanguageCode = 'patrol_app_locale_language_code';
 
-  /// Login `data.config`: `{ "background", "minMoveM", "socket", "backgroundAutoScan" }`.
+  /// Login `data.config`: `{ "background", "minMoveM", "socket", "backgroundAutoScan", "trackByShiftWindow" }`.
   static const patrolTrackingConfig = 'patrol_tracking_config';
 
   /// Epoch ms — [LocationGateScreen] / ensure background location passed (all isolates).

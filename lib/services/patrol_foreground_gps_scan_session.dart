@@ -157,8 +157,9 @@ class PatrolForegroundGpsScanSession {
   }
 }
 
-/// Live GPS subtitle on patrol screens — FGS relay when background owns GPS,
-/// else [DeviceLocationWatch] (same stack as [PatrolForegroundGpsScanSession]).
+/// Live GPS on the patrol **point** screen — always uses main-isolate
+/// [DeviceLocationWatch], independent of FGS GPS hub / shift window.
+/// Stops when the screen is disposed.
 class PatrolForegroundGpsLiveTracker extends ChangeNotifier {
   PatrolForegroundGpsLiveTracker._(
     this._barometerSupported, {
@@ -168,7 +169,7 @@ class PatrolForegroundGpsLiveTracker extends ChangeNotifier {
   final bool _barometerSupported;
   final bool Function() _isActive;
 
-  PatrolForegroundGpsScanSession? _session;
+  DeviceLocationWatch? _watch;
   var _generation = 0;
 
   bool busy = false;
@@ -215,22 +216,22 @@ class PatrolForegroundGpsLiveTracker extends ChangeNotifier {
   Future<void> start({bool userInitiated = false}) async {
     final generation = ++_generation;
 
-    await _session?.stop();
-    _session = null;
+    await _watch?.stop();
+    _watch = null;
 
     if (!_isActive() || generation != _generation) return;
     busy = true;
     if (userInitiated) messageKey = null;
     _notify();
 
-    final session = await PatrolForegroundGpsScanSession.create();
+    final watch = await DeviceLocationWatch.create();
     if (!_isActive() || generation != _generation) {
-      await session.stop();
+      await watch.stop();
       return;
     }
-    _session = session;
+    _watch = watch;
 
-    final error = await session.start(
+    final error = await watch.start(
       enableBarometer: _barometerSupported,
       onSample: (sample) {
         if (!_isActive() || generation != _generation) return false;
@@ -257,9 +258,9 @@ class PatrolForegroundGpsLiveTracker extends ChangeNotifier {
   @override
   void dispose() {
     ++_generation;
-    final session = _session;
-    _session = null;
-    if (session != null) unawaited(session.stop());
+    final watch = _watch;
+    _watch = null;
+    if (watch != null) unawaited(watch.stop());
     super.dispose();
   }
 

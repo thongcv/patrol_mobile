@@ -12,6 +12,7 @@ class PatrolTrackingConfig {
     this.autoScanMatchOrder = 'sequence',
     this.updateIntervalMs = 1000,
     this.minUpdateIntervalMs = 800,
+    this.trackByShiftWindow = false,
   });
 
   static const PatrolTrackingConfig defaults = PatrolTrackingConfig();
@@ -34,6 +35,11 @@ class PatrolTrackingConfig {
   /// Minimum interval between GPS updates (native layer).
   final int minUpdateIntervalMs;
 
+  /// When `false` (default), emit while session tracking is on and an active
+  /// round is cached. When `true`, also gate by round `expectedStartTime` /
+  /// `expectedEndTime`.
+  final bool trackByShiftWindow;
+
   /// Parsed [autoScanMatchOrder] for auto-scan proximity matching.
   CheckPointMatchOrder get checkPointMatchOrder =>
       checkPointMatchOrderFromConfig(autoScanMatchOrder);
@@ -45,8 +51,10 @@ class PatrolTrackingConfig {
     final socket = jsonBool(source['socket']) ?? true;
     final backgroundAutoScan =
         jsonBool(source['backgroundAutoScan']) ?? false;
-    final autoScanMatchOrder =
-        _readAutoScanMatchOrder(source) ?? defaults.autoScanMatchOrder;
+    final autoScanMatchOrder = _autoScanMatchOrderFromJson(
+          source['autoScanMatchOrder'],
+        ) ??
+        defaults.autoScanMatchOrder;
     final rawMin = source['minMoveM'];
     return PatrolTrackingConfig(
       background: background,
@@ -58,6 +66,8 @@ class PatrolTrackingConfig {
           jsonInt(source['updateIntervalMs']) ?? defaults.updateIntervalMs,
       minUpdateIntervalMs: jsonInt(source['minUpdateIntervalMs']) ??
           defaults.minUpdateIntervalMs,
+      trackByShiftWindow:
+          jsonBool(source['trackByShiftWindow']) ?? defaults.trackByShiftWindow,
     );
   }
 
@@ -69,6 +79,7 @@ class PatrolTrackingConfig {
         'autoScanMatchOrder': autoScanMatchOrder,
         'updateIntervalMs': updateIntervalMs,
         'minUpdateIntervalMs': minUpdateIntervalMs,
+        'trackByShiftWindow': trackByShiftWindow,
       };
 
   factory PatrolTrackingConfig.fromJson(Map<String, dynamic> json) {
@@ -94,8 +105,9 @@ class PatrolTrackingConfig {
           ? (jsonBool(source['backgroundAutoScan']) ??
               current.backgroundAutoScan)
           : current.backgroundAutoScan,
-      autoScanMatchOrder: _mergeFrameHasAutoScanMatchOrder(source)
-          ? (_readAutoScanMatchOrder(source) ?? current.autoScanMatchOrder)
+      autoScanMatchOrder: source.containsKey('autoScanMatchOrder')
+          ? (_autoScanMatchOrderFromJson(source['autoScanMatchOrder']) ??
+              current.autoScanMatchOrder)
           : current.autoScanMatchOrder,
       updateIntervalMs: source.containsKey('updateIntervalMs')
           ? (jsonInt(source['updateIntervalMs']) ?? current.updateIntervalMs)
@@ -104,6 +116,10 @@ class PatrolTrackingConfig {
           ? (jsonInt(source['minUpdateIntervalMs']) ??
               current.minUpdateIntervalMs)
           : current.minUpdateIntervalMs,
+      trackByShiftWindow: source.containsKey('trackByShiftWindow')
+          ? (jsonBool(source['trackByShiftWindow']) ??
+              current.trackByShiftWindow)
+          : current.trackByShiftWindow,
     );
   }
 
@@ -112,9 +128,10 @@ class PatrolTrackingConfig {
         source.containsKey('minMoveM') ||
         source.containsKey('socket') ||
         source.containsKey('backgroundAutoScan') ||
-        _mergeFrameHasAutoScanMatchOrder(source) ||
+        source.containsKey('autoScanMatchOrder') ||
         source.containsKey('updateIntervalMs') ||
-        source.containsKey('minUpdateIntervalMs');
+        source.containsKey('minUpdateIntervalMs') ||
+        source.containsKey('trackByShiftWindow');
   }
 
   /// Login `data` from API: prefers sibling `config` next to `accessToken`.
@@ -132,28 +149,10 @@ class PatrolTrackingConfig {
         m.containsKey('minMoveM') ||
         m.containsKey('socket') ||
         m.containsKey('backgroundAutoScan') ||
-        _mergeFrameHasAutoScanMatchOrder(m) ||
+        m.containsKey('autoScanMatchOrder') ||
         m.containsKey('updateIntervalMs') ||
-        m.containsKey('minUpdateIntervalMs');
-  }
-
-  static bool _mergeFrameHasAutoScanMatchOrder(Map<String, dynamic> source) {
-    return source.containsKey('autoScanMatchOrder') ||
-        source.containsKey('matchOrder') ||
-        source.containsKey('auto_scan_match_order');
-  }
-
-  static String? _readAutoScanMatchOrder(Map<String, dynamic> source) {
-    for (final key in const [
-      'autoScanMatchOrder',
-      'matchOrder',
-      'auto_scan_match_order',
-    ]) {
-      if (!source.containsKey(key)) continue;
-      final parsed = _autoScanMatchOrderFromJson(source[key]);
-      if (parsed != null) return parsed;
-    }
-    return null;
+        m.containsKey('minUpdateIntervalMs') ||
+        m.containsKey('trackByShiftWindow');
   }
 
   static double? _minMoveMFromJson(dynamic raw) {
@@ -165,19 +164,10 @@ class PatrolTrackingConfig {
 
   static String? _autoScanMatchOrderFromJson(dynamic raw) {
     if (raw == null) return null;
-    if (raw is num) {
-      if (raw == 1) return 'nearest';
-      if (raw == 0) return 'sequence';
-      return null;
-    }
     final normalized = jsonStr(raw)?.toLowerCase();
     if (normalized == null) return null;
     if (normalized == 'nearest') return 'nearest';
-    if (normalized == 'sequence' ||
-        normalized == 'sequenceorder' ||
-        normalized == 'sequence_order') {
-      return 'sequence';
-    }
+    if (normalized == 'sequence') return 'sequence';
     return null;
   }
 
@@ -191,7 +181,8 @@ class PatrolTrackingConfig {
             backgroundAutoScan == other.backgroundAutoScan &&
             autoScanMatchOrder == other.autoScanMatchOrder &&
             updateIntervalMs == other.updateIntervalMs &&
-            minUpdateIntervalMs == other.minUpdateIntervalMs;
+            minUpdateIntervalMs == other.minUpdateIntervalMs &&
+            trackByShiftWindow == other.trackByShiftWindow;
   }
 
   @override
@@ -203,5 +194,6 @@ class PatrolTrackingConfig {
         autoScanMatchOrder,
         updateIntervalMs,
         minUpdateIntervalMs,
+        trackByShiftWindow,
       );
 }

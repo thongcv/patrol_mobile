@@ -1,4 +1,7 @@
 /// Active patrol round (`round`).
+///
+/// [expectedStartTime] / [expectedEndTime] are UTC ISO instants from API,
+/// e.g. `2026-06-13T10:50:00Z`.
 class PatrolRound {
   PatrolRound({
     required this.id,

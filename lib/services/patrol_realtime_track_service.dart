@@ -34,6 +34,8 @@ class PatrolRealtimeTrackService {
 
   Timer? _connectivityReconnectDebounce;
 
+  Timer? _shiftBoundaryTimer;
+
   Future<void>? _startSessionChain;
 
   bool _sessionTrackingActive = false;
@@ -215,6 +217,8 @@ class PatrolRealtimeTrackService {
     _startSessionChain = null;
     _lastKnownUiPosition = null;
 
+    _cancelShiftBoundaryTimer();
+
     await _gpsSub?.cancel();
 
     _gpsSub = null;
@@ -264,8 +268,37 @@ class PatrolRealtimeTrackService {
   }
 
   Future<void> _cancelMainGps() async {
+    _cancelShiftBoundaryTimer();
     await _gpsSub?.cancel();
     _gpsSub = null;
+  }
+
+  void _cancelShiftBoundaryTimer() {
+    _shiftBoundaryTimer?.cancel();
+    _shiftBoundaryTimer = null;
+  }
+
+  Future<void> _scheduleForegroundShiftBoundaryRefresh() async {
+    _cancelShiftBoundaryTimer();
+    if (!_sessionTrackingActive) return;
+    if (_backgroundEnabled) return;
+    if (!await PatrolTrackingConfigStore.trackByShiftWindow()) return;
+
+    final window = await PatrolActiveRoundCache.readShiftWindow(reload: false);
+    if (window == null) return;
+
+    final now = DateTime.now();
+    final next = window.nextBoundaryAfter(now);
+    if (next == null) return;
+
+    var delay = next.difference(now);
+    if (delay.isNegative) delay = Duration.zero;
+    delay += const Duration(seconds: 1);
+
+    _shiftBoundaryTimer = Timer(delay, () {
+      if (!_sessionTrackingActive || _backgroundEnabled) return;
+      unawaited(_startForegroundGpsFanOut());
+    });
   }
 
   /// Returns `true` when GPS runs in FGS (foreground subscription cancelled).
@@ -359,10 +392,16 @@ class PatrolRealtimeTrackService {
 
   Future<void> _startForegroundGpsFanOut() async {
     await _gpsSub?.cancel();
+    _gpsSub = null;
 
     if (!_sessionTrackingActive) return;
 
     if (!SuperGpsService.isSupported) return;
+
+    if (!await PatrolActiveRoundCache.isTrackingWithinShiftWindow()) {
+      await _scheduleForegroundShiftBoundaryRefresh();
+      return;
+    }
 
     final config = await PatrolTrackingConfigStore.load();
     final enableBarometer =
@@ -379,6 +418,8 @@ class PatrolRealtimeTrackService {
         unawaited(_handlePosition(position));
       },
     );
+
+    await _scheduleForegroundShiftBoundaryRefresh();
   }
 
   Future<void> handlePositionFromBackground(Position position) async {
@@ -389,6 +430,7 @@ class PatrolRealtimeTrackService {
 
   Future<void> _handlePosition(Position position) async {
     if (!_sessionTrackingActive) return;
+    if (!await PatrolActiveRoundCache.isTrackingWithinShiftWindow()) return;
 
     _publishUiPosition(position);
     await _dispatchPosition(position);
@@ -448,6 +490,8 @@ class PatrolRealtimeTrackService {
     }
 
     if (!_socketEnabled) return;
+
+    if (!await PatrolActiveRoundCache.isTrackingWithinShiftWindow()) return;
 
     final payload = PatrolLocationTrackPayload.fromPosition(position: position);
 

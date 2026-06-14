@@ -95,6 +95,10 @@ class PatrolBackgroundAutoScan {
     if (!await PatrolActiveRoundCache.isBackgroundAutoScanArmed()) {
       return _ScanGate.blockedHard;
     }
+    if (await PatrolTrackingConfigStore.trackByShiftWindow() &&
+        !await PatrolActiveRoundCache.isTrackingWithinShiftWindow()) {
+      return _ScanGate.blockedHard;
+    }
     if (await PatrolActiveRoundCache.isForegroundScanBusy()) {
       return _ScanGate.blockedSoft;
     }

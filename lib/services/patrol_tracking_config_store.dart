@@ -51,6 +51,9 @@ abstract final class PatrolTrackingConfigStore {
   static Future<bool> backgroundAutoScanEnabled() async =>
       (await load()).backgroundAutoScan;
 
+  static Future<bool> trackByShiftWindow() async =>
+      (await load()).trackByShiftWindow;
+
   static Future<String> autoScanMatchOrder() async =>
       (await load()).autoScanMatchOrder;
 

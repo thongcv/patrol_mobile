@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/storage_keys.dart';
 import '../models/active_patrol_round.dart';
 import '../models/check_point.dart';
+import '../models/patrol_round.dart';
+import '../utils/patrol_shift_window.dart';
 import 'patrol_tracking_config_store.dart';
 
 /// Active round snapshot + FGS coordination prefs (cross-isolate).
@@ -32,6 +34,83 @@ abstract final class PatrolActiveRoundCache {
   static Future<void> clearTrackEmitEnabled() async {
     final prefs = await _prefs();
     await prefs.remove(StorageKeys.patrolTrackEmitEnabled);
+  }
+
+  static PatrolShiftWindowSnapshot? _memoryShiftWindow;
+  static var _memoryShiftWindowLoaded = false;
+
+  static void invalidateTrackingEmitGateCache() {
+    _memoryShiftWindowLoaded = false;
+    _memoryShiftWindow = null;
+  }
+
+  static Future<PatrolShiftWindowSnapshot?> readShiftWindow({
+    bool reload = true,
+  }) async {
+    if (!reload && _memoryShiftWindowLoaded) return _memoryShiftWindow;
+
+    final prefs = await _prefs(reload: reload);
+    final raw = prefs.getString(StorageKeys.patrolTrackShiftWindow);
+    PatrolShiftWindowSnapshot? parsed;
+    if (raw == null || raw.isEmpty) {
+      parsed = null;
+    } else {
+      try {
+        final map = jsonDecode(raw);
+        if (map is Map<String, dynamic>) {
+          parsed = PatrolShiftWindowSnapshot.fromJson(map);
+        }
+      } catch (_) {
+        parsed = null;
+      }
+    }
+    _memoryShiftWindow = parsed;
+    _memoryShiftWindowLoaded = true;
+    return parsed;
+  }
+
+  /// Reload shift-window prefs (FGS refresh / after round persist on this isolate).
+  static Future<void> refreshTrackingEmitGateCache() async {
+    invalidateTrackingEmitGateCache();
+    await readShiftWindow(reload: true);
+  }
+
+  /// `true` when STOMP location emit is allowed now.
+  ///
+  /// Requires cached active round (shift window from [save]). When
+  /// [PatrolTrackingConfig.trackByShiftWindow] is `true`, also requires current
+  /// time within `round.expectedStartTime` / `expectedEndTime`.
+  ///
+  static Future<bool> isTrackingWithinShiftWindow({
+    DateTime? now,
+    bool reload = false,
+  }) async {
+    final window = await readShiftWindow(reload: reload);
+    if (window == null) return false;
+
+    if (!await PatrolTrackingConfigStore.trackByShiftWindow()) {
+      return true;
+    }
+    return window.contains(now ?? DateTime.now());
+  }
+
+  static Future<void> _writeShiftWindow(PatrolRound round) async {
+    final prefs = await _prefs();
+    final snapshot = PatrolShiftWindowSnapshot.fromRound(
+      expectedStartTime: round.expectedStartTime,
+      expectedEndTime: round.expectedEndTime,
+    );
+    await prefs.setString(
+      StorageKeys.patrolTrackShiftWindow,
+      jsonEncode(snapshot.toJson()),
+    );
+    invalidateTrackingEmitGateCache();
+  }
+
+  static Future<void> _clearShiftWindow() async {
+    final prefs = await _prefs();
+    await prefs.remove(StorageKeys.patrolTrackShiftWindow);
+    invalidateTrackingEmitGateCache();
   }
 
   /// STOMP/bootstrap latch AND live `backgroundAutoScan` from tracking config.
@@ -352,6 +431,7 @@ abstract final class PatrolActiveRoundCache {
     if (active == null) {
       await prefs.remove(StorageKeys.patrolTrackActiveRoundSnapshot);
       await prefs.remove(StorageKeys.patrolTrackActiveRoundRevision);
+      await _clearShiftWindow();
       await setBackgroundAutoScanArmed(false);
       await setBackgroundAutoScanRunning(false);
       return;
@@ -364,6 +444,7 @@ abstract final class PatrolActiveRoundCache {
     final merged = preserveLocalVerified
         ? await preservingLocalVerified(active)
         : active;
+    await _writeShiftWindow(merged.round);
     final next = (
       roundId: merged.round.id,
       checkPoints: merged.checkPoints,

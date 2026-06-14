@@ -50,6 +50,8 @@ final class PatrolBackgroundRunner {
 
   Timer? _prefsPollTimer;
 
+  Timer? _shiftBoundaryTimer;
+
   /// Register invoke handlers before slow FGS / notification init (UI may invoke early).
 
   void prepare() {
@@ -412,6 +414,8 @@ final class PatrolBackgroundRunner {
   }) async {
     if (_shuttingDown) return;
 
+    await PatrolActiveRoundCache.refreshTrackingEmitGateCache();
+
     final awaitingConfirm =
         await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm();
 
@@ -444,6 +448,33 @@ final class PatrolBackgroundRunner {
     if (await PatrolTrackingConfigStore.socketEnabled()) {
       await PatrolTrackSocketClient.instance.connect();
     }
+
+    await _scheduleShiftBoundaryRefresh();
+  }
+
+  Future<void> _scheduleShiftBoundaryRefresh() async {
+    _shiftBoundaryTimer?.cancel();
+    _shiftBoundaryTimer = null;
+
+    if (_shuttingDown) return;
+    if (!await PatrolActiveRoundCache.isTrackEmitEnabled()) return;
+    if (!await PatrolTrackingConfigStore.trackByShiftWindow()) return;
+
+    final window = await PatrolActiveRoundCache.readShiftWindow(reload: false);
+    if (window == null) return;
+
+    final now = DateTime.now();
+    final next = window.nextBoundaryAfter(now);
+    if (next == null) return;
+
+    var delay = next.difference(now);
+    if (delay.isNegative) delay = Duration.zero;
+    delay += const Duration(seconds: 1);
+
+    _shiftBoundaryTimer = Timer(delay, () {
+      if (_shuttingDown) return;
+      unawaited(refreshTracking());
+    });
   }
 
   Future<void> shutdown() async {
@@ -457,6 +488,7 @@ final class PatrolBackgroundRunner {
     // Keep [awaiting] across FGS stop — user may still need to confirm from notification.
 
     _prefsPollTimer?.cancel();
+    _shiftBoundaryTimer?.cancel();
 
     for (final sub in _commandSubscriptions) {
       try {
