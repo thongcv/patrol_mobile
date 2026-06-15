@@ -42,6 +42,7 @@ abstract final class PatrolSession {
   }
 
   static void notifyAuthStored() {
+    _sessionExpiredHandled = false;
     if (!_authStored.isClosed) _authStored.add(null);
   }
 
@@ -51,12 +52,18 @@ abstract final class PatrolSession {
 
   static Future<void>? _endSessionInFlight;
 
+  /// Set after first 401/logout-expiry handling — blocks repeated navigation jitter
+  /// from parallel API 401s (Dio interceptor + screen coordinators).
+  static bool _sessionExpiredHandled = false;
+
   /// Invalid session (401/403): clears token and navigates to login.
   static Future<void> endSessionAndNavigateToLogin() async {
+    if (_sessionExpiredHandled) return;
     final inFlight = _endSessionInFlight;
     if (inFlight != null) {
       return inFlight;
     }
+    _sessionExpiredHandled = true;
     final future = _endSessionAndNavigateToLoginImpl();
     _endSessionInFlight = future;
     try {
@@ -76,18 +83,38 @@ abstract final class PatrolSession {
   static bool isUnauthorized(ApiFailure? failure) =>
       failure?.kind == ApiFailureKind.unauthorized;
 
+  static const String _loginRouteName = '/login';
+
+  static bool _loginNavigationQueued = false;
+
   /// Clears stack and navigates to [LoginScreen] (e.g. session expired).
   static void navigateToLoginReplaceAll() {
-    WidgetsBinding.instance.addPostFrameCallback((_) => _pushLoginRoute());
+    if (_loginNavigationQueued) return;
+    _loginNavigationQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loginNavigationQueued = false;
+      _pushLoginRouteIfNeeded();
+    });
   }
 
-  static void _pushLoginRoute() {
+  static bool _topRouteIsLogin(NavigatorState nav) {
+    var isLogin = false;
+    nav.popUntil((route) {
+      isLogin = route.settings.name == _loginRouteName;
+      return true;
+    });
+    return isLogin;
+  }
+
+  static void _pushLoginRouteIfNeeded() {
     final nav = _navigatorKey?.currentState;
     final locale = _currentLocale?.call();
     final onLoc = _onLocaleChanged;
     if (nav == null || locale == null || onLoc == null) return;
+    if (_topRouteIsLogin(nav)) return;
 
     final login = MaterialPageRoute<void>(
+      settings: const RouteSettings(name: _loginRouteName),
       builder: (ctx) => LoginScreen(
         locale: _currentLocale?.call() ?? Localizations.localeOf(ctx),
         onLocaleChanged: onLoc,
