@@ -22,6 +22,7 @@ import 'patrol_fgs_isolate_bridge.dart';
 /// |---|---|---|
 /// | Awaiting next-round STOMP confirm | detach (hard) | off |
 /// | Track emit off or background not armed | detach (hard) | off |
+/// | [trackByShiftWindow] | n/a for auto-scan; track emit uses [isTrackLocationEmitAllowed] |
 /// | [PatrolActiveRoundCache.isForegroundScanBusy] (round UI) | keep if was on | soft pause |
 /// | [_autoScanPaused] from `pauseAutoScan` invoke | keep if was on | soft pause |
 /// | All clear | attach | on |
@@ -93,10 +94,6 @@ class PatrolBackgroundAutoScan {
       return _ScanGate.blockedHard;
     }
     if (!await PatrolActiveRoundCache.isBackgroundAutoScanArmed()) {
-      return _ScanGate.blockedHard;
-    }
-    if (await PatrolTrackingConfigStore.trackByShiftWindow() &&
-        !await PatrolActiveRoundCache.isTrackingWithinShiftWindow()) {
       return _ScanGate.blockedHard;
     }
     if (await PatrolActiveRoundCache.isForegroundScanBusy()) {

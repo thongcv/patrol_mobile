@@ -5,8 +5,8 @@ import '../navigation/patrol_session.dart';
 import 'api_request_headers.dart';
 import 'patrol_cookie_jar.dart';
 
-/// Shared Dio: cookies carry auth; locale/OS/offset headers; any API 401 → login
-/// ([onResponse] — 401 is not a Dio error because validateStatus accepts status < 600).
+/// Shared Dio: cookies carry auth; locale/OS/offset headers; API 401/403 → login
+/// ([onResponse] — auth errors are not Dio errors because validateStatus accepts status < 600).
 /// Default response is deserialized JSON (`Map` / `List`).
 abstract final class PatrolDio {
   PatrolDio._();
@@ -109,9 +109,12 @@ class _PatrolInterceptors extends Interceptor {
     return options.uri.path.toLowerCase().contains('/accounts/login');
   }
 
-  Future<void> _endSessionOn401(RequestOptions options) async {
+  static bool _isUnauthorizedStatus(int? status) =>
+      status == 401 || status == 403;
+
+  Future<void> _endSessionIfUnauthorized(RequestOptions options) async {
     if (_isLoginRequest(options)) return;
-    await PatrolSession.endSessionAndNavigateToLogin();
+    await PatrolSession.handleUnauthorizedApiResponse();
   }
 
   DioException _sessionExpiredException({
@@ -131,8 +134,8 @@ class _PatrolInterceptors extends Interceptor {
     Response<dynamic> response,
     ResponseInterceptorHandler handler,
   ) async {
-    if (response.statusCode == 401) {
-      await _endSessionOn401(response.requestOptions);
+    if (_isUnauthorizedStatus(response.statusCode)) {
+      await _endSessionIfUnauthorized(response.requestOptions);
       if (!_isLoginRequest(response.requestOptions)) {
         return handler.reject(
           _sessionExpiredException(
@@ -147,8 +150,8 @@ class _PatrolInterceptors extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    if (err.response?.statusCode == 401) {
-      await _endSessionOn401(err.requestOptions);
+    if (_isUnauthorizedStatus(err.response?.statusCode)) {
+      await _endSessionIfUnauthorized(err.requestOptions);
       if (!_isLoginRequest(err.requestOptions)) {
         return handler.reject(
           _sessionExpiredException(

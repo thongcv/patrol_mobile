@@ -94,6 +94,21 @@ abstract final class PatrolActiveRoundCache {
     return window.contains(now ?? DateTime.now());
   }
 
+  /// STOMP / GPS track emit — shift window unless background auto-scan is armed
+  /// (user confirmed patrol for this round; treat as in-shift for location emit).
+  static Future<bool> isTrackLocationEmitAllowed({
+    DateTime? now,
+    bool reload = false,
+  }) async {
+    if (!await PatrolTrackingConfigStore.trackByShiftWindow()) {
+      return true;
+    }
+    if (await isBackgroundAutoScanArmed(reload: reload)) {
+      return true;
+    }
+    return isTrackingWithinShiftWindow(now: now, reload: reload);
+  }
+
   static Future<void> _writeShiftWindow(PatrolRound round) async {
     final prefs = await _prefs();
     final snapshot = PatrolShiftWindowSnapshot.fromRound(
@@ -309,6 +324,29 @@ abstract final class PatrolActiveRoundCache {
     );
   }
 
+  static Future<void> clearLastAutoScanConfirmedRoundId({
+    SharedPreferences? prefs,
+  }) async {
+    final p = prefs ?? await _prefs();
+    await p.remove(StorageKeys.patrolTrackLastAutoScanConfirmedRoundId);
+  }
+
+  /// Next-round auto-scan latch — round end / disarm. Keeps [lastAutoScanConfirmedRoundId]
+  /// so the next STOMP round change can detect `last != roundId`. Cleared on logout only.
+  static Future<void> clearNextRoundAutoScanSession({
+    SharedPreferences? prefs,
+  }) async {
+    final p = prefs ?? await _prefs();
+    await p.setBool(StorageKeys.patrolTrackBackgroundAutoScanEnabled, false);
+    await p.setBool(StorageKeys.patrolTrackBackgroundAutoScanRunning, false);
+    await p.remove(StorageKeys.patrolTrackAwaitingNextRoundAutoScanConfirm);
+    await p.remove(StorageKeys.patrolTrackConfirmNextRoundAutoScanAtMs);
+    await p.remove(StorageKeys.patrolTrackCancelNextRoundAutoScanAtMs);
+    await p.remove(StorageKeys.patrolTrackNextRoundConfirmHandledAtMs);
+    await clearNextRoundPromptOffer(prefs: p);
+    await p.setBool(StorageKeys.patrolTrackPendingFgsReloadAfterRound, false);
+  }
+
   /// Baselines first active round; on later round changes sets [awaiting] when config allows.
   static Future<bool> ensureAwaitingNextRoundIfRoundChanged(int? roundId) async {
     if (roundId == null || roundId <= 0) return false;
@@ -322,7 +360,9 @@ abstract final class PatrolActiveRoundCache {
     if (last == null) {
       // First active round for this session — baseline, not a "next round" transition.
       await setLastAutoScanConfirmedRoundId(roundId);
-      return false;
+      await setBackgroundAutoScanArmed(false);
+      await setAwaitingNextRoundAutoScanConfirm(true);
+      return true;
     }
     if (last != roundId) {
       // FGS is already auto-scanning — user accepted this round; do not disarm on UI open.
@@ -432,14 +472,12 @@ abstract final class PatrolActiveRoundCache {
       await prefs.remove(StorageKeys.patrolTrackActiveRoundSnapshot);
       await prefs.remove(StorageKeys.patrolTrackActiveRoundRevision);
       await _clearShiftWindow();
-      await setBackgroundAutoScanArmed(false);
-      await setBackgroundAutoScanRunning(false);
+      await clearNextRoundAutoScanSession(prefs: prefs);
       return;
     }
     final status = active.round.status.trim().toUpperCase();
     if (status == 'COMPLETED' || status == 'CANCELLED') {
-      await setBackgroundAutoScanArmed(false);
-      await setBackgroundAutoScanRunning(false);
+      await clearNextRoundAutoScanSession(prefs: prefs);
     }
     final merged = preserveLocalVerified
         ? await preservingLocalVerified(active)

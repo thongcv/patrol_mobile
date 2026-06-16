@@ -20,6 +20,7 @@ abstract final class PatrolForegroundNotification {
   static const int checkpointAlertNotificationIdBase = 881300;
   /// Dedicated block — must not overlap checkpoint ids (was 881301, collided).
   static const int nextRoundConfirmNotificationId = 882500;
+  static const int sessionExpiredNotificationId = 882502;
   static const String _iosNextRoundCategoryId = 'sps_patrol_next_round';
   static const String _nextRoundChannelSuffix = 'v1';
   static const int _checkpointAlertIdSlots = 100;
@@ -568,10 +569,105 @@ abstract final class PatrolForegroundNotification {
     final active =
         _activeNextRoundConfirmNotificationId ?? nextRoundConfirmNotificationId;
     _activeNextRoundConfirmNotificationId = null;
-    await cancel(active);
-    // Legacy peek id from older builds.
-    await cancel(882501);
+    await _plugin.cancel(active);
   }
+
+  /// Full-screen / heads-up when FGS REST returns 401/403 while app is backgrounded.
+  static Future<void> showSessionExpiredRelaunch({
+    required String title,
+    required String body,
+  }) async {
+    if (PatrolBackgroundIsolateFlags.active) {
+      ensurePatrolBackgroundPlugins();
+    }
+
+    if (!_ready) return;
+
+    final postedAt = DateTime.now();
+    final payload = PatrolNotificationActions.sessionExpiredPayload;
+
+    if (Platform.isIOS) {
+      await _ensureIosAttachment();
+      final path = _iosAttachmentPath;
+      final details = NotificationDetails(
+        iOS: DarwinNotificationDetails(
+          presentBanner: true,
+          presentList: true,
+          presentSound: true,
+          presentBadge: false,
+          threadIdentifier: _iosThreadId,
+          interruptionLevel: InterruptionLevel.timeSensitive,
+          attachments: path == null
+              ? null
+              : [DarwinNotificationAttachment(path)],
+        ),
+      );
+      try {
+        await _plugin.show(
+          sessionExpiredNotificationId,
+          title,
+          body,
+          details,
+          payload: payload,
+        );
+      } on Object {
+        //
+      }
+      return;
+    }
+
+    if (!Platform.isAndroid ||
+        _nextRoundHeadsUpChannelId == null ||
+        _nextRoundHeadsUpChannelName == null) {
+      return;
+    }
+
+    _androidBypassDndEnabled =
+        await androidNotificationPolicyAccessGranted();
+    final details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        _nextRoundHeadsUpChannelId!,
+        _nextRoundHeadsUpChannelName!,
+        channelDescription:
+            'Session expired — open app to sign in again',
+        icon: 'ic_bg_service_small',
+        importance: Importance.max,
+        priority: Priority.max,
+        channelBypassDnd: _androidBypassDndEnabled,
+        visibility: NotificationVisibility.public,
+        category: AndroidNotificationCategory.alarm,
+        ticker: body,
+        ongoing: false,
+        autoCancel: true,
+        fullScreenIntent: true,
+        onlyAlertOnce: true,
+        showWhen: true,
+        when: postedAt.millisecondsSinceEpoch,
+        enableVibration: true,
+        enableLights: true,
+        playSound: true,
+        audioAttributesUsage: AudioAttributesUsage.alarm,
+        styleInformation: BigTextStyleInformation(
+          body,
+          contentTitle: title,
+        ),
+      ),
+    );
+    try {
+      await _plugin.show(
+        sessionExpiredNotificationId,
+        title,
+        body,
+        details,
+        payload: payload,
+      );
+    } on Object {
+      //
+    }
+  }
+
+  static Future<void> cancelSessionExpiredRelaunch() =>
+      _plugin.cancel(sessionExpiredNotificationId);
 
   static Future<void> cancel(int notificationId) async {
     await _plugin.cancel(notificationId);

@@ -8,7 +8,6 @@ import '../models/account_me.dart';
 import '../models/menu.dart';
 import '../models/user_info.dart';
 import '../navigation/patrol_menu_router.dart';
-import '../navigation/patrol_session.dart';
 import '../services/account_service.dart';
 import '../services/account_session_store.dart';
 import '../services/auth_service.dart';
@@ -59,14 +58,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final r = await AccountService.instance.fetchMe();
     if (!mounted) return;
-
-    if (PatrolSession.isUnauthorized(r.failure)) {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
-      await PatrolSession.endSessionAndNavigateToLogin();
-      return;
-    }
 
     if (r.ok) {
       setState(() {

@@ -3,7 +3,11 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
+import '../navigation/patrol_session.dart';
 import '../services/app_locale_store.dart';
+import '../background/patrol_background_service.dart';
+import '../services/patrol_foreground_notification.dart';
+import '../utils/patrol_app_launcher.dart';
 import '../services/patrol_active_round_coordinator.dart';
 import '../services/patrol_active_round_sync.dart';
 import '../services/patrol_foreground_gps_scan_session.dart';
@@ -130,6 +134,10 @@ abstract final class PatrolFgsMainRelay {
       },
     );
     safeRelay(
+      PatrolFgsInvokeEvents.sessionExpired,
+      (_) => unawaited(_onFgsSessionExpired()),
+    );
+    safeRelay(
       PatrolFgsInvokeEvents.awaitingNextRoundAutoScanConfirm,
       (payload) {
         final map = payload is Map
@@ -147,6 +155,13 @@ abstract final class PatrolFgsMainRelay {
         }
       },
     );
+  }
+
+  static Future<void> _onFgsSessionExpired() async {
+    await PatrolAppLauncher.bringToForeground(sessionExpired: true);
+    await PatrolForegroundNotification.cancelSessionExpiredRelaunch();
+    await PatrolSession.endSessionAndNavigateToLogin();
+    await PatrolBackgroundService.stopPatrolTracking();
   }
 
   static Future<void> _speakCheckpointOnMainIsolate(String checkpointName) async {

@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../http/api_failure.dart';
-import '../../navigation/patrol_session.dart';
 import '../../l10n/app_localizations.dart';
 import '../../l10n/patrol_coord_label.dart';
 import '../../models/check_point.dart';
@@ -105,8 +104,6 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
     if (!mounted) return;
     if (r.ok) {
       _commitSiteFromDto(r.data!, finishInitialLoad: true);
-    } else if (PatrolSession.isUnauthorized(r.failure)) {
-      await PatrolSession.endSessionAndNavigateToLogin();
     } else {
       setState(() {
         _site = null;
@@ -205,10 +202,6 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
     }
 
     setState(() => _updatingFields.remove((payload.id, updatingKind)));
-    if (PatrolSession.isUnauthorized(r.failure)) {
-      await PatrolSession.endSessionAndNavigateToLogin();
-      return false;
-    }
     final l10nFail = AppLocalizations.of(context)!;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(_messageForUpdateFailure(r.failure!, l10nFail))),

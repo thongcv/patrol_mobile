@@ -398,7 +398,7 @@ class PatrolRealtimeTrackService {
 
     if (!SuperGpsService.isSupported) return;
 
-    if (!await PatrolActiveRoundCache.isTrackingWithinShiftWindow()) {
+    if (!await PatrolActiveRoundCache.isTrackLocationEmitAllowed()) {
       await _scheduleForegroundShiftBoundaryRefresh();
       return;
     }
@@ -430,7 +430,7 @@ class PatrolRealtimeTrackService {
 
   Future<void> _handlePosition(Position position) async {
     if (!_sessionTrackingActive) return;
-    if (!await PatrolActiveRoundCache.isTrackingWithinShiftWindow()) return;
+    if (!await PatrolActiveRoundCache.isTrackLocationEmitAllowed()) return;
 
     _publishUiPosition(position);
     await _dispatchPosition(position);
@@ -491,7 +491,7 @@ class PatrolRealtimeTrackService {
 
     if (!_socketEnabled) return;
 
-    if (!await PatrolActiveRoundCache.isTrackingWithinShiftWindow()) return;
+    if (!await PatrolActiveRoundCache.isTrackLocationEmitAllowed()) return;
 
     final payload = PatrolLocationTrackPayload.fromPosition(position: position);
 

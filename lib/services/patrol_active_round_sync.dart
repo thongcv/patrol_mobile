@@ -161,10 +161,10 @@ abstract final class PatrolActiveRoundSync {
 
   /// Round finished / no active round — stop latch so FGS gate blocks auto-scan.
   static Future<void> disarmBackgroundAutoScanOnRoundEnd() async {
-    await PatrolActiveRoundCache.setBackgroundAutoScanArmed(false);
-    await PatrolActiveRoundCache.setBackgroundAutoScanRunning(false);
-    await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(false);
+    await PatrolActiveRoundCache.clearNextRoundAutoScanSession();
     PatrolBackgroundAutoScanUiState.setRunning(false);
+    PatrolBackgroundAutoScanUiState.setAwaitingNextRoundConfirm(false);
+    await PatrolForegroundNotification.cancelNextRoundConfirm();
     await PatrolBackgroundService.pauseBackgroundAutoScan();
   }
 

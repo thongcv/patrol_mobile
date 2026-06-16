@@ -20,7 +20,8 @@ import 'patrol_fgs_isolate_bridge.dart';
 
 /// When [PatrolTrackingConfig.trackByShiftWindow] is on, the hub stream is detached
 
-/// outside `round.expectedStartTime` / `expectedEndTime` (see [_syncGpsHub]). Shift boundaries
+/// outside `round.expectedStartTime` / `expectedEndTime` unless background auto-scan
+/// is armed (see [PatrolActiveRoundCache.isTrackLocationEmitAllowed]). Shift boundaries
 
 /// are handled by [PatrolBackgroundRunner._scheduleShiftBoundaryRefresh].
 
@@ -66,7 +67,7 @@ class PatrolBackgroundTrackEmitter {
   Future<void> _syncGpsHub() async {
     if (!_active) return;
 
-    final within = await PatrolActiveRoundCache.isTrackingWithinShiftWindow();
+    final within = await PatrolActiveRoundCache.isTrackLocationEmitAllowed();
 
     if (within) {
       _hub.trackHandler = _onGpsEvent;
@@ -128,7 +129,7 @@ class PatrolBackgroundTrackEmitter {
   Future<void> _emitPosition(Position pos) async {
     if (!_active) return;
 
-    if (!await PatrolActiveRoundCache.isTrackingWithinShiftWindow()) return;
+    if (!await PatrolActiveRoundCache.isTrackLocationEmitAllowed()) return;
 
     final minMoveM = await PatrolTrackingConfigStore.minMoveM();
 

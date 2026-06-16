@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
 import '../models/check_point.dart';
+import '../services/account_session_store.dart';
 import '../services/patrol_foreground_notification.dart';
 import '../services/patrol_active_round_cache.dart';
 import '../services/patrol_active_round_sync.dart';
@@ -59,6 +60,7 @@ final class PatrolBackgroundRunner {
 
     PatrolFgsIsolateBridge.setRelayCheckpointSuccess(_relayCheckpointSuccess);
     PatrolFgsIsolateBridge.setRelayProximityNavigation(_relayProximityNavigation);
+    PatrolFgsIsolateBridge.setOnSessionExpired(_shutdownOnSessionExpired);
 
     _registerCommands();
 
@@ -145,7 +147,10 @@ final class PatrolBackgroundRunner {
       return;
     }
     await PatrolActiveRoundCache.setPendingFgsReloadAfterRound(false);
-    unawaited(_autoScan.reloadAfterRoundPersist());
+    await _autoScan.reloadAfterRoundPersist();
+    if (await PatrolActiveRoundCache.isBackgroundAutoScanArmed()) {
+      await _trackEmitter.start();
+    }
   }
 
   void _startNextRoundConfirmPoll() {
@@ -225,6 +230,7 @@ final class PatrolBackgroundRunner {
     await PatrolActiveRoundSync.armBackgroundAutoScanByUser();
     await _autoScan.resume();
     await _autoScan.reloadAfterRoundPersist();
+    await _trackEmitter.start();
     await PatrolActiveRoundCache.signalNextRoundConfirmHandled();
   }
 
@@ -239,8 +245,9 @@ final class PatrolBackgroundRunner {
     await _autoScan.resume();
     if (await PatrolActiveRoundCache.isBackgroundAutoScanArmed()) {
       if (!_autoScan.isAutoScanActive) {
-        unawaited(_autoScan.reloadAfterRoundPersist());
+        await _autoScan.reloadAfterRoundPersist();
       }
+      await _trackEmitter.start();
     } else if (!_autoScan.isAutoScanActive) {
       unawaited(_autoScan.refresh());
     }
@@ -475,6 +482,12 @@ final class PatrolBackgroundRunner {
       if (_shuttingDown) return;
       unawaited(refreshTracking());
     });
+  }
+
+  Future<void> _shutdownOnSessionExpired() async {
+    if (_shuttingDown) return;
+    await AccountSessionStore.instance.clearAccessToken();
+    await shutdown();
   }
 
   Future<void> shutdown() async {

@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
@@ -20,6 +21,8 @@ class MainActivity : FlutterActivity() {
         /** Must match Dart [PatrolForegroundNotification] next-round popup channel. */
         const val PATROL_NEXT_ROUND_POPUP_CHANNEL_ID = "sps_patrol_track_next_round_popup_v1"
         private const val TTS_CHANNEL = "patrol/tts"
+        private const val APP_CHANNEL = "patrol/app"
+        const val EXTRA_SESSION_EXPIRED = "patrol_session_expired"
     }
 
     private var textToSpeech: TextToSpeech? = null
@@ -29,6 +32,11 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         ensurePatrolTrackNotificationChannel()
         ensureNextRoundPopupNotificationChannel()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
     }
 
     override fun onDestroy() {
@@ -99,6 +107,31 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, APP_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "bringToForeground" -> {
+                        val sessionExpired = call.argument<Boolean>("sessionExpired") == true
+                        bringToForeground(sessionExpired, result)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    private fun bringToForeground(sessionExpired: Boolean, result: MethodChannel.Result) {
+        val intent = Intent(applicationContext, MainActivity::class.java).apply {
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT,
+            )
+            if (sessionExpired) {
+                putExtra(EXTRA_SESSION_EXPIRED, true)
+            }
+        }
+        applicationContext.startActivity(intent)
+        result.success(null)
     }
 
     private fun speakNative(text: String, languageTag: String, result: MethodChannel.Result) {

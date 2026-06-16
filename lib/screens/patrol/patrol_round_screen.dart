@@ -9,7 +9,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../config/google_maps_config.dart';
 import '../../http/api_failure.dart';
-import '../../navigation/patrol_session.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/active_patrol_round.dart';
 import '../../models/check_point.dart';
@@ -255,8 +254,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       if (loadSeq == _localRoundLoadSeq) {
         await _applyFgsScanPolicyAfterRoundDataLoaded();
       }
-    } else if (PatrolSession.isUnauthorized(r.failure)) {
-      await PatrolSession.endSessionAndNavigateToLogin();
     } else {
       setState(() {
         _applyLoadedActiveRound(null, fromRefresh: false);
@@ -710,8 +707,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
         if (!mounted) return;
         context.showTopToast(l10n.patrolRoundQrScanSuccess,
          duration: const Duration(milliseconds: 400));
-      } else if (PatrolSession.isUnauthorized(logResult.failure)) {
-        await PatrolSession.endSessionAndNavigateToLogin();
       } else {
         context.showTopToast(_messageForScanFailure(logResult.failure!, l10n),
          duration: const Duration(milliseconds: 400));

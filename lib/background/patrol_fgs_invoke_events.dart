@@ -26,4 +26,6 @@ abstract final class PatrolFgsInvokeEvents {
   static const backgroundAutoScanRunning = 'backgroundAutoScanRunning';
   static const awaitingNextRoundAutoScanConfirm =
       'awaitingNextRoundAutoScanConfirm';
+  /// FGS REST 401/403 — main clears session, navigates login, stops FGS.
+  static const sessionExpired = 'sessionExpired';
 }

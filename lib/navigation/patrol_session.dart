@@ -2,9 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../background/patrol_background_isolate_flags.dart';
+import '../background/patrol_fgs_isolate_bridge.dart';
 import '../screens/login_screen.dart';
 import '../services/account_session_store.dart';
-import '../http/api_failure.dart';
 
 /// Routes to login and notifies on new token — equivalent to Web `location`/CustomEvent.
 abstract final class PatrolSession {
@@ -53,8 +54,17 @@ abstract final class PatrolSession {
   static Future<void>? _endSessionInFlight;
 
   /// Set after first 401/logout-expiry handling — blocks repeated navigation jitter
-  /// from parallel API 401s (Dio interceptor + screen coordinators).
+  /// from parallel API 401/403s (Dio interceptor).
   static bool _sessionExpiredHandled = false;
+
+  /// REST 401/403 — FGS relays to main; main isolate clears session here.
+  static Future<void> handleUnauthorizedApiResponse() async {
+    if (PatrolBackgroundIsolateFlags.active) {
+      PatrolFgsIsolateBridge.notifySessionExpiredToMain();
+      return;
+    }
+    await endSessionAndNavigateToLogin();
+  }
 
   /// Invalid session (401/403): clears token and navigates to login.
   static Future<void> endSessionAndNavigateToLogin() async {
@@ -79,9 +89,6 @@ abstract final class PatrolSession {
     await AccountSessionStore.instance.clearToken();
     navigateToLoginReplaceAll();
   }
-
-  static bool isUnauthorized(ApiFailure? failure) =>
-      failure?.kind == ApiFailureKind.unauthorized;
 
   static const String _loginRouteName = '/login';
 

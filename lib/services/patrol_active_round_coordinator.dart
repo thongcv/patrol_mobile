@@ -2,7 +2,6 @@ import 'dart:async';
 
 import '../models/active_patrol_round.dart';
 import '../models/check_point.dart';
-import '../navigation/patrol_session.dart';
 import 'patrol_active_round_cache.dart';
 import 'patrol_active_round_sync.dart';
 import 'patrol_realtime_track_coordinator.dart';
@@ -207,8 +206,9 @@ abstract final class PatrolActiveRoundCoordinator {
   static Future<void> onSessionEnded() async {
     _session.sessionActive = false;
     _lastEmitted = null;
-    await PatrolActiveRoundCache.setAwaitingNextRoundAutoScanConfirm(false);
+    await PatrolActiveRoundSync.disarmBackgroundAutoScanOnRoundEnd();
     await PatrolActiveRoundCache.save(null);
+    await PatrolActiveRoundCache.clearLastAutoScanConfirmedRoundId();
     if (!_activeRoundChanges.isClosed) {
       _activeRoundChanges.add(null);
     }
@@ -225,10 +225,6 @@ abstract final class PatrolActiveRoundCoordinator {
     }
 
     final r = await PatrolActiveRoundSync.fetchAndPersist();
-    if (PatrolSession.isUnauthorized(r.failure)) {
-      await PatrolSession.endSessionAndNavigateToLogin();
-      return;
-    }
     if (!r.ok) return;
 
     final active = r.data;
