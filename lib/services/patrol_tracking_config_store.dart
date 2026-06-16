@@ -54,6 +54,11 @@ abstract final class PatrolTrackingConfigStore {
   static Future<bool> trackByShiftWindow() async =>
       (await load()).trackByShiftWindow;
 
+  static Future<Duration> shiftWindowGrace() async {
+    final minutes = (await load()).shiftWindowGraceMinutes;
+    return Duration(minutes: minutes);
+  }
+
   static Future<String> autoScanMatchOrder() async =>
       (await load()).autoScanMatchOrder;
 

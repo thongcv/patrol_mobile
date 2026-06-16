@@ -471,7 +471,8 @@ final class PatrolBackgroundRunner {
     if (window == null) return;
 
     final now = DateTime.now();
-    final next = window.nextBoundaryAfter(now);
+    final grace = await PatrolTrackingConfigStore.shiftWindowGrace();
+    final next = window.nextBoundaryAfter(now, emitWindowGrace: grace);
     if (next == null) return;
 
     var delay = next.difference(now);

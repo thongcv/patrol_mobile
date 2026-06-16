@@ -75,11 +75,13 @@ abstract final class PatrolActiveRoundCache {
     await readShiftWindow(reload: true);
   }
 
-  /// `true` when STOMP location emit is allowed now.
+  /// `true` when STOMP / background GPS track emit is allowed now.
   ///
-  /// Requires cached active round (shift window from [save]). When
-  /// [PatrolTrackingConfig.trackByShiftWindow] is `true`, also requires current
-  /// time within `round.expectedStartTime` / `expectedEndTime`.
+  /// When [PatrolTrackingConfig.trackByShiftWindow] is `false` (default), emit
+  /// for the whole patrol session ([isTrackEmitEnabled]) — no active round required.
+  /// When `true`, requires a cached active round ([load]) and current time within
+  /// `round.expectedStartTime` / `expectedEndTime`, unless background auto-scan is
+  /// armed for that round.
   ///
   static Future<bool> isTrackingWithinShiftWindow({
     DateTime? now,
@@ -91,7 +93,8 @@ abstract final class PatrolActiveRoundCache {
     if (!await PatrolTrackingConfigStore.trackByShiftWindow()) {
       return true;
     }
-    return window.contains(now ?? DateTime.now());
+    final grace = await PatrolTrackingConfigStore.shiftWindowGrace();
+    return window.contains(now ?? DateTime.now(), emitWindowGrace: grace);
   }
 
   /// STOMP / GPS track emit — shift window unless background auto-scan is armed
@@ -103,6 +106,7 @@ abstract final class PatrolActiveRoundCache {
     if (!await PatrolTrackingConfigStore.trackByShiftWindow()) {
       return true;
     }
+    if (await load() == null) return false;
     if (await isBackgroundAutoScanArmed(reload: reload)) {
       return true;
     }

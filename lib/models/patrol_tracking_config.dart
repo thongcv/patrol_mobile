@@ -2,7 +2,8 @@ import '../http/api_response.dart';
 import '../utils/check_point_proximity.dart';
 
 /// Tracking options from login `data.config`
-/// (`background`, `minMoveM`, `socket`, `backgroundAutoScan`, GPS stream tuning).
+/// (`background`, `minMoveM`, `socket`, `backgroundAutoScan`, GPS stream tuning,
+/// `shiftWindowGraceMinutes`).
 class PatrolTrackingConfig {
   const PatrolTrackingConfig({
     this.background = true,
@@ -13,7 +14,10 @@ class PatrolTrackingConfig {
     this.updateIntervalMs = 1000,
     this.minUpdateIntervalMs = 800,
     this.trackByShiftWindow = false,
+    this.shiftWindowGraceMinutes = defaultShiftWindowGraceMinutes,
   });
+
+  static const int defaultShiftWindowGraceMinutes = 15;
 
   static const PatrolTrackingConfig defaults = PatrolTrackingConfig();
 
@@ -35,10 +39,14 @@ class PatrolTrackingConfig {
   /// Minimum interval between GPS updates (native layer).
   final int minUpdateIntervalMs;
 
-  /// When `false` (default), emit while session tracking is on and an active
-  /// round is cached. When `true`, also gate by round `expectedStartTime` /
-  /// `expectedEndTime`.
+  /// When `false` (default), emit for the whole patrol session while
+  /// [PatrolActiveRoundCache.isTrackEmitEnabled]. When `true`, requires a cached
+  /// active round and gates by `round.expectedStartTime` / `expectedEndTime`.
   final bool trackByShiftWindow;
+
+  /// Minutes before [expectedStartTime] / after [expectedEndTime] for emit gating
+  /// when [trackByShiftWindow] is `true` ([PatrolShiftWindow]).
+  final int shiftWindowGraceMinutes;
 
   /// Parsed [autoScanMatchOrder] for auto-scan proximity matching.
   CheckPointMatchOrder get checkPointMatchOrder =>
@@ -68,6 +76,10 @@ class PatrolTrackingConfig {
           defaults.minUpdateIntervalMs,
       trackByShiftWindow:
           jsonBool(source['trackByShiftWindow']) ?? defaults.trackByShiftWindow,
+      shiftWindowGraceMinutes: _shiftWindowGraceMinutesFromJson(
+            source['shiftWindowGraceMinutes'],
+          ) ??
+          defaults.shiftWindowGraceMinutes,
     );
   }
 
@@ -80,6 +92,7 @@ class PatrolTrackingConfig {
         'updateIntervalMs': updateIntervalMs,
         'minUpdateIntervalMs': minUpdateIntervalMs,
         'trackByShiftWindow': trackByShiftWindow,
+        'shiftWindowGraceMinutes': shiftWindowGraceMinutes,
       };
 
   factory PatrolTrackingConfig.fromJson(Map<String, dynamic> json) {
@@ -120,6 +133,12 @@ class PatrolTrackingConfig {
           ? (jsonBool(source['trackByShiftWindow']) ??
               current.trackByShiftWindow)
           : current.trackByShiftWindow,
+      shiftWindowGraceMinutes: source.containsKey('shiftWindowGraceMinutes')
+          ? (_shiftWindowGraceMinutesFromJson(
+                  source['shiftWindowGraceMinutes'],
+                ) ??
+                current.shiftWindowGraceMinutes)
+          : current.shiftWindowGraceMinutes,
     );
   }
 
@@ -131,7 +150,8 @@ class PatrolTrackingConfig {
         source.containsKey('autoScanMatchOrder') ||
         source.containsKey('updateIntervalMs') ||
         source.containsKey('minUpdateIntervalMs') ||
-        source.containsKey('trackByShiftWindow');
+        source.containsKey('trackByShiftWindow') ||
+        source.containsKey('shiftWindowGraceMinutes');
   }
 
   /// Login `data` from API: prefers sibling `config` next to `accessToken`.
@@ -152,7 +172,8 @@ class PatrolTrackingConfig {
         m.containsKey('autoScanMatchOrder') ||
         m.containsKey('updateIntervalMs') ||
         m.containsKey('minUpdateIntervalMs') ||
-        m.containsKey('trackByShiftWindow');
+        m.containsKey('trackByShiftWindow') ||
+        m.containsKey('shiftWindowGraceMinutes');
   }
 
   static double? _minMoveMFromJson(dynamic raw) {
@@ -160,6 +181,12 @@ class PatrolTrackingConfig {
     if (raw is num) return raw.toDouble();
     if (raw is String) return double.tryParse(raw.trim());
     return null;
+  }
+
+  static int? _shiftWindowGraceMinutesFromJson(dynamic raw) {
+    final minutes = jsonInt(raw);
+    if (minutes == null || minutes < 0) return null;
+    return minutes;
   }
 
   static String? _autoScanMatchOrderFromJson(dynamic raw) {
@@ -182,7 +209,8 @@ class PatrolTrackingConfig {
             autoScanMatchOrder == other.autoScanMatchOrder &&
             updateIntervalMs == other.updateIntervalMs &&
             minUpdateIntervalMs == other.minUpdateIntervalMs &&
-            trackByShiftWindow == other.trackByShiftWindow;
+            trackByShiftWindow == other.trackByShiftWindow &&
+            shiftWindowGraceMinutes == other.shiftWindowGraceMinutes;
   }
 
   @override
@@ -195,5 +223,6 @@ class PatrolTrackingConfig {
         updateIntervalMs,
         minUpdateIntervalMs,
         trackByShiftWindow,
+        shiftWindowGraceMinutes,
       );
 }

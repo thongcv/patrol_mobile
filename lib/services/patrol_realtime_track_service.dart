@@ -102,7 +102,8 @@ class PatrolRealtimeTrackService {
     if (!_mockViolation.isClosed) _mockViolation.add(true);
   }
 
-  /// Bật GPS + socket + FGS khi có phiên — không phụ thuộc vòng tuần tra.
+  /// Bật GPS + socket + FGS khi có phiên — không phụ thuộc vòng khi
+  /// `trackByShiftWindow` tắt; khi bật thì GPS track theo ca / vòng cached.
   ///
   /// Serialized — [PatrolSessionListen.resumeIfSession] may run more than once
   /// (attach + location gate). Re-entry must re-bootstrap FGS/GPS, not only refresh.
@@ -288,7 +289,8 @@ class PatrolRealtimeTrackService {
     if (window == null) return;
 
     final now = DateTime.now();
-    final next = window.nextBoundaryAfter(now);
+    final grace = await PatrolTrackingConfigStore.shiftWindowGrace();
+    final next = window.nextBoundaryAfter(now, emitWindowGrace: grace);
     if (next == null) return;
 
     var delay = next.difference(now);

@@ -1,10 +1,30 @@
+import '../models/patrol_tracking_config.dart';
 import 'patrol_datetime_format.dart';
 
 /// Active round window (`round.expectedStartTime` / `expectedEndTime`) for emit gating.
 abstract final class PatrolShiftWindow {
   PatrolShiftWindow._();
 
-  /// `true` when [now] is inside the round expected window.
+  static Duration _grace(Duration? emitWindowGrace) =>
+      emitWindowGrace ??
+      const Duration(minutes: PatrolTrackingConfig.defaultShiftWindowGraceMinutes);
+
+  /// Effective bounds after applying [emitWindowGrace] (local time).
+  static ({DateTime? start, DateTime? end}) effectiveBounds({
+    String? expectedStartTime,
+    String? expectedEndTime,
+    Duration? emitWindowGrace,
+  }) {
+    final grace = _grace(emitWindowGrace);
+    final start = parsePatrolApiInstant(expectedStartTime);
+    final end = parsePatrolApiInstant(expectedEndTime);
+    return (
+      start: start?.subtract(grace),
+      end: end?.add(grace),
+    );
+  }
+
+  /// `true` when [now] is inside the round expected window (± [emitWindowGrace]).
   ///
   /// Bounds are API instants (UTC ISO); compared in local time.
   /// When both bounds are absent or unparseable, returns `true` (no window gate).
@@ -12,12 +32,18 @@ abstract final class PatrolShiftWindow {
     required DateTime now,
     String? expectedStartTime,
     String? expectedEndTime,
+    Duration? emitWindowGrace,
   }) {
-    final start = parsePatrolApiInstant(expectedStartTime);
-    final end = parsePatrolApiInstant(expectedEndTime);
-    if (start == null && end == null) return true;
-    if (start != null && now.isBefore(start)) return false;
-    if (end != null && !now.isBefore(end)) return false;
+    final bounds = effectiveBounds(
+      expectedStartTime: expectedStartTime,
+      expectedEndTime: expectedEndTime,
+      emitWindowGrace: emitWindowGrace,
+    );
+    if (bounds.start == null && bounds.end == null) return true;
+    final effectiveStart = bounds.start;
+    final effectiveEnd = bounds.end;
+    if (effectiveStart != null && now.isBefore(effectiveStart)) return false;
+    if (effectiveEnd != null && !now.isBefore(effectiveEnd)) return false;
     return true;
   }
 }
@@ -32,20 +58,35 @@ class PatrolShiftWindowSnapshot {
   final String? expectedStartTime;
   final String? expectedEndTime;
 
-  bool contains(DateTime now) => PatrolShiftWindow.isWithinWindow(
+  bool contains(
+    DateTime now, {
+    Duration? emitWindowGrace,
+  }) =>
+      PatrolShiftWindow.isWithinWindow(
         now: now,
         expectedStartTime: expectedStartTime,
         expectedEndTime: expectedEndTime,
+        emitWindowGrace: emitWindowGrace,
       );
 
-  /// Next instant when [contains] may change (round start or end, local).
-  DateTime? nextBoundaryAfter(DateTime now) {
-    final start = parsePatrolApiInstant(expectedStartTime);
-    final end = parsePatrolApiInstant(expectedEndTime);
-    if (start == null && end == null) return null;
+  /// Next instant when [contains] may change (effective start/end, local).
+  DateTime? nextBoundaryAfter(
+    DateTime now, {
+    Duration? emitWindowGrace,
+  }) {
+    final bounds = PatrolShiftWindow.effectiveBounds(
+      expectedStartTime: expectedStartTime,
+      expectedEndTime: expectedEndTime,
+      emitWindowGrace: emitWindowGrace,
+    );
+    if (bounds.start == null && bounds.end == null) return null;
 
-    if (start != null && now.isBefore(start)) return start;
-    if (end != null && now.isBefore(end)) return end;
+    final effectiveStart = bounds.start;
+    final effectiveEnd = bounds.end;
+    if (effectiveStart != null && now.isBefore(effectiveStart)) {
+      return effectiveStart;
+    }
+    if (effectiveEnd != null && now.isBefore(effectiveEnd)) return effectiveEnd;
     return null;
   }
 

@@ -31,5 +31,24 @@ void main() {
     final cfg = PatrolTrackingConfig.fromLoginEnvelope(data);
     expect(cfg.autoScanMatchOrder, 'nearest');
     expect(cfg.checkPointMatchOrder, CheckPointMatchOrder.nearest);
+    expect(
+      cfg.shiftWindowGraceMinutes,
+      PatrolTrackingConfig.defaultShiftWindowGraceMinutes,
+    );
+  });
+
+  test('login envelope parses shiftWindowGraceMinutes', () {
+    final body = <String, dynamic>{
+      'data': <String, dynamic>{
+        'config': <String, dynamic>{
+          'shiftWindowGraceMinutes': 20,
+        },
+      },
+    };
+
+    final cfg = PatrolTrackingConfig.fromLoginEnvelope(
+      Map<String, dynamic>.from(body['data'] as Map),
+    );
+    expect(cfg.shiftWindowGraceMinutes, 20);
   });
 }

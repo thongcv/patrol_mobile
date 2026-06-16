@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sps/models/patrol_tracking_config.dart';
 import 'package:sps/utils/patrol_datetime_format.dart';
 import 'package:sps/utils/patrol_shift_window.dart';
 
@@ -83,7 +84,15 @@ void main() {
       );
       expect(
         PatrolShiftWindow.isWithinWindow(
-          now: startLocal.subtract(const Duration(minutes: 1)),
+          now: startLocal.subtract(const Duration(minutes: 14)),
+          expectedStartTime: start,
+          expectedEndTime: end,
+        ),
+        isTrue,
+      );
+      expect(
+        PatrolShiftWindow.isWithinWindow(
+          now: startLocal.subtract(const Duration(minutes: 16)),
           expectedStartTime: start,
           expectedEndTime: end,
         ),
@@ -92,6 +101,14 @@ void main() {
       expect(
         PatrolShiftWindow.isWithinWindow(
           now: endLocal,
+          expectedStartTime: start,
+          expectedEndTime: end,
+        ),
+        isTrue,
+      );
+      expect(
+        PatrolShiftWindow.isWithinWindow(
+          now: endLocal.add(const Duration(minutes: 15)),
           expectedStartTime: start,
           expectedEndTime: end,
         ),
@@ -117,7 +134,9 @@ void main() {
       final endLocal = parsePatrolApiInstant('2026-06-13T11:25:00Z')!;
       expect(
         window.nextBoundaryAfter(startLocal.add(const Duration(minutes: 5))),
-        endLocal,
+        endLocal.add(
+          const Duration(minutes: PatrolTrackingConfig.defaultShiftWindowGraceMinutes),
+        ),
       );
     });
 
