@@ -79,11 +79,12 @@ abstract final class PatrolCheckpointTts {
   static Future<bool> speakProximityNavigation({
     required String message,
     Locale? locale,
+    Duration? dedupeWindow,
   }) async {
     final text = message.trim();
     if (text.isEmpty) return false;
     final slot = '$_proximityNavDedupePrefix:$text';
-    if (!await _tryAcquireSpeakSlot(slot)) return false;
+    if (!await _tryAcquireSpeakSlot(slot, window: dedupeWindow)) return false;
 
     final resolvedLocale = locale ?? await AppLocaleStore.readLocale();
     var started = false;

@@ -656,6 +656,66 @@ abstract class AppLocalizations {
   /// **'Overdue'**
   String get patrolRoundOverdue;
 
+  /// No description provided for @patrolRoundOverdueNoteTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Report objective delay'**
+  String get patrolRoundOverdueNoteTooltip;
+
+  /// No description provided for @patrolRoundOverdueNoteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Objective delay'**
+  String get patrolRoundOverdueNoteTitle;
+
+  /// No description provided for @patrolRoundOverdueNoteMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter why this checkpoint could not be completed on time. The checkpoint will be marked as scanned.'**
+  String get patrolRoundOverdueNoteMessage;
+
+  /// No description provided for @patrolRoundOverdueNoteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. elevator out of service, area blocked…'**
+  String get patrolRoundOverdueNoteHint;
+
+  /// No description provided for @patrolRoundOverdueNoteSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Submit'**
+  String get patrolRoundOverdueNoteSubmit;
+
+  /// No description provided for @patrolRoundOverdueNotePrefix.
+  ///
+  /// In en, this message translates to:
+  /// **'[Objective delay] '**
+  String get patrolRoundOverdueNotePrefix;
+
+  /// No description provided for @patrolRoundOverdueNoteEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a reason.'**
+  String get patrolRoundOverdueNoteEmpty;
+
+  /// No description provided for @patrolRoundOverdueNoteSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Checkpoint recorded with delay reason.'**
+  String get patrolRoundOverdueNoteSuccess;
+
+  /// No description provided for @patrolRoundOverdueNoteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the patrol log.'**
+  String get patrolRoundOverdueNoteFailed;
+
+  /// No description provided for @patrolRoundOverdueNoteNoGps.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS unavailable and checkpoint has no coordinates.'**
+  String get patrolRoundOverdueNoteNoGps;
+
   /// No description provided for @patrolRoundScanQr.
   ///
   /// In en, this message translates to:

@@ -7,6 +7,8 @@ class _RoutePointCard extends StatelessWidget {
     required this.point,
     this.scanned = false,
     this.qrBusy = false,
+    this.overdueNoteBusy = false,
+    this.onOverdueNote,
   });
 
   final TextTheme theme;
@@ -14,6 +16,8 @@ class _RoutePointCard extends StatelessWidget {
   final CheckPoint point;
   final bool scanned;
   final bool qrBusy;
+  final bool overdueNoteBusy;
+  final VoidCallback? onOverdueNote;
 
   @override
   Widget build(BuildContext context) {
@@ -78,6 +82,32 @@ class _RoutePointCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (onOverdueNote != null) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 36,
+                    minHeight: 36,
+                  ),
+                  tooltip: l10n.patrolRoundOverdueNoteTooltip,
+                  onPressed: overdueNoteBusy ? null : onOverdueNote,
+                  style: IconButton.styleFrom(
+                    foregroundColor: const Color(0xFFFBBF24),
+                  ),
+                  icon: overdueNoteBusy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFFFBBF24),
+                          ),
+                        )
+                      : const Icon(Icons.note_alt_outlined, size: 22),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 10),

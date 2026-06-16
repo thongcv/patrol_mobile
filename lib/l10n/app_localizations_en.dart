@@ -296,6 +296,40 @@ class AppLocalizationsEn extends AppLocalizations {
   String get patrolRoundOverdue => 'Overdue';
 
   @override
+  String get patrolRoundOverdueNoteTooltip => 'Report objective delay';
+
+  @override
+  String get patrolRoundOverdueNoteTitle => 'Objective delay';
+
+  @override
+  String get patrolRoundOverdueNoteMessage =>
+      'Enter why this checkpoint could not be completed on time. The checkpoint will be marked as scanned.';
+
+  @override
+  String get patrolRoundOverdueNoteHint =>
+      'e.g. elevator out of service, area blocked…';
+
+  @override
+  String get patrolRoundOverdueNoteSubmit => 'Submit';
+
+  @override
+  String get patrolRoundOverdueNotePrefix => '[Objective delay] ';
+
+  @override
+  String get patrolRoundOverdueNoteEmpty => 'Please enter a reason.';
+
+  @override
+  String get patrolRoundOverdueNoteSuccess =>
+      'Checkpoint recorded with delay reason.';
+
+  @override
+  String get patrolRoundOverdueNoteFailed => 'Could not save the patrol log.';
+
+  @override
+  String get patrolRoundOverdueNoteNoGps =>
+      'GPS unavailable and checkpoint has no coordinates.';
+
+  @override
   String get patrolRoundScanQr => 'Scan checkpoint QR';
 
   @override

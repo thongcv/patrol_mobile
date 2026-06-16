@@ -296,6 +296,39 @@ class AppLocalizationsVi extends AppLocalizations {
   String get patrolRoundOverdue => 'Quá giờ';
 
   @override
+  String get patrolRoundOverdueNoteTooltip => 'Báo trễ khách quan';
+
+  @override
+  String get patrolRoundOverdueNoteTitle => 'Báo trễ khách quan';
+
+  @override
+  String get patrolRoundOverdueNoteMessage =>
+      'Ghi lý do không hoàn thành đúng giờ cho điểm này. Điểm sẽ được đánh dấu đã quét.';
+
+  @override
+  String get patrolRoundOverdueNoteHint =>
+      'Ví dụ: thang máy hỏng, khu vực bị phong tỏa…';
+
+  @override
+  String get patrolRoundOverdueNoteSubmit => 'Gửi';
+
+  @override
+  String get patrolRoundOverdueNotePrefix => '[Trễ khách quan] ';
+
+  @override
+  String get patrolRoundOverdueNoteEmpty => 'Vui lòng nhập lý do.';
+
+  @override
+  String get patrolRoundOverdueNoteSuccess => 'Đã ghi nhận điểm với lý do trễ.';
+
+  @override
+  String get patrolRoundOverdueNoteFailed => 'Không lưu được nhật ký tuần tra.';
+
+  @override
+  String get patrolRoundOverdueNoteNoGps =>
+      'Không đọc được GPS và điểm chưa có tọa độ.';
+
+  @override
   String get patrolRoundScanQr => 'Quét mã QR điểm';
 
   @override

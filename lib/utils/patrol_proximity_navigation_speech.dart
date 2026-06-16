@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../background/patrol_background_service.dart';
@@ -6,11 +7,30 @@ import '../services/app_locale_store.dart';
 import 'check_point_proximity.dart';
 import 'patrol_checkpoint_tts.dart';
 
+/// Throttle inputs for proximity navigation TTS (testable).
+@immutable
+class PatrolProximityNavigationTtsState {
+  const PatrolProximityNavigationTtsState({
+    this.lastNorth,
+    this.lastEast,
+    this.lastAlt,
+    this.lastHorizontalRounded,
+    this.lastSpokeAt,
+  });
+
+  final CheckPointMoveDirection? lastNorth;
+  final CheckPointMoveDirection? lastEast;
+  final CheckPointMoveDirection? lastAlt;
+  final int? lastHorizontalRounded;
+  final DateTime? lastSpokeAt;
+}
+
 /// Builds TTS phrases from proximity navigation hints and speaks with throttle.
 abstract final class PatrolProximityNavigationTts {
   PatrolProximityNavigationTts._();
 
   static const Duration _minInterval = Duration(seconds: 12);
+  static const Duration _backgroundReminderInterval = Duration(seconds: 10);
   static const int _distanceChangeM = 3;
 
   static CheckPointMoveDirection? _lastNorth;
@@ -29,12 +49,17 @@ abstract final class PatrolProximityNavigationTts {
   }
 
   /// Speaks turn-by-turn hint when [snapshot] changes meaningfully.
+  ///
+  /// [backgroundReminder] — FGS auto-scan: re-prompt on a fixed interval even
+  /// when the user is standing still, so pocket/screen-off patrol still gets
+  /// audible guidance toward the next checkpoint.
   static Future<void> maybeSpeak({
     required CheckPointProximitySnapshot snapshot,
     Locale? locale,
+    bool backgroundReminder = false,
   }) async {
     final nav = CheckPointProximityNavigationHints.fromSnapshot(snapshot);
-    if (!_shouldSpeak(nav)) return;
+    if (!_shouldSpeak(nav, backgroundReminder: backgroundReminder)) return;
 
     final resolvedLocale = locale ?? await AppLocaleStore.readLocale();
     final l10n = lookupAppLocalizations(resolvedLocale);
@@ -45,24 +70,68 @@ abstract final class PatrolProximityNavigationTts {
     final spoke = await PatrolCheckpointTts.speakProximityNavigation(
       message: message,
       locale: resolvedLocale,
+      dedupeWindow: backgroundReminder
+          ? _backgroundReminderInterval
+          : null,
     );
     if (!spoke && PatrolBackgroundService.isBackgroundIsolate) {
       PatrolBackgroundService.relayProximityNavigationToUi(message);
     }
   }
 
-  static bool _shouldSpeak(CheckPointProximityNavigationHints nav) {
+  @visibleForTesting
+  static bool shouldSpeakForState({
+    required CheckPointProximityNavigationHints nav,
+    required PatrolProximityNavigationTtsState state,
+    bool backgroundReminder = false,
+    DateTime? now,
+  }) {
+    return _shouldSpeak(
+      nav,
+      backgroundReminder: backgroundReminder,
+      state: state,
+      now: now ?? DateTime.now(),
+    );
+  }
+
+  static bool _shouldSpeak(
+    CheckPointProximityNavigationHints nav, {
+    bool backgroundReminder = false,
+    PatrolProximityNavigationTtsState? state,
+    DateTime? now,
+  }) {
+    final resolvedState = state ??
+        PatrolProximityNavigationTtsState(
+          lastNorth: _lastNorth,
+          lastEast: _lastEast,
+          lastAlt: _lastAlt,
+          lastHorizontalRounded: _lastHorizontalRounded,
+          lastSpokeAt: _lastSpokeAt,
+        );
+    final clock = now ?? DateTime.now();
+    final minInterval =
+        backgroundReminder ? _backgroundReminderInterval : _minInterval;
+
     final horizontalR = nav.horizontalDistanceM.round();
-    final northChanged = nav.northMove != _lastNorth;
-    final eastChanged = nav.eastMove != _lastEast;
-    final altChanged = nav.altitudeMove != _lastAlt;
-    final distChanged = _lastHorizontalRounded == null ||
-        (horizontalR - _lastHorizontalRounded!).abs() >= _distanceChangeM;
+    final northChanged = nav.northMove != resolvedState.lastNorth;
+    final eastChanged = nav.eastMove != resolvedState.lastEast;
+    final altChanged = nav.altitudeMove != resolvedState.lastAlt;
+    final distChanged = resolvedState.lastHorizontalRounded == null ||
+        (horizontalR - resolvedState.lastHorizontalRounded!).abs() >=
+            _distanceChangeM;
 
-    if (_lastSpokeAt == null) return true;
+    if (resolvedState.lastSpokeAt == null) return true;
 
-    final elapsed = DateTime.now().difference(_lastSpokeAt!);
-    if (elapsed >= _minInterval) {
+    final elapsed = clock.difference(resolvedState.lastSpokeAt!);
+    if (backgroundReminder && elapsed >= minInterval) {
+      return true;
+    }
+
+    if (elapsed >= minInterval) {
+      return northChanged || eastChanged || altChanged || distChanged;
+    }
+
+    if (backgroundReminder) {
       return northChanged || eastChanged || altChanged || distChanged;
     }
 

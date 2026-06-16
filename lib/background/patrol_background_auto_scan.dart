@@ -298,7 +298,12 @@ class PatrolBackgroundAutoScan {
     if (matched == null) {
       final snapshot = scan.feedback?.snapshot;
       if (snapshot != null) {
-        unawaited(PatrolProximityNavigationTts.maybeSpeak(snapshot: snapshot));
+        unawaited(
+          PatrolProximityNavigationTts.maybeSpeak(
+            snapshot: snapshot,
+            backgroundReminder: true,
+          ),
+        );
       }
       return;
     }
