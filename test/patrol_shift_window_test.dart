@@ -135,7 +135,9 @@ void main() {
       expect(
         window.nextBoundaryAfter(startLocal.add(const Duration(minutes: 5))),
         endLocal.add(
-          const Duration(minutes: PatrolTrackingConfig.defaultShiftWindowGraceMinutes),
+          const Duration(
+            minutes: PatrolTrackingConfig.defaultShiftWindowEndGraceMinutes,
+          ),
         ),
       );
     });

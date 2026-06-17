@@ -2,6 +2,8 @@ import 'dart:async';
 
 import '../http/api_result.dart';
 
+import '../utils/patrol_round_status.dart';
+
 import '../models/active_patrol_round.dart';
 
 import '../background/patrol_background_constants.dart';
@@ -28,7 +30,7 @@ abstract final class PatrolActiveRoundSync {
     if (!r.ok) return r;
     await PatrolActiveRoundCache.save(r.data);
 
-    if (r.data == null || _isRoundEnded(r.data!)) {
+    if (r.data == null || !_isRoundScannable(r.data!)) {
       await disarmBackgroundAutoScanOnRoundEnd();
       return r;
     }
@@ -36,6 +38,7 @@ abstract final class PatrolActiveRoundSync {
     final awaitingLatch =
         await PatrolActiveRoundCache.ensureAwaitingNextRoundIfRoundChanged(
       r.data?.round.id,
+      roundStatus: r.data?.round.status,
     );
     if (awaitingLatch) {
       await PatrolActiveRoundCache.setBackgroundAutoScanArmed(false);
@@ -44,14 +47,8 @@ abstract final class PatrolActiveRoundSync {
     return r;
   }
 
-  static bool _isRoundEnded(ActivePatrolRound active) {
-    switch (active.round.status.trim().toUpperCase()) {
-      case 'COMPLETED':
-      case 'CANCELLED':
-        return true;
-      default:
-        return false;
-    }
+  static bool _isRoundScannable(ActivePatrolRound active) {
+    return PatrolRoundStatus.isPendingOrInProgress(active.round.status);
   }
 
   /// Next-round notification **Xác nhận** or header radar while [awaiting].
@@ -151,6 +148,10 @@ abstract final class PatrolActiveRoundSync {
     final cached = await PatrolActiveRoundCache.load();
     final roundId = cached?.roundId;
     if (!enabled || roundId == null || roundId <= 0) {
+      await PatrolActiveRoundCache.setBackgroundAutoScanArmed(false);
+      return false;
+    }
+    if (!await PatrolActiveRoundCache.isCachedRoundPendingOrInProgress()) {
       await PatrolActiveRoundCache.setBackgroundAutoScanArmed(false);
       return false;
     }

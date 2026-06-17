@@ -3,7 +3,7 @@ import '../utils/check_point_proximity.dart';
 
 /// Tracking options from login `data.config`
 /// (`background`, `minMoveM`, `socket`, `backgroundAutoScan`, GPS stream tuning,
-/// `shiftWindowGraceMinutes`).
+/// `shiftWindowStartGraceMinutes`, `shiftWindowEndGraceMinutes`, `overdueGraceMinutes`).
 class PatrolTrackingConfig {
   const PatrolTrackingConfig({
     this.background = true,
@@ -14,10 +14,14 @@ class PatrolTrackingConfig {
     this.updateIntervalMs = 1000,
     this.minUpdateIntervalMs = 800,
     this.trackByShiftWindow = false,
-    this.shiftWindowGraceMinutes = defaultShiftWindowGraceMinutes,
+    this.shiftWindowStartGraceMinutes = defaultShiftWindowStartGraceMinutes,
+    this.shiftWindowEndGraceMinutes = defaultShiftWindowEndGraceMinutes,
+    this.overdueGraceMinutes = defaultOverdueGraceMinutes,
   });
 
-  static const int defaultShiftWindowGraceMinutes = 15;
+  static const int defaultShiftWindowStartGraceMinutes = 15;
+  static const int defaultShiftWindowEndGraceMinutes = 15;
+  static const int defaultOverdueGraceMinutes = 15;
 
   static const PatrolTrackingConfig defaults = PatrolTrackingConfig();
 
@@ -44,9 +48,16 @@ class PatrolTrackingConfig {
   /// active round and gates by `round.expectedStartTime` / `expectedEndTime`.
   final bool trackByShiftWindow;
 
-  /// Minutes before [expectedStartTime] / after [expectedEndTime] for emit gating
-  /// when [trackByShiftWindow] is `true` ([PatrolShiftWindow]).
-  final int shiftWindowGraceMinutes;
+  /// Minutes before [expectedStartTime] for emit gating when [trackByShiftWindow]
+  /// is `true` ([PatrolShiftWindow]).
+  final int shiftWindowStartGraceMinutes;
+
+  /// Minutes after [expectedEndTime] for emit gating when [trackByShiftWindow]
+  /// is `true` ([PatrolShiftWindow]).
+  final int shiftWindowEndGraceMinutes;
+
+  /// Minutes after [expectedEndTime] to show overdue UI and allow checkpoint notes.
+  final int overdueGraceMinutes;
 
   /// Parsed [autoScanMatchOrder] for auto-scan proximity matching.
   CheckPointMatchOrder get checkPointMatchOrder =>
@@ -64,6 +75,7 @@ class PatrolTrackingConfig {
         ) ??
         defaults.autoScanMatchOrder;
     final rawMin = source['minMoveM'];
+    final shiftGraces = _shiftWindowGracesFromSource(source, defaults);
     return PatrolTrackingConfig(
       background: background,
       minMoveM: _minMoveMFromJson(rawMin) ?? defaults.minMoveM,
@@ -76,10 +88,12 @@ class PatrolTrackingConfig {
           defaults.minUpdateIntervalMs,
       trackByShiftWindow:
           jsonBool(source['trackByShiftWindow']) ?? defaults.trackByShiftWindow,
-      shiftWindowGraceMinutes: _shiftWindowGraceMinutesFromJson(
-            source['shiftWindowGraceMinutes'],
+      shiftWindowStartGraceMinutes: shiftGraces.start,
+      shiftWindowEndGraceMinutes: shiftGraces.end,
+      overdueGraceMinutes: _graceMinutesFromJson(
+            source['overdueGraceMinutes'],
           ) ??
-          defaults.shiftWindowGraceMinutes,
+          defaults.overdueGraceMinutes,
     );
   }
 
@@ -92,7 +106,9 @@ class PatrolTrackingConfig {
         'updateIntervalMs': updateIntervalMs,
         'minUpdateIntervalMs': minUpdateIntervalMs,
         'trackByShiftWindow': trackByShiftWindow,
-        'shiftWindowGraceMinutes': shiftWindowGraceMinutes,
+        'shiftWindowStartGraceMinutes': shiftWindowStartGraceMinutes,
+        'shiftWindowEndGraceMinutes': shiftWindowEndGraceMinutes,
+        'overdueGraceMinutes': overdueGraceMinutes,
       };
 
   factory PatrolTrackingConfig.fromJson(Map<String, dynamic> json) {
@@ -104,6 +120,7 @@ class PatrolTrackingConfig {
     PatrolTrackingConfig current,
     Map<String, dynamic> source,
   ) {
+    final shiftGraces = _mergeShiftWindowGracesFromSource(source, current);
     return PatrolTrackingConfig(
       background: source.containsKey('background')
           ? (jsonBool(source['background']) ?? current.background)
@@ -133,12 +150,12 @@ class PatrolTrackingConfig {
           ? (jsonBool(source['trackByShiftWindow']) ??
               current.trackByShiftWindow)
           : current.trackByShiftWindow,
-      shiftWindowGraceMinutes: source.containsKey('shiftWindowGraceMinutes')
-          ? (_shiftWindowGraceMinutesFromJson(
-                  source['shiftWindowGraceMinutes'],
-                ) ??
-                current.shiftWindowGraceMinutes)
-          : current.shiftWindowGraceMinutes,
+      shiftWindowStartGraceMinutes: shiftGraces.start,
+      shiftWindowEndGraceMinutes: shiftGraces.end,
+      overdueGraceMinutes: source.containsKey('overdueGraceMinutes')
+          ? (_graceMinutesFromJson(source['overdueGraceMinutes']) ??
+              current.overdueGraceMinutes)
+          : current.overdueGraceMinutes,
     );
   }
 
@@ -151,7 +168,10 @@ class PatrolTrackingConfig {
         source.containsKey('updateIntervalMs') ||
         source.containsKey('minUpdateIntervalMs') ||
         source.containsKey('trackByShiftWindow') ||
-        source.containsKey('shiftWindowGraceMinutes');
+        source.containsKey('shiftWindowStartGraceMinutes') ||
+        source.containsKey('shiftWindowEndGraceMinutes') ||
+        source.containsKey('shiftWindowGraceMinutes') ||
+        source.containsKey('overdueGraceMinutes');
   }
 
   /// Login `data` from API: prefers sibling `config` next to `accessToken`.
@@ -173,7 +193,54 @@ class PatrolTrackingConfig {
         m.containsKey('updateIntervalMs') ||
         m.containsKey('minUpdateIntervalMs') ||
         m.containsKey('trackByShiftWindow') ||
-        m.containsKey('shiftWindowGraceMinutes');
+        m.containsKey('shiftWindowStartGraceMinutes') ||
+        m.containsKey('shiftWindowEndGraceMinutes') ||
+        m.containsKey('shiftWindowGraceMinutes') ||
+        m.containsKey('overdueGraceMinutes');
+  }
+
+  static ({int start, int end}) _shiftWindowGracesFromSource(
+    Map<String, dynamic> source,
+    PatrolTrackingConfig defaults,
+  ) {
+    final legacy = _graceMinutesFromJson(source['shiftWindowGraceMinutes']);
+    return (
+      start: _graceMinutesFromJson(source['shiftWindowStartGraceMinutes']) ??
+          legacy ??
+          defaults.shiftWindowStartGraceMinutes,
+      end: _graceMinutesFromJson(source['shiftWindowEndGraceMinutes']) ??
+          legacy ??
+          defaults.shiftWindowEndGraceMinutes,
+    );
+  }
+
+  static ({int start, int end}) _mergeShiftWindowGracesFromSource(
+    Map<String, dynamic> source,
+    PatrolTrackingConfig current,
+  ) {
+    final hasStart = source.containsKey('shiftWindowStartGraceMinutes');
+    final hasEnd = source.containsKey('shiftWindowEndGraceMinutes');
+    final hasLegacy = source.containsKey('shiftWindowGraceMinutes');
+    if (!hasStart && !hasEnd && !hasLegacy) {
+      return (
+        start: current.shiftWindowStartGraceMinutes,
+        end: current.shiftWindowEndGraceMinutes,
+      );
+    }
+
+    final legacy = hasLegacy
+        ? _graceMinutesFromJson(source['shiftWindowGraceMinutes'])
+        : null;
+    return (
+      start: hasStart
+          ? (_graceMinutesFromJson(source['shiftWindowStartGraceMinutes']) ??
+              current.shiftWindowStartGraceMinutes)
+          : (legacy ?? current.shiftWindowStartGraceMinutes),
+      end: hasEnd
+          ? (_graceMinutesFromJson(source['shiftWindowEndGraceMinutes']) ??
+              current.shiftWindowEndGraceMinutes)
+          : (legacy ?? current.shiftWindowEndGraceMinutes),
+    );
   }
 
   static double? _minMoveMFromJson(dynamic raw) {
@@ -183,7 +250,7 @@ class PatrolTrackingConfig {
     return null;
   }
 
-  static int? _shiftWindowGraceMinutesFromJson(dynamic raw) {
+  static int? _graceMinutesFromJson(dynamic raw) {
     final minutes = jsonInt(raw);
     if (minutes == null || minutes < 0) return null;
     return minutes;
@@ -210,7 +277,9 @@ class PatrolTrackingConfig {
             updateIntervalMs == other.updateIntervalMs &&
             minUpdateIntervalMs == other.minUpdateIntervalMs &&
             trackByShiftWindow == other.trackByShiftWindow &&
-            shiftWindowGraceMinutes == other.shiftWindowGraceMinutes;
+            shiftWindowStartGraceMinutes == other.shiftWindowStartGraceMinutes &&
+            shiftWindowEndGraceMinutes == other.shiftWindowEndGraceMinutes &&
+            overdueGraceMinutes == other.overdueGraceMinutes;
   }
 
   @override
@@ -223,6 +292,8 @@ class PatrolTrackingConfig {
         updateIntervalMs,
         minUpdateIntervalMs,
         trackByShiftWindow,
-        shiftWindowGraceMinutes,
+        shiftWindowStartGraceMinutes,
+        shiftWindowEndGraceMinutes,
+        overdueGraceMinutes,
       );
 }

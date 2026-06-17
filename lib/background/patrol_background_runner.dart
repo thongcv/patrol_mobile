@@ -110,6 +110,9 @@ final class PatrolBackgroundRunner {
 
   /// Notify + TTS — once per round while [awaiting]; not on UI re-sync.
   Future<void> _offerNextRoundAutoScanPrompt() async {
+    if (!await PatrolActiveRoundCache.isCachedRoundPendingOrInProgress()) {
+      return;
+    }
     if (!await PatrolActiveRoundCache.tryAcquireNextRoundPromptOffer()) {
       return;
     }

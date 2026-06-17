@@ -32,12 +32,52 @@ void main() {
     expect(cfg.autoScanMatchOrder, 'nearest');
     expect(cfg.checkPointMatchOrder, CheckPointMatchOrder.nearest);
     expect(
-      cfg.shiftWindowGraceMinutes,
-      PatrolTrackingConfig.defaultShiftWindowGraceMinutes,
+      cfg.shiftWindowStartGraceMinutes,
+      PatrolTrackingConfig.defaultShiftWindowStartGraceMinutes,
+    );
+    expect(
+      cfg.shiftWindowEndGraceMinutes,
+      PatrolTrackingConfig.defaultShiftWindowEndGraceMinutes,
+    );
+    expect(
+      cfg.overdueGraceMinutes,
+      PatrolTrackingConfig.defaultOverdueGraceMinutes,
     );
   });
 
-  test('login envelope parses shiftWindowGraceMinutes', () {
+  test('login envelope parses overdueGraceMinutes', () {
+    final body = <String, dynamic>{
+      'data': <String, dynamic>{
+        'config': <String, dynamic>{
+          'overdueGraceMinutes': 30,
+        },
+      },
+    };
+
+    final cfg = PatrolTrackingConfig.fromLoginEnvelope(
+      Map<String, dynamic>.from(body['data'] as Map),
+    );
+    expect(cfg.overdueGraceMinutes, 30);
+  });
+
+  test('login envelope parses shift window start/end grace minutes', () {
+    final body = <String, dynamic>{
+      'data': <String, dynamic>{
+        'config': <String, dynamic>{
+          'shiftWindowStartGraceMinutes': 10,
+          'shiftWindowEndGraceMinutes': 20,
+        },
+      },
+    };
+
+    final cfg = PatrolTrackingConfig.fromLoginEnvelope(
+      Map<String, dynamic>.from(body['data'] as Map),
+    );
+    expect(cfg.shiftWindowStartGraceMinutes, 10);
+    expect(cfg.shiftWindowEndGraceMinutes, 20);
+  });
+
+  test('login envelope legacy shiftWindowGraceMinutes applies to both sides', () {
     final body = <String, dynamic>{
       'data': <String, dynamic>{
         'config': <String, dynamic>{
@@ -49,6 +89,7 @@ void main() {
     final cfg = PatrolTrackingConfig.fromLoginEnvelope(
       Map<String, dynamic>.from(body['data'] as Map),
     );
-    expect(cfg.shiftWindowGraceMinutes, 20);
+    expect(cfg.shiftWindowStartGraceMinutes, 20);
+    expect(cfg.shiftWindowEndGraceMinutes, 20);
   });
 }

@@ -13,6 +13,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/active_patrol_round.dart';
 import '../../models/check_point.dart';
 import '../../models/patrol_round.dart';
+import '../../models/patrol_tracking_config.dart';
 import '../../services/patrol_foreground_gps_scan_session.dart';
 import '../../services/patrol_log_service.dart';
 import '../../services/patrol_round_service.dart';
@@ -33,6 +34,7 @@ import '../../utils/patrol_proximity_navigation_speech.dart';
 import '../../utils/nfc/nfc_tag_reader.dart';
 import '../../widgets/patrol_google_map.dart';
 import '../../utils/patrol_datetime_format.dart';
+import '../../utils/patrol_round_status.dart';
 import '../../utils/top_toast.dart';
 import '../../widgets/qr_code_scanner_page.dart';
 import 'patrol_shell.dart';
@@ -103,6 +105,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   bool _preferManualScan = false;
   /// Login / STOMP tracking config — header radar hidden when false.
   bool _backgroundAutoScanConfigured = false;
+  int _overdueGraceMinutes = PatrolTrackingConfig.defaultOverdueGraceMinutes;
   /// Clears in-memory scan UI — embedded / re-open must not reuse a prior session.
   void _resetStaleForegroundScanUiState() {
     _preferManualScan = false;
@@ -228,6 +231,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       );
       if (await PatrolActiveRoundCache.ensureAwaitingNextRoundIfRoundChanged(
         active?.round.id,
+        roundStatus: active?.round.status,
       )) {
         unawaited(PatrolBackgroundService.offerNextRoundAutoScanIfAwaiting());
       }
@@ -278,6 +282,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     );
     if (await PatrolActiveRoundCache.ensureAwaitingNextRoundIfRoundChanged(
       merged.round.id,
+      roundStatus: merged.round.status,
     )) {
       unawaited(PatrolBackgroundService.offerNextRoundAutoScanIfAwaiting());
     }
@@ -316,15 +321,8 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     return false;
   }
 
-  bool _isRoundPendingOrInProgress(String status) {
-    final normalized = status.toUpperCase();
-    return normalized == 'PENDING' ||
-        normalized == 'IN_PROGRESS' ||
-        normalized == 'INPROGRESS';
-  }
-
   bool _showHeaderRadar(ActivePatrolRound data) =>
-      _isRoundPendingOrInProgress(data.round.status) &&
+      PatrolRoundStatus.isPendingOrInProgress(data.round.status) &&
       _hasUnscannedCheckPoints(data);
 
   /// FGS auto-scan — [point] đã verify; cache đã ghi trên FGS isolate.
@@ -470,6 +468,12 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     return null;
   }
 
+  DateTime? _roundOverdueGraceDeadline(ActivePatrolRound data) {
+    final end = _roundExpectedEndDeadline(data);
+    if (end == null) return null;
+    return end.add(Duration(minutes: _overdueGraceMinutes));
+  }
+
   bool _isRoundOngoing(PatrolRound round) =>
       _isRoundActive(round.status) || _isRoundActive(round.detailStatus);
 
@@ -483,8 +487,14 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     }
   }
 
-  bool _showOverdueNoteOnPoints(ActivePatrolRound data) =>
-      _isRoundNotCompleted(data.round) && _isRoundOverdue(data);
+  bool _isWithinOverdueGracePeriod(ActivePatrolRound data) {
+    if (!_isRoundNotCompleted(data.round) || !_isRoundOverdue(data)) {
+      return false;
+    }
+    final graceDeadline = _roundOverdueGraceDeadline(data);
+    if (graceDeadline == null) return false;
+    return DateTime.now().isBefore(graceDeadline);
+  }
 
   void _syncOverdueUiRefreshTimer() {
     _overdueUiRefreshTimer?.cancel();
@@ -559,6 +569,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     CheckPoint point,
   ) async {
     if (_roundActionBusy) return;
+    if (!_isWithinOverdueGracePeriod(data)) return;
     if (_isCheckpointScanned(point)) return;
 
     final l10n = AppLocalizations.of(context)!;
@@ -603,6 +614,8 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   Future<void> _syncRadarHeaderMirrorFromPrefs() async {
     await _syncBackgroundAutoScanConfiguredFromPrefs();
     if (!mounted) return;
+    await _syncOverdueGraceFromConfig();
+    if (!mounted) return;
     await _syncFgsAutoScanRunningFromPrefs();
   }
 
@@ -611,6 +624,13 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     if (!mounted) return;
     if (_backgroundAutoScanConfigured == enabled) return;
     setState(() => _backgroundAutoScanConfigured = enabled);
+  }
+
+  Future<void> _syncOverdueGraceFromConfig() async {
+    final minutes = (await PatrolTrackingConfigStore.load()).overdueGraceMinutes;
+    if (!mounted) return;
+    if (_overdueGraceMinutes == minutes) return;
+    setState(() => _overdueGraceMinutes = minutes);
   }
 
   Future<void> _syncAwaitingNextRoundConfirmFromPrefs() async {
@@ -642,6 +662,8 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   /// May recover FGS auto-scan when armed but not running; never reload a live scan.
   Future<void> _applyFgsScanPolicyAfterRoundDataLoaded() async {
     await _syncBackgroundAutoScanConfiguredFromPrefs();
+    if (!mounted) return;
+    await _syncOverdueGraceFromConfig();
     if (!mounted) return;
     await _syncAwaitingNextRoundConfirmFromPrefs();
     if (!mounted) return;
@@ -678,6 +700,11 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   Future<void> _recoverBackgroundAutoScanIfNeeded() async {
     if (_preferManualScan) return;
     if (await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      return;
+    }
+    final active = _active;
+    if (active != null &&
+        !PatrolRoundStatus.isPendingOrInProgress(active.round.status)) {
       return;
     }
     final armed = await PatrolActiveRoundCache.isBackgroundAutoScanArmed();
@@ -2117,7 +2144,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
                     ),
                   ),
                 ),
-                if (_showOverdueNoteOnPoints(data))
+                if (_isWithinOverdueGracePeriod(data))
                   _StatusChip(
                     label: l10n.patrolRoundOverdue,
                     color: const Color(0xFFFBBF24),
@@ -2138,7 +2165,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
               ...data.checkPoints.map(
                 (p) {
                   final showOverdueNote =
-                      _showOverdueNoteOnPoints(data) && !_isCheckpointScanned(p);
+                      _isWithinOverdueGracePeriod(data) && !_isCheckpointScanned(p);
                   return Padding(
                   key: ValueKey(
                     'route-${p.id}-${p.verified}-'

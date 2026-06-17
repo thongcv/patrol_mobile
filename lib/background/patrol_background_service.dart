@@ -476,6 +476,9 @@ abstract final class PatrolBackgroundService {
     if (!await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
       return;
     }
+    if (!await PatrolActiveRoundCache.isCachedRoundPendingOrInProgress()) {
+      return;
+    }
     final service = await _serviceReadyForNextRoundInvoke();
     if (service == null) return;
     await _invoke(service, PatrolFgsInvokeEvents.offerNextRoundAutoScan);

@@ -9,6 +9,7 @@ import '../utils/check_point_proximity.dart';
 import '../utils/device_location.dart';
 import '../utils/patrol_checkpoint_success_feedback.dart';
 import '../utils/patrol_proximity_navigation_speech.dart';
+import '../utils/patrol_round_status.dart';
 import '../utils/super_gps_service.dart';
 import 'patrol_background_gps_hub.dart';
 import 'patrol_background_isolate_flags.dart';
@@ -21,6 +22,7 @@ import 'patrol_fgs_isolate_bridge.dart';
 /// | Condition | Hub attach | GPS samples |
 /// |---|---|---|
 /// | Awaiting next-round STOMP confirm | detach (hard) | off |
+/// | Round status not PENDING / IN_PROGRESS | detach (hard) | off |
 /// | Track emit off or background not armed | detach (hard) | off |
 /// | [trackByShiftWindow] | n/a for auto-scan; track emit uses [isTrackLocationEmitAllowed] |
 /// | [PatrolActiveRoundCache.isForegroundScanBusy] (round UI) | keep if was on | soft pause |
@@ -50,7 +52,11 @@ class PatrolBackgroundAutoScan {
   /// Checkpoints already submitted or optimistically marked this round (survives refresh/stop).
   final Set<int> _submittedCheckpointIds = {};
   /// Latest active-round snapshot for auto-scan (refreshed after verify).
-  ({int roundId, List<CheckPoint> checkPoints})? _activeRoundSnapshot;
+  ({
+    int roundId,
+    List<CheckPoint> checkPoints,
+    String? roundStatus,
+  })? _activeRoundSnapshot;
   var _scanNeedsBaro = false;
   var _reloadInFlight = false;
   var _reloadAgain = false;
@@ -94,6 +100,9 @@ class PatrolBackgroundAutoScan {
       return _ScanGate.blockedHard;
     }
     if (!await PatrolActiveRoundCache.isBackgroundAutoScanArmed()) {
+      return _ScanGate.blockedHard;
+    }
+    if (!await PatrolActiveRoundCache.isCachedRoundPendingOrInProgress()) {
       return _ScanGate.blockedHard;
     }
     if (await PatrolActiveRoundCache.isForegroundScanBusy()) {
@@ -269,6 +278,11 @@ class PatrolBackgroundAutoScan {
 
     final active = await _currentActiveSnapshot();
     if (active == null) return;
+    final status = active.roundStatus;
+    if (status != null &&
+        !PatrolRoundStatus.isPendingOrInProgress(status)) {
+      return;
+    }
 
     final unverified = _eligibleCheckPoints(active.checkPoints);
     if (unverified.isEmpty) {
@@ -398,7 +412,11 @@ class PatrolBackgroundAutoScan {
 
   /// Trust server/cache on (re)start — do not overlay in-memory verified flags.
   void _applyServerRoundSnapshot(
-    ({int roundId, List<CheckPoint> checkPoints}) loaded,
+    ({
+      int roundId,
+      List<CheckPoint> checkPoints,
+      String? roundStatus,
+    }) loaded,
   ) {
     final idsInRound = {for (final p in loaded.checkPoints) p.id};
     _submittedCheckpointIds.removeWhere((id) => !idsInRound.contains(id));
@@ -413,8 +431,16 @@ class PatrolBackgroundAutoScan {
   }
 
   /// During GPS auto-scan only — overlay in-flight / submitted ids onto cache reads.
-  ({int roundId, List<CheckPoint> checkPoints}) _mergeSnapshotWithMemory(
-    ({int roundId, List<CheckPoint> checkPoints}) loaded,
+  ({
+    int roundId,
+    List<CheckPoint> checkPoints,
+    String? roundStatus,
+  }) _mergeSnapshotWithMemory(
+    ({
+      int roundId,
+      List<CheckPoint> checkPoints,
+      String? roundStatus,
+    }) loaded,
   ) {
     final optimistic = <int>{
       ..._submittedCheckpointIds,
@@ -427,10 +453,16 @@ class PatrolBackgroundAutoScan {
         for (final p in loaded.checkPoints)
           optimistic.contains(p.id) ? p.copyWith(verified: true) : p,
       ],
+      roundStatus: loaded.roundStatus,
     );
   }
 
-  Future<({int roundId, List<CheckPoint> checkPoints})?> _currentActiveSnapshot() async {
+  Future<
+      ({
+        int roundId,
+        List<CheckPoint> checkPoints,
+        String? roundStatus,
+      })?> _currentActiveSnapshot() async {
     final loaded = await PatrolActiveRoundCache.load();
     if (loaded == null) {
       _activeRoundSnapshot = null;
@@ -458,6 +490,7 @@ class PatrolBackgroundAutoScan {
         for (final p in snapshot.checkPoints)
           p.id == checkpointId ? p.copyWith(verified: true) : p,
       ],
+      roundStatus: snapshot.roundStatus,
     );
   }
 
@@ -470,6 +503,7 @@ class PatrolBackgroundAutoScan {
         for (final p in snapshot.checkPoints)
           p.id == checkpointId ? p.copyWith(verified: false) : p,
       ],
+      roundStatus: snapshot.roundStatus,
     );
   }
 

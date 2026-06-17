@@ -6,6 +6,7 @@ import '../config/storage_keys.dart';
 import '../http/api_response.dart';
 import '../models/patrol_tracking_config.dart';
 import '../utils/check_point_proximity.dart' show CheckPointMatchOrder;
+import '../utils/patrol_shift_window.dart';
 import '../utils/super_gps_service.dart';
 
 /// Login tracking config — persisted for UI + background isolate.
@@ -54,8 +55,16 @@ abstract final class PatrolTrackingConfigStore {
   static Future<bool> trackByShiftWindow() async =>
       (await load()).trackByShiftWindow;
 
-  static Future<Duration> shiftWindowGrace() async {
-    final minutes = (await load()).shiftWindowGraceMinutes;
+  static Future<PatrolShiftWindowGrace> shiftWindowGrace() async {
+    final config = await load();
+    return (
+      start: Duration(minutes: config.shiftWindowStartGraceMinutes),
+      end: Duration(minutes: config.shiftWindowEndGraceMinutes),
+    );
+  }
+
+  static Future<Duration> overdueGrace() async {
+    final minutes = (await load()).overdueGraceMinutes;
     return Duration(minutes: minutes);
   }
 

@@ -6,6 +6,7 @@ import '../config/storage_keys.dart';
 import '../models/active_patrol_round.dart';
 import '../models/check_point.dart';
 import '../models/patrol_round.dart';
+import '../utils/patrol_round_status.dart';
 import '../utils/patrol_shift_window.dart';
 import 'patrol_tracking_config_store.dart';
 
@@ -280,9 +281,19 @@ abstract final class PatrolActiveRoundCache {
     }
   }
 
+  /// `true` when cached round status allows FGS scan / next-round notify.
+  static Future<bool> isCachedRoundPendingOrInProgress({bool reload = true}) async {
+    final cached = await load();
+    if (cached == null) return false;
+    final status = cached.roundStatus;
+    if (status == null || status.isEmpty) return false;
+    return PatrolRoundStatus.isPendingOrInProgress(status);
+  }
+
   /// Once per active round while [awaiting] — blocks repeat notify/TTS on UI sync.
   static Future<bool> tryAcquireNextRoundPromptOffer() async {
     if (!await isAwaitingNextRoundAutoScanConfirm()) return false;
+    if (!await isCachedRoundPendingOrInProgress()) return false;
     final cached = await load();
     final roundId = cached?.roundId ?? 0;
     if (roundId <= 0) return false;
@@ -352,8 +363,15 @@ abstract final class PatrolActiveRoundCache {
   }
 
   /// Baselines first active round; on later round changes sets [awaiting] when config allows.
-  static Future<bool> ensureAwaitingNextRoundIfRoundChanged(int? roundId) async {
+  static Future<bool> ensureAwaitingNextRoundIfRoundChanged(
+    int? roundId, {
+    String? roundStatus,
+  }) async {
     if (roundId == null || roundId <= 0) return false;
+    if (roundStatus != null &&
+        !PatrolRoundStatus.isPendingOrInProgress(roundStatus)) {
+      return false;
+    }
     if (await isAwaitingNextRoundAutoScanConfirm()) return false;
     if (!await PatrolTrackingConfigStore.backgroundAutoScanEnabled()) {
       await setLastAutoScanConfirmedRoundId(roundId);
@@ -490,6 +508,7 @@ abstract final class PatrolActiveRoundCache {
     final next = (
       roundId: merged.round.id,
       checkPoints: merged.checkPoints,
+      roundStatus: merged.round.status,
     );
     final existing = await load();
     if (existing != null &&
@@ -500,6 +519,7 @@ abstract final class PatrolActiveRoundCache {
       StorageKeys.patrolTrackActiveRoundSnapshot,
       jsonEncode(<String, dynamic>{
         'roundId': merged.round.id,
+        'roundStatus': merged.round.status,
         'checkPoints': [
           for (final p in merged.checkPoints) p.toJson(),
         ],
@@ -516,9 +536,16 @@ abstract final class PatrolActiveRoundCache {
 
   /// Stable content hash for deduping reload / GPS reattach when data unchanged.
   static String snapshotFingerprint(
-    ({int roundId, List<CheckPoint> checkPoints}) snapshot,
+    ({
+      int roundId,
+      List<CheckPoint> checkPoints,
+      String? roundStatus,
+    }) snapshot,
   ) {
-    final parts = <String>[snapshot.roundId.toString()];
+    final parts = <String>[
+      snapshot.roundId.toString(),
+      snapshot.roundStatus ?? '',
+    ];
     for (final p in snapshot.checkPoints) {
       parts.add(
         '${p.id}:${p.verified == true}:${p.sequenceOrder}:'
@@ -533,7 +560,12 @@ abstract final class PatrolActiveRoundCache {
     await prefs.setInt(StorageKeys.patrolTrackActiveRoundRevision, next);
   }
 
-  static Future<({int roundId, List<CheckPoint> checkPoints})?> load() async {
+  static Future<
+      ({
+        int roundId,
+        List<CheckPoint> checkPoints,
+        String? roundStatus,
+      })?> load() async {
     final prefs = await _prefs(reload: true);
     final raw = prefs.getString(StorageKeys.patrolTrackActiveRoundSnapshot);
     if (raw == null || raw.isEmpty) return null;
@@ -542,6 +574,7 @@ abstract final class PatrolActiveRoundCache {
       if (map is! Map<String, dynamic>) return null;
       final roundId = (map['roundId'] as num?)?.toInt();
       if (roundId == null || roundId <= 0) return null;
+      final roundStatus = map['roundStatus'] as String?;
       final rawPoints = map['checkPoints'];
       if (rawPoints is! List) return null;
       final points = rawPoints
@@ -549,7 +582,11 @@ abstract final class PatrolActiveRoundCache {
           .map(CheckPoint.fromJson)
           .toList()
         ..sort((a, b) => a.sequenceOrder.compareTo(b.sequenceOrder));
-      return (roundId: roundId, checkPoints: points);
+      return (
+        roundId: roundId,
+        checkPoints: points,
+        roundStatus: roundStatus,
+      );
     } catch (_) {
       return null;
     }
@@ -575,8 +612,12 @@ abstract final class PatrolActiveRoundCache {
     required int roundId,
     required List<CheckPoint> checkPoints,
   }) async {
-    final next = (roundId: roundId, checkPoints: checkPoints);
     final existing = await load();
+    final next = (
+      roundId: roundId,
+      checkPoints: checkPoints,
+      roundStatus: existing?.roundStatus,
+    );
     if (existing != null &&
         snapshotFingerprint(existing) == snapshotFingerprint(next)) {
       return;
@@ -586,6 +627,7 @@ abstract final class PatrolActiveRoundCache {
       StorageKeys.patrolTrackActiveRoundSnapshot,
       jsonEncode(<String, dynamic>{
         'roundId': roundId,
+        if (existing?.roundStatus != null) 'roundStatus': existing!.roundStatus,
         'checkPoints': [for (final p in checkPoints) p.toJson()],
       }),
     );

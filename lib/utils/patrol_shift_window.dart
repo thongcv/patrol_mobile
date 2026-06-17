@@ -1,26 +1,38 @@
 import '../models/patrol_tracking_config.dart';
 import 'patrol_datetime_format.dart';
 
+/// Start/end grace applied to round expected window for emit gating.
+typedef PatrolShiftWindowGrace = ({Duration start, Duration end});
+
 /// Active round window (`round.expectedStartTime` / `expectedEndTime`) for emit gating.
 abstract final class PatrolShiftWindow {
   PatrolShiftWindow._();
 
-  static Duration _grace(Duration? emitWindowGrace) =>
-      emitWindowGrace ??
-      const Duration(minutes: PatrolTrackingConfig.defaultShiftWindowGraceMinutes);
+  static Duration _startGrace(PatrolShiftWindowGrace? emitWindowGrace) =>
+      emitWindowGrace?.start ??
+      const Duration(
+        minutes: PatrolTrackingConfig.defaultShiftWindowStartGraceMinutes,
+      );
+
+  static Duration _endGrace(PatrolShiftWindowGrace? emitWindowGrace) =>
+      emitWindowGrace?.end ??
+      const Duration(
+        minutes: PatrolTrackingConfig.defaultShiftWindowEndGraceMinutes,
+      );
 
   /// Effective bounds after applying [emitWindowGrace] (local time).
   static ({DateTime? start, DateTime? end}) effectiveBounds({
     String? expectedStartTime,
     String? expectedEndTime,
-    Duration? emitWindowGrace,
+    PatrolShiftWindowGrace? emitWindowGrace,
   }) {
-    final grace = _grace(emitWindowGrace);
+    final startGrace = _startGrace(emitWindowGrace);
+    final endGrace = _endGrace(emitWindowGrace);
     final start = parsePatrolApiInstant(expectedStartTime);
     final end = parsePatrolApiInstant(expectedEndTime);
     return (
-      start: start?.subtract(grace),
-      end: end?.add(grace),
+      start: start?.subtract(startGrace),
+      end: end?.add(endGrace),
     );
   }
 
@@ -32,7 +44,7 @@ abstract final class PatrolShiftWindow {
     required DateTime now,
     String? expectedStartTime,
     String? expectedEndTime,
-    Duration? emitWindowGrace,
+    PatrolShiftWindowGrace? emitWindowGrace,
   }) {
     final bounds = effectiveBounds(
       expectedStartTime: expectedStartTime,
@@ -60,7 +72,7 @@ class PatrolShiftWindowSnapshot {
 
   bool contains(
     DateTime now, {
-    Duration? emitWindowGrace,
+    PatrolShiftWindowGrace? emitWindowGrace,
   }) =>
       PatrolShiftWindow.isWithinWindow(
         now: now,
@@ -72,7 +84,7 @@ class PatrolShiftWindowSnapshot {
   /// Next instant when [contains] may change (effective start/end, local).
   DateTime? nextBoundaryAfter(
     DateTime now, {
-    Duration? emitWindowGrace,
+    PatrolShiftWindowGrace? emitWindowGrace,
   }) {
     final bounds = PatrolShiftWindow.effectiveBounds(
       expectedStartTime: expectedStartTime,
