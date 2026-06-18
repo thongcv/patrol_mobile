@@ -1,6 +1,6 @@
 part of '../patrol_round_screen.dart';
 
-/// Full-screen map: session tracking GPS + route points (Maps SDK only — [GoogleMapsConfig]).
+/// Full-screen map: session tracking GPS + route points (OpenStreetMap / flutter_map).
 class _RouteMapOverlay extends StatefulWidget {
   const _RouteMapOverlay({
     required this.routeRevision,
@@ -19,26 +19,26 @@ class _RouteMapOverlay extends StatefulWidget {
 }
 
 class _RouteMapOverlayState extends State<_RouteMapOverlay> {
-  GoogleMapController? _mapController;
-  Set<Marker> _markers = {};
-  Set<Circle> _circles = {};
+  final MapController _mapController = MapController();
+  bool _mapReady = false;
   LatLng? _userPosition;
   bool _loadingLocation = true;
-  bool _syncingMarkers = false;
-  bool _syncMarkersPendingFull = false;
-  Set<int>? _syncMarkersPendingPartial;
   bool _didFitCamera = false;
   StreamSubscription<Position>? _trackPositionSub;
-  final Map<String, BitmapDescriptor> _pinIconCache = {};
 
-  static final _defaultCenter = LatLng(10.8231, 106.6297);
+  static const _defaultCenter = LatLng(10.8231, 106.6297);
   static const _defaultZoom = 14.0;
+
+  // Last known-good camera, used to self-heal if the camera ever ends up with a
+  // non-finite center/zoom (which crashes flutter_map's projection).
+  LatLng _lastGoodCenter = _defaultCenter;
+  double _lastGoodZoom = _defaultZoom;
+  bool _recoveringCamera = false;
 
   List<CheckPoint> get _checkPoints => widget.checkPointsProvider();
 
-  List<CheckPoint> get _pointsWithGps => _checkPoints
-      .where((p) => p.hasCoordinates)
-      .toList(growable: false);
+  List<CheckPoint> get _pointsWithGps =>
+      _checkPoints.where((p) => p.hasCoordinates).toList(growable: false);
 
   @override
   void initState() {
@@ -49,13 +49,7 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
 
   void _onRouteRevision() {
     if (!mounted) return;
-    final update = widget.routeRevision.value;
-    if (update.checkpointIds.isEmpty) {
-      setState(() {});
-      unawaited(_syncMarkers());
-      return;
-    }
-    unawaited(_syncCheckpointMarkers(update.checkpointIds));
+    setState(() {});
   }
 
   @override
@@ -70,30 +64,24 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
   Future<void> _startLocationTracking() async {
     final track = PatrolRealtimeTrackService.instance;
 
-    Future<void> applyPosition(double lat, double lng) async {
+    void applyPosition(double lat, double lng) {
       if (!mounted) return;
       final latLng = finitePatrolMapLatLng(lat, lng);
       if (latLng == null) return;
-      final firstFix = _userPosition == null;
       setState(() {
         _loadingLocation = false;
         _userPosition = latLng;
       });
-      if (firstFix) {
-        await _syncMarkers();
-        await _fitMapToMarkersOnce();
-      } else {
-        await _updateUserMarkerOnly();
-      }
+      _fitMapToMarkersOnce();
     }
 
     final seed = track.lastKnownPosition;
     if (seed != null) {
-      await applyPosition(seed.latitude, seed.longitude);
+      applyPosition(seed.latitude, seed.longitude);
     }
 
     _trackPositionSub = track.positionUpdates.listen((pos) {
-      unawaited(applyPosition(pos.latitude, pos.longitude));
+      applyPosition(pos.latitude, pos.longitude);
     });
 
     if (seed != null) return;
@@ -103,8 +91,7 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
       if (!mounted) return;
       if (_userPosition == null) {
         setState(() => _loadingLocation = false);
-        await _syncMarkers();
-        await _fitMapToMarkersOnce();
+        _fitMapToMarkersOnce();
       }
       return;
     }
@@ -116,205 +103,15 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
     if (!mounted) return;
     final pos = gps.position;
     if (pos != null) {
-      await applyPosition(pos.latitude, pos.longitude);
+      applyPosition(pos.latitude, pos.longitude);
     } else {
       setState(() => _loadingLocation = false);
-      await _syncMarkers();
-      await _fitMapToMarkersOnce();
+      _fitMapToMarkersOnce();
     }
   }
 
-  Future<void> _fitMapToMarkersOnce() async {
-    if (_didFitCamera) return;
-    _didFitCamera = true;
-    await _fitMapToMarkers();
-  }
-
-  Future<BitmapDescriptor> _pinIcon({
-    required Color color,
-    String? label,
-    bool showLocationDot = false,
-  }) async {
-    final key = '${color.toARGB32()}|$label|$showLocationDot';
-    final cached = _pinIconCache[key];
-    if (cached != null) return cached;
-    final bytes = await buildMapPinImage(
-      color: color,
-      label: label,
-      showLocationDot: showLocationDot,
-    );
-    final icon = BitmapDescriptor.bytes(
-      bytes,
-      width: 44,
-      height: 52,
-    );
-    _pinIconCache[key] = icon;
-    return icon;
-  }
-
-  Future<void> _onMapCreated(GoogleMapController controller) async {
-    _mapController = controller;
-    await _syncMarkers();
-    await _fitMapToMarkersOnce();
-  }
-
-  Future<void> _updateUserMarkerOnly() async {
-    final pos = _userPosition;
-    if (pos == null) return;
-    final icon = await _pinIcon(
-      color: PatrolShellColors.accent,
-      showLocationDot: true,
-    );
-    if (!mounted) return;
-    final others = _markers
-        .where((m) => m.markerId.value != 'user')
-        .toSet();
-    setState(() {
-      _markers = {
-        ...others,
-        Marker(
-          markerId: const MarkerId('user'),
-          position: pos,
-          icon: icon,
-          anchor: const Offset(0.5, 1.0),
-        ),
-      };
-    });
-  }
-
-  Future<Marker?> _markerForCheckpoint(CheckPoint p) async {
-    final pos = finitePatrolMapLatLng(p.latitude, p.longitude);
-    if (pos == null) return null;
-    final scanned = widget.isScanned(p);
-    final color = scanned
-        ? const Color(0xFF34D399)
-        : const Color(0xFFFBBF24);
-    final icon = await _pinIcon(
-      color: color,
-      label: '${p.sequenceOrder}',
-    );
-    return Marker(
-      markerId: MarkerId('cp_${p.id}'),
-      position: pos,
-      icon: icon,
-      anchor: const Offset(0.5, 1.0),
-    );
-  }
-
-  Circle? _circleForCheckpoint(CheckPoint p) {
-    final circles = buildCheckpointRadiusCircles(
-      checkPoints: [p],
-      isScanned: widget.isScanned,
-    );
-    return circles.isEmpty ? null : circles.first;
-  }
-
-  Future<void> _syncCheckpointMarkers(Set<int> checkpointIds) async {
-    if (_syncingMarkers) {
-      _syncMarkersPendingPartial ??= {};
-      _syncMarkersPendingPartial!.addAll(checkpointIds);
-      return;
-    }
-    _syncingMarkers = true;
-    try {
-      var markers = _markers;
-      var circles = _circles;
-      for (final id in checkpointIds) {
-        CheckPoint? point;
-        for (final p in _pointsWithGps) {
-          if (p.id == id) {
-            point = p;
-            break;
-          }
-        }
-        if (point == null) continue;
-        final marker = await _markerForCheckpoint(point);
-        if (!mounted || marker == null) return;
-        markers = {
-          ...markers.where((m) => m.markerId.value != 'cp_$id'),
-          marker,
-        };
-        final circle = _circleForCheckpoint(point);
-        if (circle != null) {
-          circles = {
-            ...circles.where((c) => c.circleId.value != 'cp_radius_$id'),
-            circle,
-          };
-        }
-      }
-      if (!mounted) return;
-      setState(() {
-        _markers = markers;
-        _circles = circles;
-      });
-    } finally {
-      _syncingMarkers = false;
-      _flushPendingMarkerSync();
-    }
-  }
-
-  void _flushPendingMarkerSync() {
-    if (_syncMarkersPendingFull) {
-      _syncMarkersPendingFull = false;
-      unawaited(_syncMarkers());
-      return;
-    }
-    final partial = _syncMarkersPendingPartial;
-    if (partial != null && partial.isNotEmpty) {
-      _syncMarkersPendingPartial = null;
-      unawaited(_syncCheckpointMarkers(partial));
-    }
-  }
-
-  Future<void> _syncMarkers() async {
-    if (_syncingMarkers) {
-      _syncMarkersPendingFull = true;
-      return;
-    }
-    _syncingMarkers = true;
-    try {
-      final markers = <Marker>{};
-
-      for (final p in _pointsWithGps) {
-        final marker = await _markerForCheckpoint(p);
-        if (marker != null) markers.add(marker);
-      }
-
-      final circles = buildCheckpointRadiusCircles(
-        checkPoints: _pointsWithGps,
-        isScanned: widget.isScanned,
-      );
-
-      if (_userPosition != null) {
-        final icon = await _pinIcon(
-          color: PatrolShellColors.accent,
-          showLocationDot: true,
-        );
-        markers.add(
-          Marker(
-            markerId: const MarkerId('user'),
-            position: _userPosition!,
-            icon: icon,
-            anchor: const Offset(0.5, 1.0),
-          ),
-        );
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _markers = markers;
-        _circles = circles;
-      });
-    } finally {
-      _syncingMarkers = false;
-      _flushPendingMarkerSync();
-    }
-  }
-
-  Future<void> _fitMapToMarkers() async {
-    final controller = _mapController;
-    if (controller == null) return;
-
+  void _fitMapToMarkersOnce() {
+    if (_didFitCamera || !_mapReady) return;
     final positions = <LatLng>[];
     for (final p in _pointsWithGps) {
       final pos = finitePatrolMapLatLng(p.latitude, p.longitude);
@@ -323,49 +120,134 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
     if (_userPosition != null) positions.add(_userPosition!);
     if (positions.isEmpty) return;
 
-    if (positions.length == 1) {
-      await controller.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(target: positions.first, zoom: 15),
-        ),
+    _didFitCamera = true;
+    _fitToPositions(positions, attempt: 0);
+  }
+
+  /// Fits the camera once the map has a real (finite, positive) size. While the
+  /// overlay sheet is still animating in, the camera size can be the impossible
+  /// placeholder size, which makes flutter_map's fit math produce NaN — so we
+  /// wait for a laid-out frame before fitting.
+  void _fitToPositions(List<LatLng> positions, {required int attempt}) {
+    if (!mounted) return;
+    final size = _mapController.camera.nonRotatedSize;
+    final ready = size.width.isFinite &&
+        size.height.isFinite &&
+        size.width > 0 &&
+        size.height > 0;
+    if (!ready) {
+      if (attempt >= 5) return;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _fitToPositions(positions, attempt: attempt + 1),
       );
       return;
     }
 
-    var minLat = 90.0;
-    var maxLat = -90.0;
-    var minLng = 180.0;
-    var maxLng = -180.0;
-    for (final pos in positions) {
-      if (pos.latitude < minLat) minLat = pos.latitude;
-      if (pos.latitude > maxLat) maxLat = pos.latitude;
-      if (pos.longitude < minLng) minLng = pos.longitude;
-      if (pos.longitude > maxLng) maxLng = pos.longitude;
+    final unique = <LatLng>[];
+    final seen = <String>{};
+    for (final p in positions) {
+      if (seen.add('${p.latitude},${p.longitude}')) unique.add(p);
     }
 
-    final bounds = LatLngBounds(
-      southwest: LatLng(minLat, minLng),
-      northeast: LatLng(maxLat, maxLng),
+    if (unique.length == 1) {
+      _mapController.move(unique.first, 15);
+      return;
+    }
+
+    // Keep padding within the available size to avoid a non-positive fit area.
+    final padX = size.width / 4 < 56 ? size.width / 4 : 56.0;
+    final padY = size.height / 4 < 56 ? size.height / 4 : 56.0;
+    try {
+      _mapController.fitCamera(
+        CameraFit.coordinates(
+          coordinates: unique,
+          padding: EdgeInsets.symmetric(horizontal: padX, vertical: padY),
+          maxZoom: 17,
+        ),
+      );
+    } catch (_) {
+      _mapController.move(unique.first, 14);
+    }
+  }
+
+  void _onMapReady() {
+    _mapReady = true;
+    _fitMapToMarkersOnce();
+  }
+
+  /// Safety net: if the camera center/zoom ever becomes non-finite (a known
+  /// failure mode in flutter_map gesture math), snap back to the last valid
+  /// camera before the next paint projects the bad value and throws.
+  void _onPositionChanged(MapCamera camera, bool hasGesture) {
+    final center = camera.center;
+    final isFinite = center.latitude.isFinite &&
+        center.longitude.isFinite &&
+        camera.zoom.isFinite;
+    if (isFinite) {
+      _lastGoodCenter = center;
+      _lastGoodZoom = camera.zoom;
+      return;
+    }
+    if (_recoveringCamera) return;
+    _recoveringCamera = true;
+    _mapController.move(
+      _lastGoodCenter,
+      _lastGoodZoom.isFinite ? _lastGoodZoom : _defaultZoom,
     );
-    await controller.animateCamera(
-      CameraUpdate.newLatLngBounds(bounds, 56),
+    _recoveringCamera = false;
+  }
+
+  List<CircleMarker> _buildCircles() {
+    return buildCheckpointRadiusCircles(
+      checkPoints: _pointsWithGps,
+      isScanned: widget.isScanned,
     );
   }
 
-  CameraPosition _initialCamera() {
-    var center = _defaultCenter;
-    if (_userPosition != null) {
-      center = _userPosition!;
-    } else {
-      for (final p in _pointsWithGps) {
-        final pos = finitePatrolMapLatLng(p.latitude, p.longitude);
-        if (pos != null) {
-          center = pos;
-          break;
-        }
-      }
+  List<Marker> _buildMarkers() {
+    final markers = <Marker>[];
+    for (final p in _pointsWithGps) {
+      final pos = finitePatrolMapLatLng(p.latitude, p.longitude);
+      if (pos == null) continue;
+      final scanned = widget.isScanned(p);
+      markers.add(
+        Marker(
+          point: pos,
+          width: kMapPinWidth,
+          height: kMapPinHeight,
+          alignment: Alignment.topCenter,
+          child: MapPin(
+            color: scanned ? const Color(0xFF34D399) : const Color(0xFFFBBF24),
+            label: '${p.sequenceOrder}',
+          ),
+        ),
+      );
     }
-    return CameraPosition(target: center, zoom: _defaultZoom);
+    final user = _userPosition;
+    if (user != null) {
+      markers.add(
+        Marker(
+          point: user,
+          width: kMapPinWidth,
+          height: kMapPinHeight,
+          alignment: Alignment.topCenter,
+          child: const MapPin(
+            color: PatrolShellColors.accent,
+            showLocationDot: true,
+          ),
+        ),
+      );
+    }
+    return markers;
+  }
+
+  LatLng _initialCenter() {
+    if (_userPosition != null) return _userPosition!;
+    for (final p in _pointsWithGps) {
+      final pos = finitePatrolMapLatLng(p.latitude, p.longitude);
+      if (pos != null) return pos;
+    }
+    return _defaultCenter;
   }
 
   @override
@@ -398,33 +280,17 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
                   borderRadius: BorderRadius.circular(16),
                   child: Stack(
                     children: [
-                      if (!GoogleMapsConfig.isConfigured)
-                        ColoredBox(
-                          color: PatrolShellColors.surface,
-                          child: Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Text(
-                                'Google Maps is not configured: set GOOGLE_MAPS_API_KEY '
-                                '(--dart-define) or GoogleMapsConfig.devFallbackApiKey. '
-                                'On iOS, add the key to Info.plist as well.',
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(color: Colors.white70),
-                              ),
-                            ),
-                          ),
-                        )
-                      else
-                        PatrolGoogleMap(
-                          key: const ValueKey('patrol_route_map'),
-                          initialCameraPosition: _initialCamera(),
-                          markers: _markers,
-                          circles: _circles,
-                          onMapCreated: _onMapCreated,
-                        ),
+                      PatrolOsmMap(
+                        key: const ValueKey('patrol_route_map'),
+                        mapController: _mapController,
+                        initialCenter: _initialCenter(),
+                        initialZoom: _defaultZoom,
+                        onMapReady: _onMapReady,
+                        onPositionChanged: _onPositionChanged,
+                        markers: _buildMarkers(),
+                        circles: _buildCircles(),
+                        backgroundColor: PatrolShellColors.surface,
+                      ),
                       if (_loadingLocation)
                         const Align(
                           alignment: Alignment.topCenter,

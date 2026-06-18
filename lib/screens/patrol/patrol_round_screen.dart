@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
-import '../../config/google_maps_config.dart';
 import '../../http/api_failure.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/active_patrol_round.dart';
@@ -28,11 +28,11 @@ import '../../services/patrol_realtime_track_service.dart';
 import '../../utils/beacon/bluetooth_beacon_reader.dart';
 import '../../utils/check_point_proximity.dart';
 import '../../utils/device_location.dart';
-import '../../utils/map_pin_image.dart';
+import '../../utils/map_pin_widget.dart';
 import '../../utils/patrol_map_overlays.dart';
 import '../../utils/patrol_proximity_navigation_speech.dart';
 import '../../utils/nfc/nfc_tag_reader.dart';
-import '../../widgets/patrol_google_map.dart';
+import '../../widgets/patrol_osm_map.dart';
 import '../../utils/patrol_datetime_format.dart';
 import '../../utils/patrol_round_status.dart';
 import '../../utils/top_toast.dart';
@@ -85,6 +85,10 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   StreamSubscription<ActivePatrolRound?>? _activeRoundSocketSub;
   StreamSubscription<CheckPoint>? _checkpointVerifiedSub;
   Timer? _overdueUiRefreshTimer;
+  /// One-shot at [PatrolRound.expectedEndTime] to reload when overdue chip appears.
+  Timer? _overdueChipReloadTimer;
+  /// Avoid duplicate silent reload after overdue chip is shown.
+  bool _overdueChipReloadDone = false;
   late final VoidCallback _fgsAutoScanUiListener;
   /// Guards socket-driven policy while [_load] owns the round bootstrap sequence.
   var _localRoundLoadSeq = 0;
@@ -178,6 +182,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   @override
   void dispose() {
     _overdueUiRefreshTimer?.cancel();
+    _overdueChipReloadTimer?.cancel();
     PatrolBackgroundAutoScanUiState.running
         .removeListener(_fgsAutoScanUiListener);
     PatrolBackgroundAutoScanUiState.awaitingNextRoundConfirm
@@ -359,6 +364,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _resetStaleForegroundScanUiState();
       _active = null;
       _scannedCheckpointIds.clear();
+      _overdueChipReloadDone = false;
       _notifyRouteMapRevision();
       _syncOverdueUiRefreshTimer();
       return;
@@ -366,6 +372,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
     if (previousRoundId != null && previousRoundId != active.round.id) {
       _resetStaleForegroundScanUiState();
+      _overdueChipReloadDone = false;
     }
 
     // On user refresh: trust only GET active `verified`, drop local scan overrides.
@@ -404,8 +411,50 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       ],
     );
     _notifyRouteMapRevision();
+    if (_active != null && _isWithinOverdueGracePeriod(_active!)) {
+      _overdueChipReloadDone = true;
+    }
     _syncOverdueUiRefreshTimer();
   }
+
+  /// Silent GET active as soon as overdue chip would appear — server status may
+  /// already hide scan buttons while local round snapshot is stale.
+  void _maybeReloadForOverdueChipShown() {
+    final active = _active;
+    if (active == null) {
+      _overdueChipReloadDone = false;
+      return;
+    }
+    if (!_isWithinOverdueGracePeriod(active)) return;
+    if (_overdueChipReloadDone) return;
+    if (_loading || _refreshing || _overdueNoteSubmittingId != null) return;
+
+    _overdueChipReloadDone = true;
+    unawaited(_load(silent: true));
+  }
+
+  void _onOverdueChipDeadlineReached() {
+    if (!mounted) return;
+    _maybeReloadForOverdueChipShown();
+    setState(() {});
+  }
+
+  void _scheduleOverdueChipReloadAtDeadline(ActivePatrolRound data) {
+    _overdueChipReloadTimer?.cancel();
+    _overdueChipReloadTimer = null;
+
+    if (!_isRoundNotCompleted(data.round)) return;
+    final end = _roundExpectedEndDeadline(data);
+    if (end == null) return;
+
+    final delay = end.difference(DateTime.now());
+    if (delay.isNegative) {
+      _maybeReloadForOverdueChipShown();
+      return;
+    }
+    _overdueChipReloadTimer = Timer(delay, _onOverdueChipDeadlineReached);
+  }
+
   void _markCheckpointVerified(int checkpointId) {
     final active = _active;
     if (active == null) return;
@@ -499,13 +548,18 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
   void _syncOverdueUiRefreshTimer() {
     _overdueUiRefreshTimer?.cancel();
     _overdueUiRefreshTimer = null;
+    _overdueChipReloadTimer?.cancel();
+    _overdueChipReloadTimer = null;
 
     final active = _active;
     if (active == null || !_isRoundNotCompleted(active.round)) return;
     if (_roundExpectedEndDeadline(active) == null) return;
 
+    _scheduleOverdueChipReloadAtDeadline(active);
+
     _overdueUiRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
+      _maybeReloadForOverdueChipShown();
       setState(() {});
     });
   }
@@ -582,7 +636,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       if (!mounted || sample == null) return;
 
       final note = '${l10n.patrolRoundOverdueNotePrefix}$reason';
-      await _submitPatrolLogAfterProximity(
+      final ok = await _submitPatrolLogAfterProximity(
         point: point,
         roundId: data.round.id,
         sample: sample,
@@ -590,6 +644,9 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
         successMessage: l10n.patrolRoundOverdueNoteSuccess,
         failureMessage: l10n.patrolRoundOverdueNoteFailed,
       );
+      if (mounted && ok) {
+        unawaited(_load(silent: true));
+      }
     } finally {
       if (mounted) {
         setState(() => _overdueNoteSubmittingId = null);
@@ -870,7 +927,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     );
   }
 
-  Future<void> _submitPatrolLogAfterProximity({
+  Future<bool> _submitPatrolLogAfterProximity({
     required CheckPoint point,
     required int roundId,
     required DeviceLocationSample sample,
@@ -880,13 +937,13 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     String? failureMessage,
     bool resumeAutoScan = false,
   }) async {
-    if (!mounted) return;
+    if (!mounted) return false;
 
     final l10n = AppLocalizations.of(context)!;
 
     if (await PatrolActiveRoundCache.isCheckpointVerified(point.id)) {
       _markCheckpointVerified(point.id);
-      if (!mounted) return;
+      if (!mounted) return false;
       context.showTopToast(
         l10n.patrolRoundQrScanSuccess,
         duration: const Duration(milliseconds: 400),
@@ -903,7 +960,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
         });
         await _stopQrLocationWatch();
       }
-      return;
+      return true;
     }
 
     final submit = PatrolLogSubmit(
@@ -924,12 +981,12 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     try {
       final logResult = await PatrolLogService.instance.createPatrolLog(submit);
 
-      if (!mounted) return;
+      if (!mounted) return false;
 
       if (logResult.ok) {
         ok = true;
         _markCheckpointVerified(point.id);
-        if (!mounted) return;
+        if (!mounted) return false;
         context.showTopToast(
           successMessage ?? l10n.patrolRoundQrScanSuccess,
          duration: const Duration(milliseconds: 400));
@@ -943,7 +1000,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       if (!resumeAutoScan) {
         await _cancelQrScanWait();
       }
-      if (!mounted) return;
+      if (!mounted) return false;
       context.showTopToast(
         failureMessage ?? l10n.patrolRoundQrScanFailed,
        duration: const Duration(milliseconds: 400));
@@ -978,6 +1035,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
         }
       }
     }
+    return ok;
   }
   DeviceLocationSample _fallbackLocationSampleForCheckpoint(CheckPoint point) {
     final lat = point.latitude!;

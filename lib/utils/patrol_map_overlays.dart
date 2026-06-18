@@ -1,11 +1,13 @@
-import 'dart:math' as math;
 import 'dart:ui' show Color;
 
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../models/check_point.dart';
 import 'check_point_proximity.dart';
 
+/// Validates a coordinate pair and returns a [LatLng] (OpenStreetMap / flutter_map),
+/// or null when out of range / non-finite.
 LatLng? finitePatrolMapLatLng(double? lat, double? lng) {
   if (lat == null || lng == null) return null;
   if (!lat.isFinite || !lng.isFinite) return null;
@@ -13,12 +15,12 @@ LatLng? finitePatrolMapLatLng(double? lat, double? lng) {
   return LatLng(lat, lng);
 }
 
-/// Checkpoint radius circles on map (Maps SDK `Circle`, not Geocoding).
-Set<Circle> buildCheckpointRadiusCircles({
+/// Checkpoint radius circles drawn on the map ([CircleMarker], radius in meters).
+List<CircleMarker> buildCheckpointRadiusCircles({
   required Iterable<CheckPoint> checkPoints,
   required bool Function(CheckPoint) isScanned,
 }) {
-  final circles = <Circle>{};
+  final circles = <CircleMarker>[];
   for (final p in checkPoints) {
     if (!p.hasCoordinates) continue;
     final center = finitePatrolMapLatLng(p.latitude, p.longitude);
@@ -28,74 +30,15 @@ Set<Circle> buildCheckpointRadiusCircles({
     final radiusM = p.radius ?? kDefaultCheckPointRadiusM;
     if (!radiusM.isFinite || radiusM <= 0) continue;
     circles.add(
-      Circle(
-        circleId: CircleId('cp_radius_${p.id}'),
-        center: center,
+      CircleMarker(
+        point: center,
         radius: radiusM,
-        fillColor: stroke.withValues(alpha: 0.12),
-        strokeColor: stroke.withValues(alpha: 0.55),
-        strokeWidth: 1,
+        useRadiusInMeter: true,
+        color: stroke.withValues(alpha: 0.12),
+        borderColor: stroke.withValues(alpha: 0.55),
+        borderStrokeWidth: 1,
       ),
     );
   }
   return circles;
-}
-
-/// Circle-approximating polygon (Maps SDK `Polygon`) when polygon is needed instead of Circle.
-Set<Polygon> buildCheckpointRadiusPolygons({
-  required Iterable<CheckPoint> checkPoints,
-  required bool Function(CheckPoint) isScanned,
-  int segments = 32,
-}) {
-  final polygons = <Polygon>{};
-  for (final p in checkPoints) {
-    if (!p.hasCoordinates) continue;
-    final center = finitePatrolMapLatLng(p.latitude, p.longitude);
-    if (center == null) continue;
-    final scanned = isScanned(p);
-    final stroke = scanned ? const Color(0xFF34D399) : const Color(0xFFFBBF24);
-    final radiusM = p.radius ?? kDefaultCheckPointRadiusM;
-    if (!radiusM.isFinite || radiusM <= 0) continue;
-    final ring = _geodesicRing(
-      center: center,
-      radiusMeters: radiusM,
-      segments: segments,
-    );
-    polygons.add(
-      Polygon(
-        polygonId: PolygonId('cp_poly_${p.id}'),
-        points: ring,
-        fillColor: stroke.withValues(alpha: 0.12),
-        strokeColor: stroke.withValues(alpha: 0.55),
-        strokeWidth: 1,
-      ),
-    );
-  }
-  return polygons;
-}
-
-List<LatLng> _geodesicRing({
-  required LatLng center,
-  required double radiusMeters,
-  required int segments,
-}) {
-  const earthRadiusM = 6371000.0;
-  final latRad = center.latitude * math.pi / 180;
-  final lngRad = center.longitude * math.pi / 180;
-  final angular = radiusMeters / earthRadiusM;
-  final points = <LatLng>[];
-  for (var i = 0; i < segments; i++) {
-    final bearing = 2 * math.pi * i / segments;
-    final lat2 = math.asin(
-      math.sin(latRad) * math.cos(angular) +
-          math.cos(latRad) * math.sin(angular) * math.cos(bearing),
-    );
-    final lng2 = lngRad +
-        math.atan2(
-          math.sin(bearing) * math.sin(angular) * math.cos(latRad),
-          math.cos(angular) - math.sin(latRad) * math.sin(lat2),
-        );
-    points.add(LatLng(lat2 * 180 / math.pi, lng2 * 180 / math.pi));
-  }
-  return points;
 }

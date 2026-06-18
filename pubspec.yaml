@@ -56,13 +56,14 @@ dependencies:
   # Chỉ để `flutter pub get` trên máy dev Windows; APK/IPA không dùng.
   flutter_blue_plus_winrt: ^0.0.20
   permission_handler: ^12.0.1
-  google_maps_flutter: 2.17.0
   vibration: ^3.1.8
   flutter_tts: ^4.2.5
   stomp_dart_client: ^3.0.1
   dio_cookie_manager: ^3.4.0
   cookie_jar: ^4.0.9
   path_provider: ^2.1.5
+  flutter_map: ^8.3.0
+  latlong2: ^0.9.1
 
 dev_dependencies:
   flutter_test:
