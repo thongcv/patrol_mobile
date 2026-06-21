@@ -48,6 +48,8 @@ part 'round/patrol_round_overdue_note_dialog.dart';
 part 'round/patrol_round_route_point_card.dart';
 part 'round/patrol_round_route_map_overlay.dart';
 part 'round/patrol_round_common_widgets.dart';
+part 'round/patrol_round_auto_scan_sheet.dart';
+part 'round/patrol_round_schedule_overlay.dart';
 
 /// QR preview / button size on checkpoint and round cards.
 const double kPatrolQrPreviewSize = 64;
@@ -471,25 +473,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _applyCheckpointVerified(verifiedPoint, persistCache: true);
     });
   }
-  String _messageForFailure(ApiFailure f, AppLocalizations l10n) {
-    return f.userMessage(
-      configMissing: l10n.toastApiNotConfigured,
-      network: l10n.toastNetworkErrorShort,
-      unauthorized: l10n.patrolRoundUnauthorized,
-      badResponse: l10n.patrolRoundLoadFailed,
-      server: l10n.patrolRoundLoadFailed,
-    );
-  }
-  String _messageForScanFailure(ApiFailure f, AppLocalizations l10n) {
-    return f.userMessage(
-      configMissing: l10n.toastApiNotConfigured,
-      network: l10n.toastNetworkErrorShort,
-      unauthorized: l10n.patrolRoundUnauthorized,
-      badResponse: l10n.patrolRoundQrScanFailed,
-      server: l10n.patrolRoundQrScanFailed,
-    );
-  }
-
   // --- Scan flows: shared ---
 
   bool get _roundActionBusy =>
@@ -499,41 +482,10 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       _autoScanActive ||
       _manualScanKind != null;
 
-  bool _isRoundOverdue(ActivePatrolRound data) {
-    final end = _roundExpectedEndDeadline(data);
-    if (end == null) return false;
-    return DateTime.now().isAfter(end);
-  }
-
-  DateTime? _roundExpectedEndDeadline(ActivePatrolRound data) {
-    final direct = parsePatrolApiInstant(data.round.expectedEndTime);
-    if (direct != null) return direct;
-
-    final start = parsePatrolApiInstant(data.round.expectedStartTime);
-    final roundMin = data.schedule.roundMinutes;
-    if (start != null && roundMin != null && roundMin > 0) {
-      return start.add(Duration(minutes: roundMin));
-    }
-    return null;
-  }
-
   DateTime? _roundOverdueGraceDeadline(ActivePatrolRound data) {
     final end = _roundExpectedEndDeadline(data);
     if (end == null) return null;
     return end.add(Duration(minutes: _overdueGraceMinutes));
-  }
-
-  bool _isRoundOngoing(PatrolRound round) =>
-      _isRoundActive(round.status) || _isRoundActive(round.detailStatus);
-
-  bool _isRoundNotCompleted(PatrolRound round) {
-    switch (round.status.trim().toUpperCase()) {
-      case 'COMPLETED':
-      case 'DONE':
-        return false;
-      default:
-        return true;
-    }
   }
 
   bool _isWithinOverdueGracePeriod(ActivePatrolRound data) {
@@ -1037,40 +989,8 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     }
     return ok;
   }
-  DeviceLocationSample _fallbackLocationSampleForCheckpoint(CheckPoint point) {
-    final lat = point.latitude!;
-    final lng = point.longitude!;
-    return (
-      position: Position(
-        latitude: lat,
-        longitude: lng,
-        timestamp: DateTime.now(),
-        accuracy: double.maxFinite,
-        altitude: 0,
-        heading: 0,
-        speed: 0,
-        speedAccuracy: 0,
-        altitudeAccuracy: 0,
-        headingAccuracy: 0,
-      ),
-      latitude: lat,
-      longitude: lng,
-      gpsAltitude: null,
-      baroAltitude: null,
-    );
-  }
-
   // --- Scan flow: QR (onQrScan) ---
 
-  /// Normalizes QR payload and matches `CheckPoint.qrCode` on the current route.
-  CheckPoint? _findCheckPointByQrCode(List<CheckPoint> points, String raw) {
-    var payload = raw.trim();
-    if (payload.isEmpty) return null;
-    for (final p in points) {
-      if (p.qrCode?.trim() == payload) return p;
-    }
-    return null;
-  }
   Future<void> _onRoundQrScan(ActivePatrolRound data) async {
     if (_roundActionBusy) return;
 
@@ -1164,23 +1084,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
   // --- Scan flow: NFC (onNfcScan) ---
 
-  CheckPoint? _findCheckPointByNfc(List<CheckPoint> points, String raw) {
-    final payload = raw.trim();
-    if (payload.isEmpty) return null;
-    for (final p in points) {
-      if (p.nfc?.trim() == payload && p.verified != true) return p;
-    }
-    return null;
-  }
-  String _nfcScanFailureMessage(AppLocalizations l10n, NfcReadFailure failure) {
-    return switch (failure) {
-      NfcReadFailure.disabled => l10n.patrolPointNfcDisabled,
-      NfcReadFailure.timeout => l10n.patrolPointNfcScanTimeout,
-      NfcReadFailure.unavailable => l10n.patrolPointNfcUnavailable,
-      NfcReadFailure.noIdentifier || NfcReadFailure.failed =>
-        l10n.patrolPointNfcScanFailed,
-    };
-  }
   Future<void> _onRoundNfcScan(ActivePatrolRound data) async {
     if (_roundActionBusy) return;
 
@@ -1233,15 +1136,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
 
   // --- Scan flow: auto GPS (onAutoScan) ---
 
-  String _gpsMessageFromKey(String? key, AppLocalizations l10n) {
-    return switch (key) {
-      'service' => l10n.patrolPointGpsServiceOff,
-      'denied' => l10n.patrolPointGpsDenied,
-      'error' => l10n.patrolPointGpsError,
-      'unavailable' => l10n.patrolRoundQrGpsUnavailable,
-      _ => l10n.patrolRoundQrGpsUnavailable,
-    };
-  }
   Future<void> _completeAutoScanAfterMatch({
     required CheckPoint point,
     required int roundId,
@@ -1322,76 +1216,13 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (sheetContext) {
-          return Padding(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              4,
-              16,
-              16 + MediaQuery.paddingOf(sheetContext).bottom,
-            ),
-            child: Material(
-              color: PatrolShellColors.surface,
-              borderRadius: BorderRadius.circular(20),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    ValueListenableBuilder<_QrScanProximityStatus>(
-                      valueListenable: statusNotifier,
-                      builder: (_, status, _) {
-                        final bodyStyle = Theme.of(sheetContext)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.88),
-                              height: 1.45,
-                            );
-                        final detail = status.snapshot;
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text(
-                              status.headline,
-                              textAlign: TextAlign.center,
-                              style: bodyStyle,
-                            ),
-                            if (detail != null) ...[
-                              const SizedBox(height: 14),
-                              _QrProximityDetailPanel(
-                                l10n: l10n,
-                                snapshot: detail,
-                                baroPending: status.baroPending,
-                              ),
-                            ],
-                          ],
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    const Center(
-                      child: SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: Color(0xFF34D399),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(sheetContext).pop();
-                        unawaited(_cancelQrScanWait());
-                      },
-                      child: Text(l10n.patrolRoundCancel),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          return _AutoScanWaitingSheet(
+            l10n: l10n,
+            statusNotifier: statusNotifier,
+            onCancel: () {
+              Navigator.of(sheetContext).pop();
+              unawaited(_cancelQrScanWait());
+            },
           );
         },
       ).whenComplete(() {
@@ -1498,72 +1329,6 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     out.sort((a, b) => a.sequenceOrder.compareTo(b.sequenceOrder));
     return out;
   }
-  bool _bluetoothCheckPointBeaconFieldsMatch(
-    CheckPoint point, {
-    String? scannedUuid,
-    int? major,
-    int? minor,
-    int? rssi,
-  }) {
-    final scanned = scannedUuid?.trim();
-    final pUuid = point.uuid?.trim();
-    if (scanned == null ||
-        scanned.isEmpty ||
-        pUuid == null ||
-        pUuid.isEmpty ||
-        !bluetoothIdentifiersMatch(pUuid, scanned)) {
-      return false;
-    }
-
-    final targetMajor = point.major;
-    if (targetMajor != null && major != targetMajor) return false;
-
-    final targetMinor = point.minor;
-    if (targetMinor != null && minor != targetMinor) return false;
-
-    final targetRssi = point.rssi;
-    if (targetRssi != null) {
-      if (rssi == null) return false;
-      final tolerance = point.radius ?? kDefaultCheckPointRadiusM;
-      if ((rssi - targetRssi).abs() > tolerance) return false;
-    }
-
-    return true;
-  }
-
-  CheckPoint? _matchBluetoothCheckPoint(
-    List<CheckPoint> candidates, {
-    String? uuid,
-    int? major,
-    int? minor,
-    int? rssi,
-  }) {
-    for (final p in candidates) {
-      if (_bluetoothCheckPointBeaconFieldsMatch(
-        p,
-        scannedUuid: uuid,
-        major: major,
-        minor: minor,
-        rssi: rssi,
-      )) {
-        return p;
-      }
-    }
-    return null;
-  }
-  String _bluetoothScanFailureMessage(
-    AppLocalizations l10n,
-    BluetoothReadFailure failure,
-  ) {
-    return switch (failure) {
-      BluetoothReadFailure.disabled => l10n.patrolPointBluetoothDisabled,
-      BluetoothReadFailure.permissionDenied =>
-        l10n.patrolPointBluetoothPermissionDenied,
-      BluetoothReadFailure.timeout => l10n.patrolPointBluetoothScanTimeout,
-      BluetoothReadFailure.unavailable => l10n.patrolPointBluetoothUnavailable,
-      BluetoothReadFailure.failed => l10n.patrolRoundBluetoothScanFailed,
-    };
-  }
   Future<void> _completeBluetoothAutoScanAfterMatch({
     required CheckPoint point,
     required int roundId,
@@ -1667,62 +1432,13 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (sheetContext) {
-          return Padding(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              4,
-              16,
-              16 + MediaQuery.paddingOf(sheetContext).bottom,
-            ),
-            child: Material(
-              color: PatrolShellColors.surface,
-              borderRadius: BorderRadius.circular(20),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    ValueListenableBuilder<_QrScanProximityStatus>(
-                      valueListenable: statusNotifier,
-                      builder: (_, status, _) {
-                        final bodyStyle = Theme.of(sheetContext)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.88),
-                              height: 1.45,
-                            );
-                        return Text(
-                          status.headline,
-                          textAlign: TextAlign.center,
-                          style: bodyStyle,
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    const Center(
-                      child: SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: Color(0xFF34D399),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(sheetContext).pop();
-                        unawaited(_cancelQrScanWait());
-                      },
-                      child: Text(l10n.patrolRoundCancel),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          return _AutoScanWaitingSheet(
+            l10n: l10n,
+            statusNotifier: statusNotifier,
+            onCancel: () {
+              Navigator.of(sheetContext).pop();
+              unawaited(_cancelQrScanWait());
+            },
           );
         },
       ).whenComplete(() {
@@ -1869,132 +1585,15 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.55),
       builder: (sheetContext) {
-        final pad = MediaQuery.paddingOf(sheetContext);
-        final h = MediaQuery.sizeOf(sheetContext).height;
-
-        void closeSheet() {
-          if (sheetContext.mounted) {
-            Navigator.of(sheetContext).pop();
-          }
-        }
-
-        return Padding(
-          padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + pad.bottom),
-          child: Align(
-            alignment: Alignment.bottomCenter,
-            child: StatefulBuilder(
-              builder: (modalContext, setSheetState) {
-                const handleReserve = 40.0;
-                final maxBodyHeight =
-                    (h * 0.88 - handleReserve).clamp(120.0, h);
-                final scrollPhysics = AlwaysScrollableScrollPhysics(
-                  parent: Theme.of(sheetContext).platform ==
-                          TargetPlatform.iOS
-                      ? const BouncingScrollPhysics()
-                      : const ClampingScrollPhysics(),
-                );
-
-                return ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: h * 0.88),
-                  child: Material(
-                    color: PatrolShellColors.surface,
-                    elevation: 12,
-                    shadowColor: Colors.black.withValues(alpha: 0.45),
-                    borderRadius: BorderRadius.circular(20),
-                    clipBehavior: Clip.antiAlias,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _SheetVerticalDismissHandle(onDismiss: closeSheet),
-                        ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxHeight: maxBodyHeight,
-                          ),
-                          child: NotificationListener<ScrollNotification>(
-                            onNotification: (ScrollNotification n) {
-                              if (n is! OverscrollNotification) {
-                                return false;
-                              }
-                              if (n.overscroll.abs() >= 20) {
-                                closeSheet();
-                                return true;
-                              }
-                              return false;
-                            },
-                            child: ListView(
-                              shrinkWrap: true,
-                              physics: scrollPhysics,
-                              padding: const EdgeInsets.all(4),
-                              children: [
-                                _ScheduleCard(
-                                  theme: theme,
-                                  l10n: AppLocalizations.of(modalContext)!,
-                                  loading: _loading,
-                                  failure: _failure,
-                                  data: _active,
-                                  failureMessage: _failure != null
-                                      ? _messageForFailure(
-                                          _failure!,
-                                          AppLocalizations.of(modalContext)!,
-                                        )
-                                      : null,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
+        return _ScheduleSheet(
+          theme: theme,
+          loading: _loading,
+          failure: _failure,
+          data: _active,
+          messageForFailure: _messageForFailure,
         );
       },
     );
-  }
-
-  bool _isRoundActive(String status) {
-    final normalized = status.toUpperCase();
-    return normalized == 'PENDING' ||
-        normalized == 'IN_PROGRESS' ||
-        normalized == 'INPROGRESS' ||
-        normalized == 'ACTIVE';
-  }
-
-  String _statusLabel(String status, AppLocalizations l10n) {
-    switch (status.toUpperCase()) {
-      case 'PENDING':
-        return l10n.patrolRoundStatusPending;
-      case 'IN_PROGRESS':
-        return l10n.patrolRoundStatusInProgress;
-      case 'COMPLETED':
-        return l10n.patrolRoundStatusCompleted;
-      case 'CANCELED':
-        return l10n.patrolRoundStatusCancelled;
-      default:
-        return status.isEmpty ? l10n.patrolRoundStatusOther : status;
-    }
-  }
-
-  Color _statusColor(String status) {
-    switch (status.toUpperCase()) {
-      case 'PENDING':
-        return const Color(0xFFFBBF24);
-      case 'IN_PROGRESS':
-      case 'INPROGRESS':
-        return const Color(0xFF34D399);
-      case 'COMPLETED':
-      case 'DONE':
-        return PatrolShellColors.accent;
-      case 'CANCELLED':
-      case 'CANCELED':
-        return Colors.white54;
-      default:
-        return Colors.white70;
-    }
   }
 
   @override

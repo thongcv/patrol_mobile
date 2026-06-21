@@ -1,5 +1,227 @@
 part of '../patrol_round_screen.dart';
 
+bool _isRoundActive(String status) {
+  final normalized = status.toUpperCase();
+  return normalized == 'PENDING' ||
+      normalized == 'IN_PROGRESS' ||
+      normalized == 'INPROGRESS' ||
+      normalized == 'ACTIVE';
+}
+
+String _statusLabel(String status, AppLocalizations l10n) {
+  switch (status.toUpperCase()) {
+    case 'PENDING':
+      return l10n.patrolRoundStatusPending;
+    case 'IN_PROGRESS':
+      return l10n.patrolRoundStatusInProgress;
+    case 'COMPLETED':
+      return l10n.patrolRoundStatusCompleted;
+    case 'CANCELED':
+      return l10n.patrolRoundStatusCancelled;
+    default:
+      return status.isEmpty ? l10n.patrolRoundStatusOther : status;
+  }
+}
+
+Color _statusColor(String status) {
+  switch (status.toUpperCase()) {
+    case 'PENDING':
+      return const Color(0xFFFBBF24);
+    case 'IN_PROGRESS':
+    case 'INPROGRESS':
+      return const Color(0xFF34D399);
+    case 'COMPLETED':
+    case 'DONE':
+      return PatrolShellColors.accent;
+    case 'CANCELLED':
+    case 'CANCELED':
+      return Colors.white54;
+    default:
+      return Colors.white70;
+  }
+}
+
+bool _isRoundOngoing(PatrolRound round) =>
+    _isRoundActive(round.status) || _isRoundActive(round.detailStatus);
+
+bool _isRoundNotCompleted(PatrolRound round) {
+  switch (round.status.trim().toUpperCase()) {
+    case 'COMPLETED':
+    case 'DONE':
+      return false;
+    default:
+      return true;
+  }
+}
+
+DateTime? _roundExpectedEndDeadline(ActivePatrolRound data) {
+  final direct = parsePatrolApiInstant(data.round.expectedEndTime);
+  if (direct != null) return direct;
+
+  final start = parsePatrolApiInstant(data.round.expectedStartTime);
+  final roundMin = data.schedule.roundMinutes;
+  if (start != null && roundMin != null && roundMin > 0) {
+    return start.add(Duration(minutes: roundMin));
+  }
+  return null;
+}
+
+bool _isRoundOverdue(ActivePatrolRound data) {
+  final end = _roundExpectedEndDeadline(data);
+  if (end == null) return false;
+  return DateTime.now().isAfter(end);
+}
+
+String _messageForFailure(ApiFailure f, AppLocalizations l10n) {
+  return f.userMessage(
+    configMissing: l10n.toastApiNotConfigured,
+    network: l10n.toastNetworkErrorShort,
+    unauthorized: l10n.patrolRoundUnauthorized,
+    badResponse: l10n.patrolRoundLoadFailed,
+    server: l10n.patrolRoundLoadFailed,
+  );
+}
+
+String _messageForScanFailure(ApiFailure f, AppLocalizations l10n) {
+  return f.userMessage(
+    configMissing: l10n.toastApiNotConfigured,
+    network: l10n.toastNetworkErrorShort,
+    unauthorized: l10n.patrolRoundUnauthorized,
+    badResponse: l10n.patrolRoundQrScanFailed,
+    server: l10n.patrolRoundQrScanFailed,
+  );
+}
+
+String _gpsMessageFromKey(String? key, AppLocalizations l10n) {
+  return switch (key) {
+    'service' => l10n.patrolPointGpsServiceOff,
+    'denied' => l10n.patrolPointGpsDenied,
+    'error' => l10n.patrolPointGpsError,
+    'unavailable' => l10n.patrolRoundQrGpsUnavailable,
+    _ => l10n.patrolRoundQrGpsUnavailable,
+  };
+}
+
+String _nfcScanFailureMessage(AppLocalizations l10n, NfcReadFailure failure) {
+  return switch (failure) {
+    NfcReadFailure.disabled => l10n.patrolPointNfcDisabled,
+    NfcReadFailure.timeout => l10n.patrolPointNfcScanTimeout,
+    NfcReadFailure.unavailable => l10n.patrolPointNfcUnavailable,
+    NfcReadFailure.noIdentifier || NfcReadFailure.failed =>
+      l10n.patrolPointNfcScanFailed,
+  };
+}
+
+String _bluetoothScanFailureMessage(
+  AppLocalizations l10n,
+  BluetoothReadFailure failure,
+) {
+  return switch (failure) {
+    BluetoothReadFailure.disabled => l10n.patrolPointBluetoothDisabled,
+    BluetoothReadFailure.permissionDenied =>
+      l10n.patrolPointBluetoothPermissionDenied,
+    BluetoothReadFailure.timeout => l10n.patrolPointBluetoothScanTimeout,
+    BluetoothReadFailure.unavailable => l10n.patrolPointBluetoothUnavailable,
+    BluetoothReadFailure.failed => l10n.patrolRoundBluetoothScanFailed,
+  };
+}
+
+/// Normalizes QR payload and matches `CheckPoint.qrCode` on the current route.
+CheckPoint? _findCheckPointByQrCode(List<CheckPoint> points, String raw) {
+  final payload = raw.trim();
+  if (payload.isEmpty) return null;
+  for (final p in points) {
+    if (p.qrCode?.trim() == payload) return p;
+  }
+  return null;
+}
+
+CheckPoint? _findCheckPointByNfc(List<CheckPoint> points, String raw) {
+  final payload = raw.trim();
+  if (payload.isEmpty) return null;
+  for (final p in points) {
+    if (p.nfc?.trim() == payload && p.verified != true) return p;
+  }
+  return null;
+}
+
+bool _bluetoothCheckPointBeaconFieldsMatch(
+  CheckPoint point, {
+  String? scannedUuid,
+  int? major,
+  int? minor,
+  int? rssi,
+}) {
+  final scanned = scannedUuid?.trim();
+  final pUuid = point.uuid?.trim();
+  if (scanned == null ||
+      scanned.isEmpty ||
+      pUuid == null ||
+      pUuid.isEmpty ||
+      !bluetoothIdentifiersMatch(pUuid, scanned)) {
+    return false;
+  }
+
+  final targetMajor = point.major;
+  if (targetMajor != null && major != targetMajor) return false;
+
+  final targetMinor = point.minor;
+  if (targetMinor != null && minor != targetMinor) return false;
+
+  final targetRssi = point.rssi;
+  if (targetRssi != null) {
+    if (rssi == null) return false;
+    final tolerance = point.radius ?? kDefaultCheckPointRadiusM;
+    if ((rssi - targetRssi).abs() > tolerance) return false;
+  }
+
+  return true;
+}
+
+CheckPoint? _matchBluetoothCheckPoint(
+  List<CheckPoint> candidates, {
+  String? uuid,
+  int? major,
+  int? minor,
+  int? rssi,
+}) {
+  for (final p in candidates) {
+    if (_bluetoothCheckPointBeaconFieldsMatch(
+      p,
+      scannedUuid: uuid,
+      major: major,
+      minor: minor,
+      rssi: rssi,
+    )) {
+      return p;
+    }
+  }
+  return null;
+}
+
+DeviceLocationSample _fallbackLocationSampleForCheckpoint(CheckPoint point) {
+  final lat = point.latitude!;
+  final lng = point.longitude!;
+  return (
+    position: Position(
+      latitude: lat,
+      longitude: lng,
+      timestamp: DateTime.now(),
+      accuracy: double.maxFinite,
+      altitude: 0,
+      heading: 0,
+      speed: 0,
+      speedAccuracy: 0,
+      altitudeAccuracy: 0,
+      headingAccuracy: 0,
+    ),
+    latitude: lat,
+    longitude: lng,
+    gpsAltitude: null,
+    baroAltitude: null,
+  );
+}
+
 class _PatrolPanel extends StatelessWidget {
   const _PatrolPanel({
     required this.child,
