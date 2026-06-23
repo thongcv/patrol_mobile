@@ -1275,7 +1275,10 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
             final snapshot = feedback.snapshot;
             if (snapshot != null) {
               unawaited(
-                PatrolProximityNavigationTts.maybeSpeak(snapshot: snapshot),
+                PatrolProximityNavigationTts.maybeSpeak(
+                  snapshot: snapshot,
+                  speedMps: sample.position.speed,
+                ),
               );
             }
           }

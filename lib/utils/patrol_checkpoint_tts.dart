@@ -35,6 +35,7 @@ abstract final class PatrolCheckpointTts {
     final text = message.trim();
     if (text.isEmpty) return false;
     if (!await _tryAcquireSpeakSlot(_roundCompletedDedupeKey)) return false;
+    await _markPriorityAnnouncement(text);
 
     var started = false;
     final future = (_speakChain ?? Future<void>.value()).then((_) async {
@@ -61,6 +62,7 @@ abstract final class PatrolCheckpointTts {
     )) {
       return false;
     }
+    await _markPriorityAnnouncement(text);
 
     final resolvedLocale = locale ?? await AppLocaleStore.readLocale();
     var started = false;
@@ -83,6 +85,9 @@ abstract final class PatrolCheckpointTts {
   }) async {
     final text = message.trim();
     if (text.isEmpty) return false;
+    // Stay silent while a checkpoint-scan / round announcement is speaking so
+    // route guidance never talks over the more important notification.
+    if (await isPriorityAnnouncementActive()) return false;
     final slot = '$_proximityNavDedupePrefix:$text';
     if (!await _tryAcquireSpeakSlot(slot, window: dedupeWindow)) return false;
 
@@ -113,6 +118,7 @@ abstract final class PatrolCheckpointTts {
     final message = lookupAppLocalizations(
       resolvedLocale,
     ).patrolBackgroundCheckpointScanned(name);
+    await _markPriorityAnnouncement(message);
 
     var started = false;
     final future = (_speakChain ?? Future<void>.value()).then((_) async {
@@ -124,6 +130,41 @@ abstract final class PatrolCheckpointTts {
     _speakChain = future;
     await future;
     return started;
+  }
+
+  /// Reserves a cross-isolate window during which route-guidance TTS stays
+  /// quiet, sized to the estimated spoken length of [message] (+ a buffer).
+  static Future<void> _markPriorityAnnouncement(String message) async {
+    final until = DateTime.now()
+        .add(_estimateSpeechDuration(message))
+        .millisecondsSinceEpoch;
+    final prefs = await SharedPreferences.getInstance();
+    final existing =
+        prefs.getInt(StorageKeys.patrolCheckpointTtsPriorityUntilMs) ?? 0;
+    if (until > existing) {
+      await prefs.setInt(
+        StorageKeys.patrolCheckpointTtsPriorityUntilMs,
+        until,
+      );
+    }
+  }
+
+  /// `true` while a checkpoint-scan / round announcement is (or is about to be)
+  /// speaking — route-guidance TTS must defer until it finishes.
+  static Future<bool> isPriorityAnnouncementActive() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    final until =
+        prefs.getInt(StorageKeys.patrolCheckpointTtsPriorityUntilMs) ?? 0;
+    return DateTime.now().millisecondsSinceEpoch < until;
+  }
+
+  /// Rough spoken-length estimate at the configured slow speech rate, clamped
+  /// so even short messages get protected and long ones don't block forever.
+  static Duration _estimateSpeechDuration(String message) {
+    final chars = message.trim().length;
+    final ms = (1000 + chars * 80).clamp(3000, 12000);
+    return Duration(milliseconds: ms);
   }
 
   static Future<bool> _tryAcquireSpeakSlot(

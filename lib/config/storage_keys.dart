@@ -69,4 +69,10 @@ abstract final class StorageKeys {
   /// Cross-isolate TTS dedupe for checkpoint success feedback.
   static const patrolCheckpointTtsLastName = 'patrol_checkpoint_tts_last_name';
   static const patrolCheckpointTtsLastAtMs = 'patrol_checkpoint_tts_last_at_ms';
+
+  /// Epoch ms until which a high-priority announcement (checkpoint scanned /
+  /// round completed / next-round prompt) is speaking — route-guidance TTS
+  /// stays silent until then so it doesn't talk over the announcement.
+  static const patrolCheckpointTtsPriorityUntilMs =
+      'patrol_checkpoint_tts_priority_until_ms';
 }

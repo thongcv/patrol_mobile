@@ -316,6 +316,7 @@ class PatrolBackgroundAutoScan {
           PatrolProximityNavigationTts.maybeSpeak(
             snapshot: snapshot,
             backgroundReminder: true,
+            speedMps: sample.position.speed,
           ),
         );
       }

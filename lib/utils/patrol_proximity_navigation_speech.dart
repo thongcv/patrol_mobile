@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import '../background/patrol_background_service.dart';
@@ -28,9 +30,32 @@ class PatrolProximityNavigationTtsState {
 abstract final class PatrolProximityNavigationTts {
   PatrolProximityNavigationTts._();
 
+  /// Upper bound between hints while actively walking toward a checkpoint.
   static const Duration _minInterval = Duration(seconds: 12);
   static const Duration _backgroundReminderInterval = Duration(seconds: 10);
+
+  /// Anti-chatter floor: never speak two hints closer than this.
+  static const Duration _minGap = Duration(seconds: 5);
+
+  /// While standing still the hint won't change, so repeat it far less often.
+  static const Duration _stationaryForegroundInterval = Duration(seconds: 30);
+  static const Duration _stationaryBackgroundInterval = Duration(seconds: 20);
+
+  /// Below this ground speed (m/s) the user is treated as stationary (GPS jitter).
+  static const double _stationarySpeedMps = 0.5;
+
+  /// Floor applied to noisy walking speed when estimating time-to-arrival.
+  static const double _walkingFloorMps = 0.7;
+
+  /// Re-announce after the user has covered this many seconds of travel…
+  static const double _distanceStepSeconds = 3;
+
+  /// …bounded by this minimum and maximum distance step (m).
   static const int _distanceChangeM = 3;
+  static const double _maxDistanceStepM = 20;
+
+  /// Speak after roughly this fraction of the remaining ETA has elapsed.
+  static const double _etaIntervalFraction = 1 / 3;
 
   static CheckPointMoveDirection? _lastNorth;
   static CheckPointMoveDirection? _lastEast;
@@ -52,13 +77,26 @@ abstract final class PatrolProximityNavigationTts {
   /// [backgroundReminder] — FGS auto-scan: re-prompt on a fixed interval even
   /// when the user is standing still, so pocket/screen-off patrol still gets
   /// audible guidance toward the next checkpoint.
+  /// [speedMps] — current ground speed (GPS), used to pace hints by ETA so the
+  /// guidance comes more often on final approach and stays quiet when idle.
   static Future<void> maybeSpeak({
     required CheckPointProximitySnapshot snapshot,
     Locale? locale,
     bool backgroundReminder = false,
+    double? speedMps,
   }) async {
     final nav = CheckPointProximityNavigationHints.fromSnapshot(snapshot);
-    if (!_shouldSpeak(nav, backgroundReminder: backgroundReminder)) return;
+    if (!_shouldSpeak(
+      nav,
+      backgroundReminder: backgroundReminder,
+      speedMps: speedMps,
+    )) {
+      return;
+    }
+
+    // Defer (without advancing throttle/relaying) while a checkpoint-scan or
+    // round announcement is speaking, so guidance never cuts it off.
+    if (await PatrolCheckpointTts.isPriorityAnnouncementActive()) return;
 
     final resolvedLocale = locale ?? await AppLocaleStore.readLocale();
     final l10n = lookupAppLocalizations(resolvedLocale);
@@ -83,11 +121,13 @@ abstract final class PatrolProximityNavigationTts {
     required CheckPointProximityNavigationHints nav,
     required PatrolProximityNavigationTtsState state,
     bool backgroundReminder = false,
+    double? speedMps,
     DateTime? now,
   }) {
     return _shouldSpeak(
       nav,
       backgroundReminder: backgroundReminder,
+      speedMps: speedMps,
       state: state,
       now: now ?? DateTime.now(),
     );
@@ -96,6 +136,7 @@ abstract final class PatrolProximityNavigationTts {
   static bool _shouldSpeak(
     CheckPointProximityNavigationHints nav, {
     bool backgroundReminder = false,
+    double? speedMps,
     PatrolProximityNavigationTtsState? state,
     DateTime? now,
   }) {
@@ -108,33 +149,74 @@ abstract final class PatrolProximityNavigationTts {
           lastSpokeAt: _lastSpokeAt,
         );
     final clock = now ?? DateTime.now();
-    final minInterval =
-        backgroundReminder ? _backgroundReminderInterval : _minInterval;
 
     final horizontalR = nav.horizontalDistanceM.round();
     final northChanged = nav.northMove != resolvedState.lastNorth;
     final eastChanged = nav.eastMove != resolvedState.lastEast;
     final altChanged = nav.altitudeMove != resolvedState.lastAlt;
+    final directionChanged = northChanged || eastChanged || altChanged;
+
+    final distanceStep = _resolveDistanceStepM(speedMps);
     final distChanged = resolvedState.lastHorizontalRounded == null ||
         (horizontalR - resolvedState.lastHorizontalRounded!).abs() >=
-            _distanceChangeM;
+            distanceStep;
 
     if (resolvedState.lastSpokeAt == null) return true;
 
     final elapsed = clock.difference(resolvedState.lastSpokeAt!);
-    if (backgroundReminder && elapsed >= minInterval) {
-      return true;
+    // Never fire two hints back-to-back, even on a direction flip.
+    if (elapsed < _minGap) return false;
+
+    final interval = _resolveInterval(
+      backgroundReminder: backgroundReminder,
+      speedMps: speedMps,
+      distanceM: nav.horizontalDistanceM,
+    );
+
+    if (elapsed >= interval) {
+      // Background keeps a periodic nudge for screen-off / pocketed patrol.
+      return backgroundReminder ? true : (directionChanged || distChanged);
     }
 
-    if (elapsed >= minInterval) {
-      return northChanged || eastChanged || altChanged || distChanged;
+    // Within the interval, only a meaningful route change breaks through.
+    return directionChanged || distChanged;
+  }
+
+  /// Pace between hints: ETA-based while moving (more frequent on approach),
+  /// stretched while standing still, and clamped to [_minGap]…cap.
+  static Duration _resolveInterval({
+    required bool backgroundReminder,
+    required double? speedMps,
+    required double distanceM,
+  }) {
+    final speed = _sanitizeSpeed(speedMps);
+    if (speed < _stationarySpeedMps) {
+      return backgroundReminder
+          ? _stationaryBackgroundInterval
+          : _stationaryForegroundInterval;
     }
 
-    if (backgroundReminder) {
-      return northChanged || eastChanged || altChanged || distChanged;
-    }
+    final cap = backgroundReminder ? _backgroundReminderInterval : _minInterval;
+    final effectiveSpeed = math.max(speed, _walkingFloorMps);
+    final etaSeconds =
+        distanceM.isFinite && distanceM > 0 ? distanceM / effectiveSpeed : 0.0;
+    final dynamicMs = (etaSeconds * _etaIntervalFraction * 1000).round();
+    final clampedMs =
+        dynamicMs.clamp(_minGap.inMilliseconds, cap.inMilliseconds);
+    return Duration(milliseconds: clampedMs);
+  }
 
-    return northChanged || eastChanged || altChanged;
+  /// Distance the user must cover before a hint repeats — scales with speed so
+  /// fast movement doesn't trigger a hint on every meter, slow movement still does.
+  static double _resolveDistanceStepM(double? speedMps) {
+    final speed = _sanitizeSpeed(speedMps);
+    final step = speed * _distanceStepSeconds;
+    return step.clamp(_distanceChangeM.toDouble(), _maxDistanceStepM);
+  }
+
+  static double _sanitizeSpeed(double? speedMps) {
+    if (speedMps == null || !speedMps.isFinite || speedMps <= 0) return 0;
+    return speedMps;
   }
 
   static void _remember(CheckPointProximityNavigationHints nav) {
