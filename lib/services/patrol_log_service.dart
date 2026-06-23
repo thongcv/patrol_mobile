@@ -46,7 +46,7 @@ class PatrolLogService {
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
     }
-    final uri = AppConfig.resolveApiUri('/api/patrol-logs');
+    final uri = AppConfig.resolveApiUri('/patrol-logs');
 
     final fields = <String, dynamic>{
       'roundId': body.roundId,

@@ -20,7 +20,7 @@ class PatrolRoundService {
     try {
       // Use absolute Uri to avoid any Dio baseUrl timing/resolution issues
       // (can happen right after app restart).
-      final uri = AppConfig.resolveApiUri('/api/patrol-rounds/me/active');
+      final uri = AppConfig.resolveApiUri('/patrol-rounds/me/active');
       final res = await PatrolDio.instance.getUri<dynamic>(uri);
       final status = res.statusCode ?? 0;
       if (status == 401 || status == 403) {

@@ -20,7 +20,7 @@ class CheckPointService {
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
     }
-    final uri = AppConfig.resolveApiUri('/api/check-points/me/site');
+    final uri = AppConfig.resolveApiUri('/check-points/me/site');
 
     try {
       final res = await PatrolDio.instance.getUri<dynamic>(uri);
@@ -58,7 +58,7 @@ class CheckPointService {
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
     }
-    final uri = AppConfig.resolveApiUri('/api/check-points');
+    final uri = AppConfig.resolveApiUri('/check-points');
 
     try {
       final res = await PatrolDio.instance.putUri<dynamic>(

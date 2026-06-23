@@ -12,6 +12,13 @@ class AppConfig {
   /// Used when no dart-define is passed (edit directly during local dev).
   static const String devFallbackBaseUrl = 'http://192.168.1.192:8080';
 
+  /// API path prefix prepended to every path passed to [resolveApiUri].
+  /// `flutter run --dart-define=API_PREFIX=/api` (set empty to disable).
+  static const String apiPrefix = String.fromEnvironment(
+    'API_PREFIX',
+    defaultValue: '/api',
+  );
+
   /// SockJS/STOMP endpoint (HTTP/HTTPS, not ws://).
   /// `flutter run --dart-define=STOMP_ENDPOINT_URL=http://10.0.2.2:8080/notification`
   static const String stompEndpointUrl = String.fromEnvironment(
@@ -60,12 +67,21 @@ class AppConfig {
     return Uri.parse(httpBase).replace(path: path).toString();
   }
 
-  /// Joins base + API path (path must start with `/`, e.g. `/api/accounts/login`).
+  /// Normalized [apiPrefix]: starts with `/`, no trailing slash, empty if unset.
+  static String get effectiveApiPrefix {
+    var s = apiPrefix.trim();
+    if (s.isEmpty) return '';
+    if (!s.startsWith('/')) s = '/$s';
+    return s.replaceAll(RegExp(r'/$'), '');
+  }
+
+  /// Joins base + [apiPrefix] + API path (path must start with `/`, e.g. `/accounts/login`).
   static Uri resolveApiUri(String path) {
     final base = effectiveBaseUrl;
     final p = path.startsWith('/') ? path : '/$path';
-    if (base.isEmpty) return Uri.parse(p);
-    return Uri.parse('$base$p');
+    final full = '$effectiveApiPrefix$p';
+    if (base.isEmpty) return Uri.parse(full);
+    return Uri.parse('$base$full');
   }
 
   static String _normalizeHttpUrl(String raw) {

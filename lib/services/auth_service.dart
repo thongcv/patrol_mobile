@@ -91,7 +91,7 @@ class AuthService {
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
     }
-    final uri = AppConfig.resolveApiUri('/api/accounts/forget-password');
+    final uri = AppConfig.resolveApiUri('/accounts/forget-password');
     try {
       final res = await PatrolDio.instance.postUri<dynamic>(
         uri,
@@ -121,7 +121,7 @@ class AuthService {
       return ApiResult.failure(ApiFailure.configMissing);
     }
 
-    final uri = AppConfig.resolveApiUri('/api/accounts/logout');
+    final uri = AppConfig.resolveApiUri('/accounts/logout');
     try {
       final res = await PatrolDio.instance.getUri<dynamic>(uri);
       final status = res.statusCode ?? 0;
