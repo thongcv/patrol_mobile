@@ -54,7 +54,33 @@
   "homeEmptyMenus": "Chưa được gán chức năng.",
   "homeEmergencySupport": "HỖ TRỢ KHẨN CẤP",
   "historyTitle": "Lịch sử tuần tra",
+  "historySubtitle": "Danh sách các vòng tuần tra đã diễn ra",
+  "historyEmpty": "Chưa có lịch sử tuần tra.",
   "historyInDevelopment": "Tính năng đang được phát triển.",
+  "historyColWindow": "Khung giờ",
+  "historyColAssignee": "Người tuần tra",
+  "historyColAssignees": "Người được giao",
+  "historyColSite": "Khu vực",
+  "historyColUpdated": "Cập nhật lúc",
+  "historyStatusCompleted": "Hoàn thành",
+  "historyStatusMissed": "Bỏ lỡ",
+  "historyStatusInProgress": "Đang tuần tra",
+  "historyStatusPending": "Chờ bắt đầu",
+  "historyStatusCancelled": "Đã hủy",
+  "historyRoundFallback": "Vòng #{id}",
+  "@historyRoundFallback": {
+    "placeholders": {
+      "id": { "type": "int" }
+    }
+  },
+  "historyShowingRange": "HIỂN THỊ {from}-{to} / {total} BẢN GHI",
+  "@historyShowingRange": {
+    "placeholders": {
+      "from": { "type": "int" },
+      "to": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
   "labelEmail": "Email",
   "profileAccountHeading": "Thông tin tài khoản",
   "profileFieldAccountId": "Tài khoản",

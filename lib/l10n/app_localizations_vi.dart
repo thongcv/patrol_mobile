@@ -176,7 +176,53 @@ class AppLocalizationsVi extends AppLocalizations {
   String get historyTitle => 'Lịch sử tuần tra';
 
   @override
+  String get historySubtitle => 'Danh sách các vòng tuần tra đã diễn ra';
+
+  @override
+  String get historyEmpty => 'Chưa có lịch sử tuần tra.';
+
+  @override
   String get historyInDevelopment => 'Tính năng đang được phát triển.';
+
+  @override
+  String get historyColWindow => 'Khung giờ';
+
+  @override
+  String get historyColAssignee => 'Người tuần tra';
+
+  @override
+  String get historyColAssignees => 'Người được giao';
+
+  @override
+  String get historyColSite => 'Khu vực';
+
+  @override
+  String get historyColUpdated => 'Cập nhật lúc';
+
+  @override
+  String get historyStatusCompleted => 'Hoàn thành';
+
+  @override
+  String get historyStatusMissed => 'Bỏ lỡ';
+
+  @override
+  String get historyStatusInProgress => 'Đang tuần tra';
+
+  @override
+  String get historyStatusPending => 'Chờ bắt đầu';
+
+  @override
+  String get historyStatusCancelled => 'Đã hủy';
+
+  @override
+  String historyRoundFallback(int id) {
+    return 'Vòng #$id';
+  }
+
+  @override
+  String historyShowingRange(int from, int to, int total) {
+    return 'HIỂN THỊ $from-$to / $total BẢN GHI';
+  }
 
   @override
   String get labelEmail => 'Email';

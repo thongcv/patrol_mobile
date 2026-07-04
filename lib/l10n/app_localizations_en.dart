@@ -176,7 +176,53 @@ class AppLocalizationsEn extends AppLocalizations {
   String get historyTitle => 'Patrol history';
 
   @override
+  String get historySubtitle => 'List of past patrol rounds';
+
+  @override
+  String get historyEmpty => 'No patrol history yet.';
+
+  @override
   String get historyInDevelopment => 'This feature is under development.';
+
+  @override
+  String get historyColWindow => 'Time window';
+
+  @override
+  String get historyColAssignee => 'Patrol officer';
+
+  @override
+  String get historyColAssignees => 'Assignees';
+
+  @override
+  String get historyColSite => 'Area';
+
+  @override
+  String get historyColUpdated => 'Updated at';
+
+  @override
+  String get historyStatusCompleted => 'Completed';
+
+  @override
+  String get historyStatusMissed => 'Missed';
+
+  @override
+  String get historyStatusInProgress => 'In progress';
+
+  @override
+  String get historyStatusPending => 'Pending';
+
+  @override
+  String get historyStatusCancelled => 'Cancelled';
+
+  @override
+  String historyRoundFallback(int id) {
+    return 'Round #$id';
+  }
+
+  @override
+  String historyShowingRange(int from, int to, int total) {
+    return 'SHOWING $from-$to / $total RECORDS';
+  }
 
   @override
   String get labelEmail => 'Email';

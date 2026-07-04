@@ -15,6 +15,7 @@ import '../services/auth_service.dart';
 import '../utils/api_image_preview.dart';
 import '../widgets/language_toggle_bar.dart';
 import 'login_screen.dart';
+import 'patrol/patrol_history_screen.dart';
 
 abstract final class _PatrolUi {
   static const Color headerBlue = Color(0xFF152B45);
@@ -346,7 +347,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ))
                     : _navIndex == 1
-                        ? _HistoryPlaceholder(theme: theme, l10n: l10n)
+                        ? const PatrolHistoryScreen()
                         : _ProfileTab(
                             theme: theme,
                             l10n: l10n,
@@ -1007,42 +1008,6 @@ class _EmergencyBanner extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HistoryPlaceholder extends StatelessWidget {
-  const _HistoryPlaceholder({required this.theme, required this.l10n});
-
-  final TextTheme theme;
-  final AppLocalizations l10n;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.history_rounded, size: 56, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            Text(
-              l10n.historyTitle,
-              style: theme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              l10n.historyInDevelopment,
-              textAlign: TextAlign.center,
-              style: theme.bodyMedium?.copyWith(color: Colors.grey.shade600),
-            ),
-          ],
         ),
       ),
     );

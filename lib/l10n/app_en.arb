@@ -54,7 +54,33 @@
   "homeEmptyMenus": "No operations assigned.",
   "homeEmergencySupport": "EMERGENCY SUPPORT",
   "historyTitle": "Patrol history",
+  "historySubtitle": "List of past patrol rounds",
+  "historyEmpty": "No patrol history yet.",
   "historyInDevelopment": "This feature is under development.",
+  "historyColWindow": "Time window",
+  "historyColAssignee": "Patrol officer",
+  "historyColAssignees": "Assignees",
+  "historyColSite": "Area",
+  "historyColUpdated": "Updated at",
+  "historyStatusCompleted": "Completed",
+  "historyStatusMissed": "Missed",
+  "historyStatusInProgress": "In progress",
+  "historyStatusPending": "Pending",
+  "historyStatusCancelled": "Cancelled",
+  "historyRoundFallback": "Round #{id}",
+  "@historyRoundFallback": {
+    "placeholders": {
+      "id": { "type": "int" }
+    }
+  },
+  "historyShowingRange": "SHOWING {from}-{to} / {total} RECORDS",
+  "@historyShowingRange": {
+    "placeholders": {
+      "from": { "type": "int" },
+      "to": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
   "labelEmail": "Email",
   "profileAccountHeading": "Account",
   "profileFieldAccountId": "Account ID",

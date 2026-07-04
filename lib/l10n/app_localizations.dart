@@ -422,11 +422,95 @@ abstract class AppLocalizations {
   /// **'Patrol history'**
   String get historyTitle;
 
+  /// No description provided for @historySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'List of past patrol rounds'**
+  String get historySubtitle;
+
+  /// No description provided for @historyEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No patrol history yet.'**
+  String get historyEmpty;
+
   /// No description provided for @historyInDevelopment.
   ///
   /// In en, this message translates to:
   /// **'This feature is under development.'**
   String get historyInDevelopment;
+
+  /// No description provided for @historyColWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Time window'**
+  String get historyColWindow;
+
+  /// No description provided for @historyColAssignee.
+  ///
+  /// In en, this message translates to:
+  /// **'Patrol officer'**
+  String get historyColAssignee;
+
+  /// No description provided for @historyColAssignees.
+  ///
+  /// In en, this message translates to:
+  /// **'Assignees'**
+  String get historyColAssignees;
+
+  /// No description provided for @historyColSite.
+  ///
+  /// In en, this message translates to:
+  /// **'Area'**
+  String get historyColSite;
+
+  /// No description provided for @historyColUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated at'**
+  String get historyColUpdated;
+
+  /// No description provided for @historyStatusCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get historyStatusCompleted;
+
+  /// No description provided for @historyStatusMissed.
+  ///
+  /// In en, this message translates to:
+  /// **'Missed'**
+  String get historyStatusMissed;
+
+  /// No description provided for @historyStatusInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'In progress'**
+  String get historyStatusInProgress;
+
+  /// No description provided for @historyStatusPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get historyStatusPending;
+
+  /// No description provided for @historyStatusCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get historyStatusCancelled;
+
+  /// No description provided for @historyRoundFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Round #{id}'**
+  String historyRoundFallback(int id);
+
+  /// No description provided for @historyShowingRange.
+  ///
+  /// In en, this message translates to:
+  /// **'SHOWING {from}-{to} / {total} RECORDS'**
+  String historyShowingRange(int from, int to, int total);
 
   /// No description provided for @labelEmail.
   ///
