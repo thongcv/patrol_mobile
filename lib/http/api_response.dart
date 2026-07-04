@@ -49,3 +49,11 @@ Map<String, dynamic>? responseEnvelopeData(dynamic data) {
 Map<String, dynamic>? jsonObjectFromDecoded(Map<String, dynamic> json) {
   return jsonMapCoerce(json['data'] ?? json);
 }
+
+/// `data` list from API envelope (`{ "data": [ ... ] }`).
+List<dynamic>? responseEnvelopeList(dynamic data) {
+  final root = jsonMapCoerce(data);
+  if (root == null) return null;
+  final d = root['data'];
+  return d is List ? d : null;
+}

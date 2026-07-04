@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
+import '../screens/issues/issues_screen.dart';
 import '../screens/patrol/patrol_point_screen.dart';
 import '../screens/patrol/patrol_round_screen.dart';
 
@@ -39,6 +40,12 @@ IconData? _materialIconByName(String name) {
       return Icons.location_on;
     case 'location_on_outlined':
       return Icons.location_on_outlined;
+    case 'report_problem':
+    case 'report_problem_outlined':
+    case 'report_gmailerrorred_outlined':
+      return Icons.report_problem_outlined;
+    case 'warning_amber_rounded':
+      return Icons.warning_amber_rounded;
     default:
       return null;
   }
@@ -87,6 +94,11 @@ PatrolMenuCardStyle patrolMenuCardStyleForLink(String? link) {
         circleBg: Color(0xFFEDE9FE),
         iconColor: Color(0xFF7C3AED),
       );
+    case 'issues':
+      return const PatrolMenuCardStyle(
+        circleBg: Color(0xFFFFEDD5),
+        iconColor: Color(0xFFEA580C),
+      );
     default:
       return const PatrolMenuCardStyle(
         circleBg: Color(0xFFF1F5F9),
@@ -104,6 +116,8 @@ abstract final class PatrolMenuRouter {
     required String menuTitle,
     required Locale locale,
     required ValueChanged<Locale> onLocaleChanged,
+    String? defaultAssigneeId,
+    String? defaultAssigneeName,
   }) {
     final path = normalizePatrolMenuLink(link);
     final title = menuTitle.trim();
@@ -117,6 +131,14 @@ abstract final class PatrolMenuRouter {
           locale: locale,
           onLocaleChanged: onLocaleChanged,
           embedded: true,
+        ),
+      'issues' => IssuesScreen(
+          locale: locale,
+          onLocaleChanged: onLocaleChanged,
+          defaultAssigneeId: defaultAssigneeId,
+          defaultAssigneeName: defaultAssigneeName,
+          embedded: true,
+          menuTitle: title,
         ),
       _ => _PatrolPlaceholderScreen(
           locale: locale,
@@ -134,6 +156,8 @@ abstract final class PatrolMenuRouter {
     required String menuTitle,
     required Locale locale,
     required ValueChanged<Locale> onLocaleChanged,
+    String? defaultAssigneeId,
+    String? defaultAssigneeName,
   }) {
     final path = normalizePatrolMenuLink(link);
     final Widget page = switch (path) {
@@ -144,6 +168,13 @@ abstract final class PatrolMenuRouter {
       'patrol-round' => PatrolRoundScreen(
           locale: locale,
           onLocaleChanged: onLocaleChanged,
+        ),
+      'issues' => IssuesScreen(
+          locale: locale,
+          onLocaleChanged: onLocaleChanged,
+          defaultAssigneeId: defaultAssigneeId,
+          defaultAssigneeName: defaultAssigneeName,
+          menuTitle: menuTitle,
         ),
       _ => _PatrolPlaceholderScreen(
           locale: locale,

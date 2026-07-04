@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../http/api_failure.dart';
@@ -11,6 +12,8 @@ import '../navigation/patrol_menu_router.dart';
 import '../services/account_service.dart';
 import '../services/account_session_store.dart';
 import '../services/auth_service.dart';
+import '../utils/api_image_preview.dart';
+import '../widgets/language_toggle_bar.dart';
 import 'login_screen.dart';
 
 abstract final class _PatrolUi {
@@ -40,7 +43,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loading = true;
   int _navIndex = 0;
   bool _signOutBusy = false;
+  bool _avatarUploading = false;
   Menu? _homeEmbeddedMenu;
+  final _imagePicker = ImagePicker();
 
   @override
   void initState() {
@@ -160,6 +165,46 @@ class _HomeScreenState extends State<HomeScreen> {
     return n.length >= 2 ? n.substring(0, 2).toUpperCase() : n[0].toUpperCase();
   }
 
+  Future<void> _pickAndUploadAvatar() async {
+    if (_avatarUploading) return;
+
+    final file = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+    if (file == null || !mounted) return;
+
+    setState(() => _avatarUploading = true);
+    try {
+      final r = await AccountService.instance.uploadAvatar(file.path);
+      if (!mounted) return;
+
+      if (r.ok) {
+        final me = _me;
+        if (me == null) return;
+        final updated = AccountMe(
+          managerInfo: me.managerInfo,
+          userInfo: me.userInfo.withImageUrl(r.data),
+          menus: me.menus,
+        );
+        await AccountSessionStore.instance.applyFromAccountMe(updated);
+        if (!mounted) return;
+        setState(() => _me = updated);
+        return;
+      }
+
+      final l10n = AppLocalizations.of(context)!;
+      final msg = _snackForFailure(r.failure!, l10n);
+      if (msg.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _avatarUploading = false);
+    }
+  }
+
   String _roleBadgeLabel(UserInfo u) {
     final code = u.roleCode?.trim();
     if (code != null && code.isNotEmpty) {
@@ -231,6 +276,8 @@ class _HomeScreenState extends State<HomeScreen> {
               user: me.userInfo,
               initials: _initials(me.userInfo),
               roleLabel: _roleBadgeLabel(me.userInfo),
+              avatarUploading: _avatarUploading,
+              onAvatarTap: _pickAndUploadAvatar,
               onNotificationTap: () {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -260,6 +307,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             menu: _homeEmbeddedMenu!,
                             locale: widget.locale,
                             onLocaleChanged: widget.onLocaleChanged,
+                            defaultAssigneeId: me.managerInfo?.accountId,
+                            defaultAssigneeName: me.managerInfo?.name,
                             onClose: () =>
                                 setState(() => _homeEmbeddedMenu = null),
                           )
@@ -303,7 +352,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             l10n: l10n,
                             me: me,
                             signOutBusy: _signOutBusy,
+                            onLocaleChanged: widget.onLocaleChanged,
                             onSignOut: _signOut,
+                            onReloadMe: () => _load(silent: true),
+                            snackForFailure: _snackForFailure,
                           ),
               ),
             ),
@@ -365,6 +417,8 @@ class _HomeEmbeddedPatrolShell extends StatelessWidget {
     required this.locale,
     required this.onLocaleChanged,
     required this.onClose,
+    this.defaultAssigneeId,
+    this.defaultAssigneeName,
   });
 
   final TextTheme theme;
@@ -372,6 +426,8 @@ class _HomeEmbeddedPatrolShell extends StatelessWidget {
   final Locale locale;
   final ValueChanged<Locale> onLocaleChanged;
   final VoidCallback onClose;
+  final String? defaultAssigneeId;
+  final String? defaultAssigneeName;
 
   String get _barTitle {
     final n = menu.name?.forLocale(locale);
@@ -423,6 +479,8 @@ class _HomeEmbeddedPatrolShell extends StatelessWidget {
             menuTitle: menu.name?.forLocale(locale) ?? '',
             locale: locale,
             onLocaleChanged: onLocaleChanged,
+            defaultAssigneeId: defaultAssigneeId,
+            defaultAssigneeName: defaultAssigneeName,
           ),
         ),
       ],
@@ -437,6 +495,8 @@ class _PatrolHeaderBar extends StatelessWidget {
     required this.user,
     required this.initials,
     required this.roleLabel,
+    required this.avatarUploading,
+    required this.onAvatarTap,
     required this.onNotificationTap,
   });
 
@@ -445,6 +505,8 @@ class _PatrolHeaderBar extends StatelessWidget {
   final UserInfo user;
   final String initials;
   final String roleLabel;
+  final bool avatarUploading;
+  final VoidCallback onAvatarTap;
   final VoidCallback onNotificationTap;
 
   @override
@@ -452,6 +514,19 @@ class _PatrolHeaderBar extends StatelessWidget {
     final name = user.name?.trim().isNotEmpty == true
         ? user.name!.trim()
         : l10n.userFallbackDisplayName;
+    final initialsStyle = theme.titleLarge?.copyWith(
+      color: Colors.white,
+      fontWeight: FontWeight.w800,
+    );
+    final initialsLabel = Text(initials, style: initialsStyle);
+    final avatar = apiImagePreview(
+      user.imageUrl,
+      size: 56,
+      fit: BoxFit.cover,
+      borderRadius: 14,
+      backgroundColor: _PatrolUi.accentBlue,
+      errorWidget: Text(initials, style: initialsStyle),
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 12, 20),
@@ -461,26 +536,48 @@ class _PatrolHeaderBar extends StatelessWidget {
           Stack(
             clipBehavior: Clip.none,
             children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: _PatrolUi.accentBlue,
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: avatarUploading ? null : onAvatarTap,
                   borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.25),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
+                  child: Ink(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: _PatrolUi.accentBlue,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  initials,
-                  style: theme.titleLarge?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Center(child: avatar ?? initialsLabel),
+                          if (avatarUploading)
+                            const ColoredBox(
+                              color: Color(0x66000000),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -952,20 +1049,118 @@ class _HistoryPlaceholder extends StatelessWidget {
   }
 }
 
-class _ProfileTab extends StatelessWidget {
+class _ProfileTab extends StatefulWidget {
   const _ProfileTab({
     required this.theme,
     required this.l10n,
     required this.me,
     required this.signOutBusy,
+    required this.onLocaleChanged,
     required this.onSignOut,
+    required this.onReloadMe,
+    required this.snackForFailure,
   });
 
   final TextTheme theme;
   final AppLocalizations l10n;
   final AccountMe me;
   final bool signOutBusy;
+  final ValueChanged<Locale> onLocaleChanged;
   final Future<void> Function() onSignOut;
+  final Future<void> Function() onReloadMe;
+  final String Function(ApiFailure, AppLocalizations) snackForFailure;
+
+  @override
+  State<_ProfileTab> createState() => _ProfileTabState();
+}
+
+class _ProfileTabState extends State<_ProfileTab> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _emailCtrl;
+  late final TextEditingController _phoneCtrl;
+  late final TextEditingController _addressCtrl;
+  late final TextEditingController _noteCtrl;
+  bool _saving = false;
+
+  TextTheme get theme => widget.theme;
+  AppLocalizations get l10n => widget.l10n;
+  AccountMe get me => widget.me;
+
+  @override
+  void initState() {
+    super.initState();
+    final u = me.userInfo;
+    _nameCtrl = TextEditingController(text: u.name ?? '');
+    _emailCtrl = TextEditingController(text: u.email ?? '');
+    _phoneCtrl = TextEditingController(text: u.phone ?? '');
+    _addressCtrl = TextEditingController(text: u.address ?? '');
+    _noteCtrl = TextEditingController(text: u.note ?? '');
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProfileTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.me, widget.me)) {
+      _syncFromMe(widget.me);
+    }
+  }
+
+  void _syncFromMe(AccountMe account) {
+    final u = account.userInfo;
+    _nameCtrl.text = u.name ?? '';
+    _emailCtrl.text = u.email ?? '';
+    _phoneCtrl.text = u.phone ?? '';
+    _addressCtrl.text = u.address ?? '';
+    _noteCtrl.text = u.note ?? '';
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    _phoneCtrl.dispose();
+    _addressCtrl.dispose();
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    final id = me.userInfo.id;
+    if (id <= 0) return;
+
+    FocusScope.of(context).unfocus();
+    setState(() => _saving = true);
+    try {
+      final r = await AccountService.instance.updateUserInfo(
+        id: id,
+        name: _nameCtrl.text.trim(),
+        email: _emailCtrl.text.trim(),
+        phone: _phoneCtrl.text.trim(),
+        address: _addressCtrl.text.trim(),
+        note: _noteCtrl.text.trim(),
+      );
+      if (!mounted) return;
+
+      if (!r.ok) {
+        final msg = widget.snackForFailure(r.failure!, l10n);
+        if (msg.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg)),
+          );
+        }
+        return;
+      }
+
+      await widget.onReloadMe();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.profileSaveSuccess)),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -988,22 +1183,45 @@ class _ProfileTab extends StatelessWidget {
           label: l10n.profileFieldAccountId,
           value: u.accountId ?? '—',
         ),
-        _ProfileInfoTile(
+        _ProfileFieldTile(
+          icon: Icons.person_outline_rounded,
+          label: l10n.profileFieldFullName,
+          controller: _nameCtrl,
+          enabled: !_saving,
+          textInputAction: TextInputAction.next,
+        ),
+        _ProfileFieldTile(
           icon: Icons.email_outlined,
           label: l10n.labelEmail,
-          value: u.email ?? '—',
+          controller: _emailCtrl,
+          enabled: !_saving,
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
         ),
-        _ProfileInfoTile(
+        _ProfileFieldTile(
           icon: Icons.phone_outlined,
           label: l10n.profileFieldPhone,
-          value: u.phone ?? '—',
+          controller: _phoneCtrl,
+          enabled: !_saving,
+          keyboardType: TextInputType.phone,
+          textInputAction: TextInputAction.next,
         ),
-        if (u.address?.trim().isNotEmpty == true)
-          _ProfileInfoTile(
-            icon: Icons.location_on_outlined,
-            label: l10n.profileFieldAddress,
-            value: u.address!.trim(),
-          ),
+        _ProfileFieldTile(
+          icon: Icons.location_on_outlined,
+          label: l10n.profileFieldAddress,
+          controller: _addressCtrl,
+          enabled: !_saving,
+          textInputAction: TextInputAction.next,
+          maxLines: 2,
+        ),
+        _ProfileFieldTile(
+          icon: Icons.notes_rounded,
+          label: l10n.profileFieldNote,
+          controller: _noteCtrl,
+          enabled: !_saving,
+          textInputAction: TextInputAction.done,
+          maxLines: 3,
+        ),
         if (u.branchName?.trim().isNotEmpty == true)
           _ProfileInfoTile(
             icon: Icons.storefront_outlined,
@@ -1016,6 +1234,65 @@ class _ProfileTab extends StatelessWidget {
             label: l10n.profileFieldMerchant,
             value: u.merchantName!.trim(),
           ),
+        const SizedBox(height: 8),
+        FilledButton.icon(
+          onPressed: _saving ? null : _save,
+          style: FilledButton.styleFrom(
+            backgroundColor: _PatrolUi.accentBlue,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          icon: _saving
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.save_rounded),
+          label: Text(l10n.profileSave),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          l10n.profileLanguageHeading,
+          style: theme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: const Color(0xFF0F172A),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Icon(Icons.language_rounded, size: 22, color: Colors.grey.shade600),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  l10n.profileLanguageHeading,
+                  style: theme.bodyMedium?.copyWith(
+                    color: const Color(0xFF0F172A),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              LanguageToggleRow(
+                onLocaleChanged: widget.onLocaleChanged,
+                dark: false,
+              ),
+            ],
+          ),
+        ),
         if (m != null &&
             (m.name?.trim().isNotEmpty == true ||
                 m.phone?.trim().isNotEmpty == true)) ...[
@@ -1049,10 +1326,10 @@ class _ProfileTab extends StatelessWidget {
         ],
         const SizedBox(height: 32),
         FilledButton.icon(
-          onPressed: signOutBusy
+          onPressed: widget.signOutBusy || _saving
               ? null
               : () async {
-                  await onSignOut();
+                  await widget.onSignOut();
                 },
           style: FilledButton.styleFrom(
             backgroundColor: const Color(0xFF1E293B),
@@ -1062,7 +1339,7 @@ class _ProfileTab extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
             ),
           ),
-          icon: signOutBusy
+          icon: widget.signOutBusy
               ? const SizedBox(
                   width: 20,
                   height: 20,
@@ -1075,6 +1352,75 @@ class _ProfileTab extends StatelessWidget {
           label: Text(l10n.signOut),
         ),
       ],
+    );
+  }
+}
+
+class _ProfileFieldTile extends StatelessWidget {
+  const _ProfileFieldTile({
+    required this.icon,
+    required this.label,
+    required this.controller,
+    required this.enabled,
+    this.keyboardType,
+    this.textInputAction,
+    this.maxLines = 1,
+  });
+
+  final IconData icon;
+  final String label;
+  final TextEditingController controller;
+  final bool enabled;
+  final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: EdgeInsets.only(top: maxLines > 1 ? 10 : 8),
+              child: Icon(icon, size: 22, color: Colors.grey.shade600),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: controller,
+                enabled: enabled,
+                keyboardType: keyboardType,
+                textInputAction: textInputAction,
+                maxLines: maxLines,
+                style: theme.bodyMedium?.copyWith(
+                  color: const Color(0xFF0F172A),
+                  fontWeight: FontWeight.w600,
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  labelText: label,
+                  labelStyle: theme.labelSmall?.copyWith(
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

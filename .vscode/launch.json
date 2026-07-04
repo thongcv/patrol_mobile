@@ -5,7 +5,13 @@
       "name": "patrol_mobile (debug)",
       "request": "launch",
       "type": "dart",
-      "program": "lib/main.dart"
+      "flutterMode": "debug",
+      "program": "lib/main.dart",
+      "args": [
+        "--dart-define=PATROL_API_BASE_URL=http://192.168.1.192:8080",
+        "--dart-define=API_PREFIX=api",
+        "--dart-define=STOMP_ENDPOINT_URL=http://192.168.1.192:8080/notification"
+      ]
     },
     {
       "name": "patrol_mobile (profile)",

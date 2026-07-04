@@ -6,6 +6,7 @@ import '../config/access_token_payload.dart';
 import '../config/storage_keys.dart';
 import '../http/patrol_cookie_jar.dart';
 import '../models/account_me.dart';
+import '../models/user_info.dart';
 import '../navigation/patrol_session.dart';
 import '../background/patrol_background_isolate_flags.dart';
 import '../background/patrol_background_service.dart';
@@ -22,6 +23,8 @@ class AccountSessionStore {
   SharedPreferences? _prefs;
 
   String? _companyBeaconUuid;
+  UserInfo? _userInfo;
+  String? _userImageUrl;
 
   Future<SharedPreferences> get _preferences async {
     return _prefs ??= await SharedPreferences.getInstance();
@@ -29,6 +32,12 @@ class AccountSessionStore {
 
   /// Read from RAM after [applyFromAccountMe] or [loadFromPrefs].
   String? get companyBeaconUuid => _normalized(_companyBeaconUuid);
+
+  /// Latest `userInfo` from `/accounts/me` (RAM only; set by [applyFromAccountMe]).
+  UserInfo? get userInfo => _userInfo;
+
+  /// Guard avatar URL/path — RAM after [applyFromAccountMe], prefs after [loadFromPrefs].
+  String? get userImageUrl => _normalized(_userImageUrl ?? _userInfo?.imageUrl);
 
   /// JWT value from `access_token` cookie (fingerprint / accountId; REST+STOMP use cookies).
   Future<String?> getStoredAccessToken() => PatrolCookieJar.getAccessToken();
@@ -89,15 +98,19 @@ class AccountSessionStore {
   }
 
   Future<void> applyFromAccountMe(AccountMe me) async {
+    _userInfo = me.userInfo;
     final uuid = _normalized(me.userInfo.beaconUuid);
+    final imageUrl = _normalized(me.userInfo.imageUrl);
     _companyBeaconUuid = uuid;
-    await _persist(uuid);
+    _userImageUrl = imageUrl;
+    await _persist(uuid: uuid, imageUrl: imageUrl);
   }
 
   /// Restores RAM from disk (on app launch, before `fetchMe` completes).
   Future<void> loadFromPrefs() async {
     final p = await _preferences;
     _companyBeaconUuid = _normalized(p.getString(StorageKeys.companyBeaconUuid));
+    _userImageUrl = _normalized(p.getString(StorageKeys.userImageUrl));
   }
 
   /// For background isolate / task — no RAM; each isolate calls [SharedPreferences.getInstance] separately.
@@ -108,16 +121,24 @@ class AccountSessionStore {
 
   Future<void> clear() async {
     _companyBeaconUuid = null;
+    _userInfo = null;
+    _userImageUrl = null;
     final p = await _preferences;
     await p.remove(StorageKeys.companyBeaconUuid);
+    await p.remove(StorageKeys.userImageUrl);
   }
 
-  Future<void> _persist(String? uuid) async {
+  Future<void> _persist({String? uuid, String? imageUrl}) async {
     final p = await _preferences;
     if (uuid == null) {
       await p.remove(StorageKeys.companyBeaconUuid);
     } else {
       await p.setString(StorageKeys.companyBeaconUuid, uuid);
+    }
+    if (imageUrl == null) {
+      await p.remove(StorageKeys.userImageUrl);
+    } else {
+      await p.setString(StorageKeys.userImageUrl, imageUrl);
     }
   }
 

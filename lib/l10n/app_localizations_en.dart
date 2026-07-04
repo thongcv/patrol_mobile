@@ -194,6 +194,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileFieldAddress => 'Address';
 
   @override
+  String get profileFieldNote => 'Note';
+
+  @override
   String get profileFieldBranch => 'Branch';
 
   @override
@@ -207,6 +210,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get profileFieldManagerPhone => 'Manager phone';
+
+  @override
+  String get profileLanguageHeading => 'Language';
+
+  @override
+  String get profileSave => 'Save';
+
+  @override
+  String get profileSaveSuccess => 'Profile updated.';
 
   @override
   String get signOut => 'Sign out';
@@ -1317,4 +1329,102 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get patrolBackgroundRoundCompleted => 'Your patrol round has ended.';
+
+  @override
+  String get issuesTitle => 'Issues';
+
+  @override
+  String get issuesListTitle => 'Issues I reported';
+
+  @override
+  String get issuesListSubtitle => 'List of issues created by your account';
+
+  @override
+  String get issuesEmpty => 'No issues reported yet.';
+
+  @override
+  String get issuesReportAction => 'Report issue';
+
+  @override
+  String get issuesReportTitle => 'Report issue';
+
+  @override
+  String get issuesDetailAction => 'Details';
+
+  @override
+  String get issuesEditAction => 'Update';
+
+  @override
+  String get issuesEditTitle => 'Update issue';
+
+  @override
+  String get issuesCancel => 'Cancel';
+
+  @override
+  String get issuesSubmit => 'Send report';
+
+  @override
+  String get issuesUpdateSubmit => 'Save changes';
+
+  @override
+  String get issuesFieldTitle => 'Issue title';
+
+  @override
+  String get issuesFieldTitleHint => 'Short description of the issue';
+
+  @override
+  String get issuesFieldDescription => 'Detailed description';
+
+  @override
+  String get issuesFieldDescriptionHint => 'Full description of what happened';
+
+  @override
+  String get issuesFieldAssignee => 'Assignee';
+
+  @override
+  String get issuesFieldAssigneeHint => 'Assignee name';
+
+  @override
+  String get issuesFieldNote => 'Initial note';
+
+  @override
+  String get issuesFieldNoteHint => 'Reason or instructions for the recipient';
+
+  @override
+  String get issuesFieldSite => 'Area (optional)';
+
+  @override
+  String get issuesFieldSiteHint => '— Select area —';
+
+  @override
+  String get issuesFieldPhotos => 'Attached images';
+
+  @override
+  String get issuesFieldPhotosHint => 'Select images (max 5 files)';
+
+  @override
+  String get issuesColAssignee => 'Assignee';
+
+  @override
+  String get issuesColSite => 'Area';
+
+  @override
+  String get issuesColReportedAt => 'Reported at';
+
+  @override
+  String get issuesStatusOpen => 'New';
+
+  @override
+  String get issuesStatusResolved => 'Resolved';
+
+  @override
+  String get issuesTitleRequired => 'Please enter an issue title.';
+
+  @override
+  String get issuesAssigneeRequired => 'Please enter an assignee account.';
+
+  @override
+  String issuesShowingRange(int from, int to, int total) {
+    return 'SHOWING $from-$to / $total RECORDS';
+  }
 }

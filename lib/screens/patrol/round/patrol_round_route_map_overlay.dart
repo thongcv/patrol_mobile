@@ -40,6 +40,9 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
   List<CheckPoint> get _pointsWithGps =>
       _checkPoints.where((p) => p.hasCoordinates).toList(growable: false);
 
+  /// Guard avatar from session cache (`/accounts/me` via Home/login).
+  String? get _guardImageUrl => AccountSessionStore.instance.userImageUrl;
+
   @override
   void initState() {
     super.initState();
@@ -120,7 +123,6 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
     if (_userPosition != null) positions.add(_userPosition!);
     if (positions.isEmpty) return;
 
-    _didFitCamera = true;
     _fitToPositions(positions, attempt: 0);
   }
 
@@ -129,14 +131,14 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
   /// placeholder size, which makes flutter_map's fit math produce NaN — so we
   /// wait for a laid-out frame before fitting.
   void _fitToPositions(List<LatLng> positions, {required int attempt}) {
-    if (!mounted) return;
+    if (!mounted || _didFitCamera) return;
     final size = _mapController.camera.nonRotatedSize;
     final ready = size.width.isFinite &&
         size.height.isFinite &&
         size.width > 0 &&
         size.height > 0;
     if (!ready) {
-      if (attempt >= 5) return;
+      if (attempt >= 30) return;
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => _fitToPositions(positions, attempt: attempt + 1),
       );
@@ -148,6 +150,8 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
     for (final p in positions) {
       if (seen.add('${p.latitude},${p.longitude}')) unique.add(p);
     }
+
+    _didFitCamera = true;
 
     if (unique.length == 1) {
       _mapController.move(unique.first, 15);
@@ -172,7 +176,43 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
 
   void _onMapReady() {
     _mapReady = true;
-    _fitMapToMarkersOnce();
+    // Dialog fade/zero-size first frames leave TileLayer idle (dark surface)
+    // until a gesture — nudge the camera once layout is real so tiles load.
+    _wakeMapTiles();
+  }
+
+  /// Forces TileLayer to request tiles for the real viewport.
+  ///
+  /// `MapController.move` is a no-op when center/zoom are unchanged, so we
+  /// apply a tiny zoom nudge then restore.
+  void _wakeMapTiles({int attempt = 0}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final size = _mapController.camera.nonRotatedSize;
+      final ready = size.width.isFinite &&
+          size.height.isFinite &&
+          size.width > 0 &&
+          size.height > 0;
+      if (!ready) {
+        if (attempt < 30) _wakeMapTiles(attempt: attempt + 1);
+        return;
+      }
+
+      final cam = _mapController.camera;
+      final center = cam.center;
+      final zoom = cam.zoom;
+      if (!center.latitude.isFinite ||
+          !center.longitude.isFinite ||
+          !zoom.isFinite) {
+        _fitMapToMarkersOnce();
+        return;
+      }
+
+      final nudged = (zoom + 0.001).clamp(2.0, 19.0);
+      _mapController.move(center, nudged);
+      _mapController.move(center, zoom);
+      _fitMapToMarkersOnce();
+    });
   }
 
   /// Safety net: if the camera center/zoom ever becomes non-finite (a known
@@ -231,9 +271,9 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
           width: kMapPinWidth,
           height: kMapPinHeight,
           alignment: Alignment.topCenter,
-          child: const MapPin(
+          child: MapPin(
             color: PatrolShellColors.accent,
-            showLocationDot: true,
+            imageSource: _guardImageUrl,
           ),
         ),
       );

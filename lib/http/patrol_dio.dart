@@ -88,6 +88,11 @@ class _PatrolInterceptors extends Interceptor {
         () => ApiRequestHeaders.defaultClientPlatform,
       );
 
+      headers.putIfAbsent(
+        ApiRequestHeaders.xMenuCode,
+        () => ApiRequestHeaders.defaultMenuCode,
+      );
+
       await PatrolCookieJar.applyRestAuthHeaders(options);
       handler.next(options);
     } catch (e, st) {

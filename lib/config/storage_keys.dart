@@ -8,6 +8,9 @@ abstract final class StorageKeys {
   /// Company/merchant iBeacon proximity UUID — from `userInfo.beaconUuid` (`/accounts/me`).
   static const companyBeaconUuid = 'patrol_company_beacon_uuid';
 
+  /// Guard avatar — from `userInfo.imageUrl` (`/accounts/me`), shared outside Home.
+  static const userImageUrl = 'patrol_user_image_url';
+
   /// GATT protocol for programming beacons (`hm10_ffe0`, `nordic_nrf52`, …).
   static const beaconConfigureProtocol = 'patrol_beacon_configure_protocol';
 

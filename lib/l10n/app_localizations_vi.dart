@@ -194,6 +194,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get profileFieldAddress => 'Địa chỉ';
 
   @override
+  String get profileFieldNote => 'Ghi chú';
+
+  @override
   String get profileFieldBranch => 'Chi nhánh';
 
   @override
@@ -207,6 +210,15 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get profileFieldManagerPhone => 'Liên hệ quản lý';
+
+  @override
+  String get profileLanguageHeading => 'Ngôn ngữ';
+
+  @override
+  String get profileSave => 'Lưu';
+
+  @override
+  String get profileSaveSuccess => 'Đã cập nhật hồ sơ.';
 
   @override
   String get signOut => 'Đăng xuất';
@@ -1311,4 +1323,103 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get patrolBackgroundRoundCompleted =>
       'Đã kết thúc vòng tuần tra của bạn.';
+
+  @override
+  String get issuesTitle => 'Sự cố';
+
+  @override
+  String get issuesListTitle => 'Sự cố tôi đã báo cáo';
+
+  @override
+  String get issuesListSubtitle =>
+      'Danh sách các sự cố do tài khoản của bạn tạo ra';
+
+  @override
+  String get issuesEmpty => 'Chưa có sự cố nào được báo cáo.';
+
+  @override
+  String get issuesReportAction => 'Báo cáo sự cố';
+
+  @override
+  String get issuesReportTitle => 'Báo cáo sự cố';
+
+  @override
+  String get issuesDetailAction => 'Chi tiết';
+
+  @override
+  String get issuesEditAction => 'Cập nhật';
+
+  @override
+  String get issuesEditTitle => 'Cập nhật sự cố';
+
+  @override
+  String get issuesCancel => 'Hủy';
+
+  @override
+  String get issuesSubmit => 'Gửi báo cáo';
+
+  @override
+  String get issuesUpdateSubmit => 'Lưu thay đổi';
+
+  @override
+  String get issuesFieldTitle => 'Tiêu đề sự cố';
+
+  @override
+  String get issuesFieldTitleHint => 'Mô tả ngắn về sự cố';
+
+  @override
+  String get issuesFieldDescription => 'Mô tả chi tiết';
+
+  @override
+  String get issuesFieldDescriptionHint => 'Mô tả đầy đủ về sự cố đã xảy ra';
+
+  @override
+  String get issuesFieldAssignee => 'Người phụ trách';
+
+  @override
+  String get issuesFieldAssigneeHint => 'Tên người phụ trách';
+
+  @override
+  String get issuesFieldNote => 'Ghi chú ban đầu';
+
+  @override
+  String get issuesFieldNoteHint => 'Lý do hoặc hướng dẫn cho người nhận';
+
+  @override
+  String get issuesFieldSite => 'Khu vực (tuỳ chọn)';
+
+  @override
+  String get issuesFieldSiteHint => '— Chọn khu vực —';
+
+  @override
+  String get issuesFieldPhotos => 'Ảnh đính kèm';
+
+  @override
+  String get issuesFieldPhotosHint => 'Chọn ảnh (tối đa 5 file)';
+
+  @override
+  String get issuesColAssignee => 'Người phụ trách';
+
+  @override
+  String get issuesColSite => 'Khu vực';
+
+  @override
+  String get issuesColReportedAt => 'Thời gian báo';
+
+  @override
+  String get issuesStatusOpen => 'Mới';
+
+  @override
+  String get issuesStatusResolved => 'Đã giải quyết';
+
+  @override
+  String get issuesTitleRequired => 'Vui lòng nhập tiêu đề sự cố.';
+
+  @override
+  String get issuesAssigneeRequired => 'Vui lòng nhập tài khoản được giao.';
+
+  @override
+  String issuesShowingRange(int from, int to, int total) {
+    return 'HIỂN THỊ $from-$to / $total BẢN GHI';
+  }
 }

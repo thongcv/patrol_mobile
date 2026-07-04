@@ -14,6 +14,7 @@ import '../../models/active_patrol_round.dart';
 import '../../models/check_point.dart';
 import '../../models/patrol_round.dart';
 import '../../models/patrol_tracking_config.dart';
+import '../../services/account_session_store.dart';
 import '../../services/patrol_foreground_gps_scan_session.dart';
 import '../../services/patrol_log_service.dart';
 import '../../services/patrol_round_service.dart';
@@ -1560,6 +1561,19 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       barrierLabel: AppLocalizations.of(context)!.patrolRoundMap,
       barrierColor: Colors.black.withValues(alpha: 0.55),
       transitionDuration: const Duration(milliseconds: 220),
+      // Avoid FadeTransition: opacity < 1 leaves OSM tiles unloaded (dark map)
+      // until the user touches and forces a camera event.
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.04),
+            end: Offset.zero,
+          ).animate(
+            CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+          ),
+          child: child,
+        );
+      },
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
         void close() {
           if (dialogContext.mounted) {

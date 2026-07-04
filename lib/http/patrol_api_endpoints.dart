@@ -3,4 +3,9 @@ abstract final class PatrolApiEndpoints {
 
   static const String accountsLoginPath = '/accounts/login';
   static const String accountsMePath = '/accounts/me';
+  static const String accountsAvatarPath = '/accounts/avatar';
+  static const String accountsUserInfoPath = '/accounts/user-info';
+  static const String sitesAccessiblePath = '/sites/accessible';
+  static const String issuesPath = '/issues';
+  static const String issuesMyPostedViewPath = '/issues/my-posted-view';
 }

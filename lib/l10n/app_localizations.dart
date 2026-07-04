@@ -458,6 +458,12 @@ abstract class AppLocalizations {
   /// **'Address'**
   String get profileFieldAddress;
 
+  /// No description provided for @profileFieldNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Note'**
+  String get profileFieldNote;
+
   /// No description provided for @profileFieldBranch.
   ///
   /// In en, this message translates to:
@@ -487,6 +493,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Manager phone'**
   String get profileFieldManagerPhone;
+
+  /// No description provided for @profileLanguageHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get profileLanguageHeading;
+
+  /// No description provided for @profileSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get profileSave;
+
+  /// No description provided for @profileSaveSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile updated.'**
+  String get profileSaveSuccess;
 
   /// No description provided for @signOut.
   ///
@@ -2340,6 +2364,198 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your patrol round has ended.'**
   String get patrolBackgroundRoundCompleted;
+
+  /// No description provided for @issuesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Issues'**
+  String get issuesTitle;
+
+  /// No description provided for @issuesListTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Issues I reported'**
+  String get issuesListTitle;
+
+  /// No description provided for @issuesListSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'List of issues created by your account'**
+  String get issuesListSubtitle;
+
+  /// No description provided for @issuesEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No issues reported yet.'**
+  String get issuesEmpty;
+
+  /// No description provided for @issuesReportAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Report issue'**
+  String get issuesReportAction;
+
+  /// No description provided for @issuesReportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Report issue'**
+  String get issuesReportTitle;
+
+  /// No description provided for @issuesDetailAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get issuesDetailAction;
+
+  /// No description provided for @issuesEditAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Update'**
+  String get issuesEditAction;
+
+  /// No description provided for @issuesEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update issue'**
+  String get issuesEditTitle;
+
+  /// No description provided for @issuesCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get issuesCancel;
+
+  /// No description provided for @issuesSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Send report'**
+  String get issuesSubmit;
+
+  /// No description provided for @issuesUpdateSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Save changes'**
+  String get issuesUpdateSubmit;
+
+  /// No description provided for @issuesFieldTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Issue title'**
+  String get issuesFieldTitle;
+
+  /// No description provided for @issuesFieldTitleHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Short description of the issue'**
+  String get issuesFieldTitleHint;
+
+  /// No description provided for @issuesFieldDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Detailed description'**
+  String get issuesFieldDescription;
+
+  /// No description provided for @issuesFieldDescriptionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Full description of what happened'**
+  String get issuesFieldDescriptionHint;
+
+  /// No description provided for @issuesFieldAssignee.
+  ///
+  /// In en, this message translates to:
+  /// **'Assignee'**
+  String get issuesFieldAssignee;
+
+  /// No description provided for @issuesFieldAssigneeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Assignee name'**
+  String get issuesFieldAssigneeHint;
+
+  /// No description provided for @issuesFieldNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Initial note'**
+  String get issuesFieldNote;
+
+  /// No description provided for @issuesFieldNoteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason or instructions for the recipient'**
+  String get issuesFieldNoteHint;
+
+  /// No description provided for @issuesFieldSite.
+  ///
+  /// In en, this message translates to:
+  /// **'Area (optional)'**
+  String get issuesFieldSite;
+
+  /// No description provided for @issuesFieldSiteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'— Select area —'**
+  String get issuesFieldSiteHint;
+
+  /// No description provided for @issuesFieldPhotos.
+  ///
+  /// In en, this message translates to:
+  /// **'Attached images'**
+  String get issuesFieldPhotos;
+
+  /// No description provided for @issuesFieldPhotosHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Select images (max 5 files)'**
+  String get issuesFieldPhotosHint;
+
+  /// No description provided for @issuesColAssignee.
+  ///
+  /// In en, this message translates to:
+  /// **'Assignee'**
+  String get issuesColAssignee;
+
+  /// No description provided for @issuesColSite.
+  ///
+  /// In en, this message translates to:
+  /// **'Area'**
+  String get issuesColSite;
+
+  /// No description provided for @issuesColReportedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Reported at'**
+  String get issuesColReportedAt;
+
+  /// No description provided for @issuesStatusOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'New'**
+  String get issuesStatusOpen;
+
+  /// No description provided for @issuesStatusResolved.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolved'**
+  String get issuesStatusResolved;
+
+  /// No description provided for @issuesTitleRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter an issue title.'**
+  String get issuesTitleRequired;
+
+  /// No description provided for @issuesAssigneeRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter an assignee account.'**
+  String get issuesAssigneeRequired;
+
+  /// No description provided for @issuesShowingRange.
+  ///
+  /// In en, this message translates to:
+  /// **'SHOWING {from}-{to} / {total} RECORDS'**
+  String issuesShowingRange(int from, int to, int total);
 }
 
 class _AppLocalizationsDelegate

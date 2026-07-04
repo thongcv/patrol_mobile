@@ -63,17 +63,35 @@ bool canPreviewApiImageSource(String? imageSource) {
 }
 
 /// API image: `http(s)://` URL, `/...` path, `data:image/...;base64,...`, or plain base64.
-Widget? apiImagePreview(String? imageSource, {double size = 88}) {
+///
+/// Returns `null` when [imageSource] cannot be resolved. Use [errorWidget] for
+/// load/decode failures (defaults to a broken-image icon).
+Widget? apiImagePreview(
+  String? imageSource, {
+  double size = 88,
+  BoxFit fit = BoxFit.contain,
+  double borderRadius = 10,
+  Color backgroundColor = Colors.white,
+  Widget? errorWidget,
+}) {
   final raw = resolveApiImageSource(imageSource);
   if (raw == null || raw.isEmpty) return null;
 
+  Widget defaultError() =>
+      errorWidget ??
+      Icon(
+        Icons.broken_image_outlined,
+        size: size * 0.35,
+        color: Colors.black38,
+      );
+
   Widget framed(Widget child) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(borderRadius),
       child: Container(
         width: size,
         height: size,
-        color: Colors.white,
+        color: backgroundColor,
         alignment: Alignment.center,
         child: child,
       ),
@@ -82,19 +100,22 @@ Widget? apiImagePreview(String? imageSource, {double size = 88}) {
 
   if (raw.startsWith('http://') || raw.startsWith('https://')) {
     if (_isPatrolApiUrl(raw)) {
-      return framed(_PatrolApiNetworkImage(url: raw, size: size));
+      return framed(
+        _PatrolApiNetworkImage(
+          url: raw,
+          size: size,
+          fit: fit,
+          errorWidget: defaultError(),
+        ),
+      );
     }
     return framed(
       Image.network(
         raw,
         width: size,
         height: size,
-        fit: BoxFit.contain,
-        errorBuilder: (_, _, _) => Icon(
-          Icons.broken_image_outlined,
-          size: size * 0.35,
-          color: Colors.black38,
-        ),
+        fit: fit,
+        errorBuilder: (_, _, _) => defaultError(),
       ),
     );
   }
@@ -114,7 +135,7 @@ Widget? apiImagePreview(String? imageSource, {double size = 88}) {
   try {
     final bytes = base64Decode(b64Payload.replaceAll(RegExp(r'\s'), ''));
     return framed(
-      Image.memory(bytes, width: size, height: size, fit: BoxFit.contain),
+      Image.memory(bytes, width: size, height: size, fit: fit),
     );
   } catch (_) {
     return null;
@@ -122,10 +143,17 @@ Widget? apiImagePreview(String? imageSource, {double size = 88}) {
 }
 
 class _PatrolApiNetworkImage extends StatefulWidget {
-  const _PatrolApiNetworkImage({required this.url, required this.size});
+  const _PatrolApiNetworkImage({
+    required this.url,
+    required this.size,
+    required this.fit,
+    required this.errorWidget,
+  });
 
   final String url;
   final double size;
+  final BoxFit fit;
+  final Widget errorWidget;
 
   @override
   State<_PatrolApiNetworkImage> createState() => _PatrolApiNetworkImageState();
@@ -188,15 +216,11 @@ class _PatrolApiNetworkImageState extends State<_PatrolApiNetworkImage> {
         _bytes!,
         width: widget.size,
         height: widget.size,
-        fit: BoxFit.contain,
+        fit: widget.fit,
       );
     }
     if (_failed) {
-      return Icon(
-        Icons.broken_image_outlined,
-        size: widget.size * 0.35,
-        color: Colors.black38,
-      );
+      return widget.errorWidget;
     }
     return SizedBox(
       width: widget.size * 0.45,
