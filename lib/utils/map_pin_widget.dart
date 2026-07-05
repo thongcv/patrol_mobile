@@ -32,13 +32,24 @@ Path mapPinTeardropPath(Size size) {
     ..close();
 }
 
+/// Center and radius of the circular avatar inset in the pin head.
+(double cx, double cy, double radius) mapPinAvatarGeometry(Size size) {
+  final w = size.width;
+  final headR = w * 0.48;
+  final cx = w / 2;
+  final cy = headR + 1;
+  // Leave a visible blue ring between the avatar and the teardrop outline.
+  final innerR = headR - 3.5;
+  return (cx, cy, innerR);
+}
+
 /// A teardrop map pin drawn as a Flutter widget for flutter_map [Marker] children.
 /// The bottom tip points at the marker coordinate (use
 /// `alignment: Alignment.topCenter` on the marker so the pin sits above the point).
 ///
 /// Optional [imageSource] (e.g. `userInfo.imageUrl` from `/accounts/me`) is
-/// clipped into the teardrop; if missing or load fails, the pin is filled with
-/// [color].
+/// shown as a circular avatar inside the pin head on a solid [color] frame; if
+/// missing or load fails, the pin is filled with [color].
 class MapPin extends StatelessWidget {
   const MapPin({
     super.key,
@@ -60,6 +71,8 @@ class MapPin extends StatelessWidget {
     const size = Size(kMapPinWidth, kMapPinHeight);
     final path = mapPinTeardropPath(size);
     final hasImage = canPreviewApiImageSource(imageSource);
+    final (avatarCx, avatarCy, avatarR) = mapPinAvatarGeometry(size);
+    final avatarDiameter = avatarR * 2;
 
     return SizedBox(
       width: kMapPinWidth,
@@ -69,6 +82,10 @@ class MapPin extends StatelessWidget {
         children: [
           CustomPaint(
             size: size,
+            painter: _MapPinGlowPainter(path: path, glowColor: color),
+          ),
+          CustomPaint(
+            size: size,
             painter: _MapPinShadowPainter(path: path),
           ),
           ClipPath(
@@ -76,14 +93,31 @@ class MapPin extends StatelessWidget {
             child: SizedBox(
               width: kMapPinWidth,
               height: kMapPinHeight,
-              child: hasImage
-                  ? _MapPinFill(
-                      color: color,
-                      imageSource: imageSource!,
-                    )
-                  : ColoredBox(color: color),
+              child: ColoredBox(color: color),
             ),
           ),
+          if (hasImage)
+            Positioned(
+              left: avatarCx - avatarR,
+              top: avatarCy - avatarR,
+              width: avatarDiameter,
+              height: avatarDiameter,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    width: 1.5,
+                  ),
+                ),
+                child: ClipOval(
+                  child: _MapPinAvatarImage(
+                    color: color,
+                    imageSource: imageSource!,
+                  ),
+                ),
+              ),
+            ),
           CustomPaint(
             size: size,
             painter: _MapPinBorderPainter(path: path),
@@ -143,6 +177,29 @@ class _TeardropClipper extends CustomClipper<Path> {
   bool shouldReclip(_TeardropClipper old) => old.path != path;
 }
 
+class _MapPinGlowPainter extends CustomPainter {
+  _MapPinGlowPainter({required this.path, required this.glowColor});
+
+  final Path path;
+  final Color glowColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = glowColor.withValues(alpha: 0.28)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_MapPinGlowPainter old) =>
+      old.path != path || old.glowColor != glowColor;
+}
+
 class _MapPinShadowPainter extends CustomPainter {
   _MapPinShadowPainter({required this.path});
 
@@ -151,10 +208,10 @@ class _MapPinShadowPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     canvas.drawPath(
-      path.shift(const Offset(0, 1.5)),
+      path.shift(const Offset(1, 2)),
       Paint()
-        ..color = Colors.black.withValues(alpha: 0.35)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+        ..color = Colors.black.withValues(alpha: 0.32)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.5),
     );
   }
 
@@ -182,9 +239,9 @@ class _MapPinBorderPainter extends CustomPainter {
   bool shouldRepaint(_MapPinBorderPainter old) => old.path != path;
 }
 
-/// Solid [color] fill, with optional avatar image on top (cover).
-class _MapPinFill extends StatefulWidget {
-  const _MapPinFill({
+/// Circular avatar image for the pin head (cover). Falls back to [color].
+class _MapPinAvatarImage extends StatefulWidget {
+  const _MapPinAvatarImage({
     required this.color,
     required this.imageSource,
   });
@@ -193,10 +250,10 @@ class _MapPinFill extends StatefulWidget {
   final String imageSource;
 
   @override
-  State<_MapPinFill> createState() => _MapPinFillState();
+  State<_MapPinAvatarImage> createState() => _MapPinAvatarImageState();
 }
 
-class _MapPinFillState extends State<_MapPinFill> {
+class _MapPinAvatarImageState extends State<_MapPinAvatarImage> {
   Uint8List? _bytes;
   bool _useNetwork = false;
   String? _networkUrl;
@@ -209,7 +266,7 @@ class _MapPinFillState extends State<_MapPinFill> {
   }
 
   @override
-  void didUpdateWidget(covariant _MapPinFill oldWidget) {
+  void didUpdateWidget(covariant _MapPinAvatarImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.imageSource != widget.imageSource) {
       _bytes = null;
