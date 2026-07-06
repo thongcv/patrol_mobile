@@ -533,10 +533,11 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     AppLocalizations l10n,
   ) async {
     final needsBaro = point.baroAltitude != null;
+    final cfg = await PatrolTrackingConfigStore.load();
     final gps = await readDeviceGpsOnce(
-      timeout: const Duration(seconds: 1),
+      timeout: Duration(seconds: cfg.scanGpsFastSec),
       enableBarometer: needsBaro,
-      targetAccuracyM: kCheckpointGpsTargetAccuracyM,
+      targetAccuracyM: cfg.checkpointAccM,
     );
     if (!mounted) return null;
 
@@ -1045,10 +1046,11 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     });
     
     final needsBaro = point.baroAltitude != null;
+    final cfg = await PatrolTrackingConfigStore.load();
     final gps = await readDeviceGpsOnce(
-      timeout: const Duration(seconds: 1),
+      timeout: Duration(seconds: cfg.scanGpsFastSec),
       enableBarometer: needsBaro,
-      targetAccuracyM: kCheckpointGpsTargetAccuracyM,
+      targetAccuracyM: cfg.checkpointAccM,
     );
 
     if (!mounted) return;
@@ -1204,7 +1206,9 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     if (!mounted) return;
 
     final needsBaroValidation = eligible.any((p) => p.baroAltitude != null);
-    final matchOrder = await PatrolTrackingConfigStore.checkPointMatchOrder();
+    final trackingConfig = await PatrolTrackingConfigStore.load();
+    final matchOrder = trackingConfig.checkPointMatchOrder;
+    final defaultRadiusM = trackingConfig.radius;
     final watch = await PatrolForegroundGpsScanSession.create();
     if (!mounted) return;
     _qrLocationWatch = watch;
@@ -1263,6 +1267,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
           sample,
           validateBaro,
           matchOrder: matchOrder,
+          defaultRadiusM: defaultRadiusM,
         );
 
         if (scan.matched == null) {
@@ -1360,10 +1365,11 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     setState(() => _scanningCheckpointId = point.id);
 
     final needsBaro = point.baroAltitude != null;
+    final cfg = await PatrolTrackingConfigStore.load();
     final gps = await readDeviceGpsOnce(
-      timeout: const Duration(seconds: 2),
+      timeout: Duration(seconds: cfg.scanGpsSec),
       enableBarometer: needsBaro,
-      targetAccuracyM: kCheckpointGpsTargetAccuracyM,
+      targetAccuracyM: cfg.checkpointAccM,
     );
 
     if (!mounted) return;

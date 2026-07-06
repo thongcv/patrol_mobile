@@ -62,7 +62,7 @@ abstract final class StorageKeys {
   /// UI locale `languageCode` (`vi` / `en`) — chosen on login, read in background isolate.
   static const appLocaleLanguageCode = 'patrol_app_locale_language_code';
 
-  /// Login `data.config`: `{ "background", "minMoveM", "socket", "backgroundAutoScan", "trackByShiftWindow", "shiftWindowStartGraceMinutes", "shiftWindowEndGraceMinutes", "overdueGraceMinutes" }`.
+  /// Login `data.config` — see [PatrolTrackingConfig.toJson].
   static const patrolTrackingConfig = 'patrol_tracking_config';
 
   /// Epoch ms — [LocationGateScreen] / ensure background location passed (all isolates).

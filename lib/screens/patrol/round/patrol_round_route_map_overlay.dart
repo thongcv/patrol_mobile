@@ -34,6 +34,7 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
   LatLng _lastGoodCenter = _defaultCenter;
   double _lastGoodZoom = _defaultZoom;
   bool _recoveringCamera = false;
+  double _defaultRadiusM = kDefaultCheckPointRadiusM;
 
   List<CheckPoint> get _checkPoints => widget.checkPointsProvider();
 
@@ -47,7 +48,14 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
   void initState() {
     super.initState();
     widget.routeRevision.addListener(_onRouteRevision);
+    unawaited(_loadDefaultRadius());
     unawaited(_startLocationTracking());
+  }
+
+  Future<void> _loadDefaultRadius() async {
+    final radius = (await PatrolTrackingConfigStore.load()).radius;
+    if (!mounted) return;
+    setState(() => _defaultRadiusM = radius);
   }
 
   void _onRouteRevision() {
@@ -99,9 +107,10 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
       return;
     }
 
+    final cfg = await PatrolTrackingConfigStore.load();
     final gps = await readDeviceGpsOnce(
-      timeout: const Duration(seconds: 6),
-      targetAccuracyM: 25,
+      timeout: Duration(seconds: cfg.mapGpsFixSec),
+      targetAccuracyM: cfg.mapGpsAccM,
     );
     if (!mounted) return;
     final pos = gps.position;
@@ -241,6 +250,7 @@ class _RouteMapOverlayState extends State<_RouteMapOverlay> {
     return buildCheckpointRadiusCircles(
       checkPoints: _pointsWithGps,
       isScanned: widget.isScanned,
+      defaultRadiusM: _defaultRadiusM,
     );
   }
 

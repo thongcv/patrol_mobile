@@ -12,6 +12,7 @@ import '../../services/account_session_store.dart';
 import '../../services/beacon_device_password_store.dart';
 import '../../services/check_point_service.dart';
 import '../../services/patrol_foreground_gps_scan_session.dart';
+import '../../services/patrol_tracking_config_store.dart';
 import '../../utils/device_location.dart';
 import '../../utils/beacon/bluetooth_beacon_reader.dart';
 import '../../utils/beacon/beacon_ble_configure_devices.dart';
@@ -483,9 +484,10 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
 
     final tracker = _locationTracker;
     final wantBaro = tracker != null && tracker.barometerSupported;
+    final checkpointAccM = await PatrolTrackingConfigStore.checkpointAccM();
     final gps = await readDeviceGpsOnce(
       enableBarometer: wantBaro,
-      targetAccuracyM: kCheckpointGpsTargetAccuracyM,
+      targetAccuracyM: checkpointAccM,
     );
     final freshBaro = gps.barometricAltitude;
 

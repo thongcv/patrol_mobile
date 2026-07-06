@@ -8,6 +8,13 @@ import 'device_location.dart';
 /// Default radius (m) when checkpoint has no configured `radius`.
 const double kDefaultCheckPointRadiusM = 3;
 
+/// Effective proximity radius (m): checkpoint value, else [defaultRadiusM].
+double effectiveCheckPointRadiusM(
+  CheckPoint checkpoint, {
+  double defaultRadiusM = kDefaultCheckPointRadiusM,
+}) =>
+    checkpoint.radius ?? defaultRadiusM;
+
 /// Incremental accuracy margin: [deviceM] minus accuracy saved at checkpoint [checkpointM].
 ///
 /// Widens only when current GPS is worse than at save (`device > checkpoint`).
@@ -306,6 +313,7 @@ CheckPointProximityEvaluation evaluateCheckPointProximity({
   bool validateBaroAltitude = false,
   double? horizontalAccuracyM,
   double? gpsAltitudeAccuracyM,
+  double defaultRadiusM = kDefaultCheckPointRadiusM,
 }) {
   if (!checkpoint.hasCoordinates) {
     return const CheckPointProximityEvaluation(
@@ -324,6 +332,7 @@ CheckPointProximityEvaluation evaluateCheckPointProximity({
     usesBaroAltitude: validateBaroAltitude,
     horizontalAccuracyM: horizontalAccuracyM,
     gpsAltitudeAccuracyM: gpsAltitudeAccuracyM,
+    defaultRadiusM: defaultRadiusM,
   );
 
   final horizontalMargin = _accuracyMargin(horizontalAccuracyM);
@@ -481,10 +490,14 @@ CheckPointProximitySnapshot _buildSnapshot({
   bool usesBaroAltitude = false,
   double? horizontalAccuracyM,
   double? gpsAltitudeAccuracyM,
+  double defaultRadiusM = kDefaultCheckPointRadiusM,
 }) {
   final cpLat = checkpoint.latitude!;
   final cpLng = checkpoint.longitude!;
-  final allowedRadiusM = checkpoint.radius ?? kDefaultCheckPointRadiusM;
+  final allowedRadiusM = effectiveCheckPointRadiusM(
+    checkpoint,
+    defaultRadiusM: defaultRadiusM,
+  );
 
   final horizontalM = Geolocator.distanceBetween(
     cpLat,
@@ -588,6 +601,7 @@ CheckPointProximityEvaluation evaluateCheckPointProximityForSample({
   required CheckPoint checkpoint,
   required DeviceLocationSample sample,
   required bool baroListening,
+  double defaultRadiusM = kDefaultCheckPointRadiusM,
 }) {
   final pos = sample.position;
   final validateBaro = checkpoint.baroAltitude != null && baroListening;
@@ -606,6 +620,7 @@ CheckPointProximityEvaluation evaluateCheckPointProximityForSample({
       pos.altitudeAccuracy,
       checkpoint.altitudeAccuracy,
     ),
+    defaultRadiusM: defaultRadiusM,
   );
 }
 
@@ -615,6 +630,7 @@ CheckPointProximityScan scanCheckPointsProximity(
   DeviceLocationSample sample,
   bool baroListening, {
   CheckPointMatchOrder matchOrder = CheckPointMatchOrder.sequenceOrder,
+  double defaultRadiusM = kDefaultCheckPointRadiusM,
 }) {
   if (points.isEmpty) return const CheckPointProximityScan();
 
@@ -623,6 +639,7 @@ CheckPointProximityScan scanCheckPointsProximity(
       checkpoint: points.first,
       sample: sample,
       baroListening: baroListening,
+      defaultRadiusM: defaultRadiusM,
     );
     if (evaluation.result.ok) {
       return CheckPointProximityScan(matched: points.first);
@@ -640,6 +657,7 @@ CheckPointProximityScan scanCheckPointsProximity(
       checkpoint: point,
       sample: sample,
       baroListening: baroListening,
+      defaultRadiusM: defaultRadiusM,
     );
     if (evaluation.result.ok) {
       final distanceM = evaluation.snapshot?.horizontalM;

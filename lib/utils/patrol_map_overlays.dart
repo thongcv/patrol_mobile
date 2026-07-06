@@ -19,6 +19,7 @@ LatLng? finitePatrolMapLatLng(double? lat, double? lng) {
 List<CircleMarker> buildCheckpointRadiusCircles({
   required Iterable<CheckPoint> checkPoints,
   required bool Function(CheckPoint) isScanned,
+  double defaultRadiusM = kDefaultCheckPointRadiusM,
 }) {
   final circles = <CircleMarker>[];
   for (final p in checkPoints) {
@@ -27,7 +28,10 @@ List<CircleMarker> buildCheckpointRadiusCircles({
     if (center == null) continue;
     final scanned = isScanned(p);
     final stroke = scanned ? const Color(0xFF34D399) : const Color(0xFFFBBF24);
-    final radiusM = p.radius ?? kDefaultCheckPointRadiusM;
+    final radiusM = effectiveCheckPointRadiusM(
+      p,
+      defaultRadiusM: defaultRadiusM,
+    );
     if (!radiusM.isFinite || radiusM <= 0) continue;
     circles.add(
       CircleMarker(

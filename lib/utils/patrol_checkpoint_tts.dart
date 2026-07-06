@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/storage_keys.dart';
 import '../l10n/app_localizations.dart';
 import '../services/app_locale_store.dart';
+import '../services/patrol_tracking_config_store.dart';
 import 'patrol_tts_platform.dart';
 
 /// Single TTS entry point — dedupes across UI + FGS isolates via prefs.
@@ -17,9 +18,7 @@ abstract final class PatrolCheckpointTts {
 
   static final FlutterTts _tts = FlutterTts();
   static Future<void>? _speakChain;
-  static const Duration _dedupeWindow = Duration(seconds: 8);
   /// Matches next-round confirm visibility — blocks repeat TTS on sync races.
-  static const Duration _nextRoundDedupeWindow = Duration(minutes: 20);
   static const String _nextRoundDedupeKey = '__next_round_prompt__';
   /// Sentinel relayed via [PatrolFgsInvokeEvents.checkpointSuccess] when FGS TTS fails.
   static const String roundCompletedRelayToken = '__round_completed__';
@@ -58,7 +57,9 @@ abstract final class PatrolCheckpointTts {
     if (text.isEmpty) return false;
     if (!await _tryAcquireSpeakSlot(
       _nextRoundDedupeKey,
-      window: _nextRoundDedupeWindow,
+      window: Duration(
+        minutes: (await PatrolTrackingConfigStore.load()).nextRoundConfirmMin,
+      ),
     )) {
       return false;
     }
@@ -171,7 +172,9 @@ abstract final class PatrolCheckpointTts {
     String checkpointName, {
     Duration? window,
   }) async {
-    final dedupeWindow = window ?? _dedupeWindow;
+    final config = await PatrolTrackingConfigStore.load();
+    final dedupeWindow = window ??
+        Duration(seconds: config.checkpointTtsDedupeSec);
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload();
     final lastName = prefs.getString(StorageKeys.patrolCheckpointTtsLastName);

@@ -46,7 +46,6 @@ class PatrolBackgroundAutoScan {
   Future<void>? _lifecycleChain;
   /// Serializes GPS samples so only one submit runs at a time.
   Future<void>? _sampleProcessingChain;
-  static const Duration _patrolLogSubmitTimeout = Duration(seconds: 20);
   /// Checkpoint ids with an in-flight patrol-log POST.
   final Set<int> _inFlightCheckpointIds = {};
   /// Checkpoints already submitted or optimistically marked this round (survives refresh/stop).
@@ -301,12 +300,14 @@ class PatrolBackgroundAutoScan {
     if (pending.isEmpty) return;
 
     final validateBaro = needsBaroValidation && barometerListening;
-    final matchOrder = await PatrolTrackingConfigStore.checkPointMatchOrder();
+    final trackingConfig = await PatrolTrackingConfigStore.load();
+    final matchOrder = trackingConfig.checkPointMatchOrder;
     final scan = scanCheckPointsProximity(
       pending,
       sample,
       validateBaro,
       matchOrder: matchOrder,
+      defaultRadiusM: trackingConfig.radius,
     );
     final matched = scan.matched;
     if (matched == null) {
@@ -340,6 +341,7 @@ class PatrolBackgroundAutoScan {
     try {
       final pos = sample.position;
       final gpsAlt = pos.altitude.isFinite ? pos.altitude : null;
+      final logSubmitSec = (await PatrolTrackingConfigStore.load()).logSubmitSec;
       final result = await PatrolLogService.instance
           .createPatrolLog(
             PatrolLogSubmit(
@@ -354,7 +356,7 @@ class PatrolBackgroundAutoScan {
               verified: true,
             ),
           )
-          .timeout(_patrolLogSubmitTimeout);
+          .timeout(Duration(seconds: logSubmitSec));
       if (result.ok) {
         await PatrolActiveRoundCache.markCheckpointVerified(matched.id);
         _relayCheckpointVerified(matched.copyWith(verified: true));

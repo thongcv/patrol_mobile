@@ -179,6 +179,9 @@ class PatrolTrackSocketClient {
     final auth = await PatrolCookieJar.stompAuthHeaders();
     if (auth == null) return;
 
+    final reconnectSec =
+        (await PatrolTrackingConfigStore.load()).socketReconnectSec;
+
     _connecting = true;
 
     _manualClose = false;
@@ -191,7 +194,7 @@ class PatrolTrackSocketClient {
       client = StompClient(
         config: StompConfig.sockJS(
           url: url,
-          reconnectDelay: const Duration(seconds: 5),
+          reconnectDelay: Duration(seconds: reconnectSec),
           webSocketConnectHeaders: auth.webSocketConnectHeaders,
           stompConnectHeaders: auth.stompConnectHeaders,
 

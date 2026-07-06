@@ -4,14 +4,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/storage_keys.dart';
 import '../models/patrol_location_track_payload.dart';
+import '../services/patrol_tracking_config_store.dart';
 
 /// Buffers locations when WebSocket is down — flushed on reconnect.
 class PatrolTrackOfflineQueue {
   PatrolTrackOfflineQueue._();
 
-  static const int maxItems = 500;
-
   static Future<void> enqueue(PatrolLocationTrackPayload payload) async {
+    final maxItems = (await PatrolTrackingConfigStore.load()).offlineQueueMax;
     final p = await SharedPreferences.getInstance();
     final raw = p.getString(StorageKeys.patrolTrackOfflineQueue);
     final list = <Map<String, dynamic>>[];

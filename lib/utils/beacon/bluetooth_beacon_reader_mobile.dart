@@ -225,6 +225,32 @@ String? _iBeaconUuidFromMsd(Map<int, List<int>> msd) {
   return _formatUuid(apple.sublist(2, 18));
 }
 
+/// 1D Kalman smoother for noisy BLE RSSI (dBm).
+class _RssiKalmanFilter {
+  bool _initialized = false;
+  double _estimate = 0;
+  double _errorVariance = 0;
+
+  static const double _processNoise = 0.5;
+  static const double _measurementNoise = 4.0;
+
+  int filter(int rssi) {
+    if (!_initialized) {
+      _estimate = rssi.toDouble();
+      _errorVariance = _measurementNoise;
+      _initialized = true;
+      return rssi;
+    }
+
+    final predictedVariance = _errorVariance + _processNoise;
+    final kalmanGain =
+        predictedVariance / (predictedVariance + _measurementNoise);
+    _estimate += kalmanGain * (rssi - _estimate);
+    _errorVariance = (1.0 - kalmanGain) * predictedVariance;
+    return _estimate.round();
+  }
+}
+
 class _BeaconCandidate {
   const _BeaconCandidate({
     this.uuid,
@@ -297,6 +323,7 @@ void _trackNearestCandidate(
   Map<String, _BeaconCandidate> bestById,
   ScanResult result, {
   required int minRssi,
+  required Map<String, _RssiKalmanFilter> rssiFilters,
   List<String> uuids = const [],
   List<String> remoteIds = const [],
 }) {
@@ -312,10 +339,18 @@ void _trackNearestCandidate(
   }
   final key = candidate._trackingKey;
   if (key.isEmpty) return;
-  final prev = bestById[key];
-  if (prev == null || candidate.rssi > prev.rssi) {
-    bestById[key] = candidate;
-  }
+  final filteredRssi =
+      rssiFilters.putIfAbsent(key, _RssiKalmanFilter.new).filter(candidate.rssi);
+  if (filteredRssi < minRssi) return;
+  bestById[key] = _BeaconCandidate(
+    uuid: candidate.uuid,
+    remoteId: candidate.remoteId,
+    rssi: filteredRssi,
+    deviceName: candidate.deviceName,
+    major: candidate.major,
+    minor: candidate.minor,
+    txPowerAt1m: candidate.txPowerAt1m,
+  );
 }
 
 _BeaconCandidate? _pickNearestBeacon(Map<String, _BeaconCandidate> bestById) {
@@ -407,6 +442,7 @@ Future<BluetoothReadResult> readBluetoothBeaconIdentifier({
   final filterUuids = uuids ?? _companyBeaconUuids() ?? const <String>[];
   final filterRemoteIds = remoteIds ?? const <String>[];
   final bestById = <String, _BeaconCandidate>{};
+  final rssiFilters = <String, _RssiKalmanFilter>{};
   final discoveredDevices = <ScanResult>[];
   StreamSubscription<List<ScanResult>>? resultsSub;
   StreamSubscription<bool>? scanningSub;
@@ -418,22 +454,20 @@ Future<BluetoothReadResult> readBluetoothBeaconIdentifier({
 
   void absorbResults(List<ScanResult> results) {
     for (final r in results) {
-      // Only handle new devices or meaningful updates (stronger RSSI).
       final existingIndex = discoveredDevices.indexWhere(
         (d) => d.device.remoteId == r.device.remoteId,
       );
       final isNew = existingIndex < 0;
       if (isNew) {
         discoveredDevices.add(r);
-      } else if (r.rssi <= discoveredDevices[existingIndex].rssi) {
-        continue;
-      } else {
+      } else if (r.rssi > discoveredDevices[existingIndex].rssi) {
         discoveredDevices[existingIndex] = r;
       }
       _trackNearestCandidate(
         bestById,
         r,
         minRssi: minRssi,
+        rssiFilters: rssiFilters,
         uuids: filterUuids,
         remoteIds: filterRemoteIds,
       );
@@ -518,6 +552,7 @@ Future<BluetoothReadResult> readBluetoothBeaconIdentifier({
 class BluetoothBeaconScanSession {
   StreamSubscription<List<ScanResult>>? _resultsSub;
   final _bestById = <String, _BeaconCandidate>{};
+  final _rssiFilters = <String, _RssiKalmanFilter>{};
   var _stopped = true;
   BluetoothBeaconOnHit? _onHit;
   _StrongSignalTracker? _strongTracker;
@@ -564,6 +599,7 @@ class BluetoothBeaconScanSession {
     final hits = stableHits < 1 ? 1 : stableHits;
     _strongTracker = _StrongSignalTracker(requiredHits: hits);
     _bestById.clear();
+    _rssiFilters.clear();
 
     void absorbAndDispatch(List<ScanResult> results) {
       if (_stopped || _onHit == null || _strongTracker == null) return;
@@ -572,6 +608,7 @@ class BluetoothBeaconScanSession {
           _bestById,
           r,
           minRssi: _minRssi,
+          rssiFilters: _rssiFilters,
           uuids: _filterUuids,
           remoteIds: _filterRemoteIds,
         );
@@ -637,5 +674,6 @@ class BluetoothBeaconScanSession {
     } catch (_) {}
     _runner = null;
     _bestById.clear();
+    _rssiFilters.clear();
   }
 }

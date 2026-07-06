@@ -5,6 +5,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../models/patrol_location_track_payload.dart';
+import '../models/patrol_tracking_config.dart';
 
 import '../utils/device_location.dart';
 
@@ -43,6 +44,9 @@ class PatrolRealtimeTrackService {
   bool _socketEnabled = true;
 
   bool _backgroundEnabled = false;
+
+  int _connectivityDebounceSec =
+      PatrolTrackingConfig.defaultConnectivityDebounceSec;
 
   final StreamController<bool> _mockViolation =
       StreamController<bool>.broadcast();
@@ -86,7 +90,7 @@ class PatrolRealtimeTrackService {
       _connectivityReconnectDebounce?.cancel();
 
       _connectivityReconnectDebounce = Timer(
-        const Duration(seconds: 2),
+        Duration(seconds: _connectivityDebounceSec),
 
         () => unawaited(_onConnectivityRestored()),
       );
@@ -518,5 +522,7 @@ class PatrolRealtimeTrackService {
     _socketEnabled = config.socket;
 
     _backgroundEnabled = config.background;
+
+    _connectivityDebounceSec = config.connectivityDebounceSec;
   }
 }

@@ -6,21 +6,10 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/storage_keys.dart';
+import '../models/patrol_tracking_config.dart';
 import '../services/patrol_tracking_config_store.dart';
 import 'barometric_altitude.dart';
 import 'super_gps_service.dart';
-
-/// Location: Geolocator + Super GPS filters (Kalman, quality gate).
-const Duration _kSuperGpsCurrentTimeout = Duration(seconds: 4);
-
-/// OEM [Geolocator.isLocationServiceEnabled] can stall even when GPS is on.
-const Duration kLocationServiceProbeTimeout = Duration(seconds: 4);
-
-/// Stream wait time when saving checkpoint (best-of-stream).
-const Duration kCheckpointGpsRefineTimeout = Duration(seconds: 8);
-
-/// Accuracy threshold (m) to end early when saving checkpoint.
-const double kCheckpointGpsTargetAccuracyM = 5.0;
 
 Stream<SuperGpsEvent> _deviceLocationEventStream({
   SuperGpsStreamOptions? streamOptions,
@@ -52,8 +41,8 @@ bool _isBetterGpsEvent(SuperGpsEvent? current, SuperGpsEvent candidate) {
 
 /// One-shot fix; refines via stream if accuracy below [targetAccuracyM].
 Future<SuperGpsEvent?> _resolveSuperGpsEvent({
-  Duration timeout = _kSuperGpsCurrentTimeout,
-  double targetAccuracyM = 4.0,
+  required Duration timeout,
+  required double targetAccuracyM,
   bool enableBarometer = false,
 }) async {
   if (!SuperGpsService.isSupported) return null;
@@ -85,7 +74,7 @@ Future<SuperGpsEvent?> _resolveSuperGpsEvent({
 Future<({Position? position, double? barometricAltitude, String? messageKey})>
 readDeviceGpsOnce({
   Duration? timeout,
-  double targetAccuracyM = 4.0,
+  double? targetAccuracyM,
   bool enableBarometer = false,
 }) async {
   final denied = await _ensureLocationReady();
@@ -93,10 +82,14 @@ readDeviceGpsOnce({
     return (position: null, barometricAltitude: null, messageKey: denied);
   }
 
+  final config = await PatrolTrackingConfigStore.load();
+  final effectiveTimeout = timeout ?? Duration(seconds: config.gpsFixSec);
+  final effectiveAccuracy = targetAccuracyM ?? config.gpsAccM;
+
   try {
     final resolved = await _resolveSuperGpsEvent(
-      timeout: timeout ?? _kSuperGpsCurrentTimeout,
-      targetAccuracyM: targetAccuracyM,
+      timeout: effectiveTimeout,
+      targetAccuracyM: effectiveAccuracy,
       enableBarometer: enableBarometer,
     );
     if (resolved == null) {
@@ -152,8 +145,8 @@ StreamSubscription<SuperGpsEvent>? listenDeviceGpsForMap({
 
 /// Waits for fix via stream; keeps best horizontal accuracy sample.
 Future<SuperGpsEvent?> _readDeviceGpsEventFromStream({
-  Duration timeout = _kSuperGpsCurrentTimeout,
-  double targetAccuracyM = 4.0,
+  required Duration timeout,
+  required double targetAccuracyM,
   bool enableBarometer = false,
   SuperGpsEvent? seed,
 }) async {
@@ -192,9 +185,10 @@ Future<SuperGpsEvent?> _readDeviceGpsEventFromStream({
 
 /// Native location-settings query with timeout + permission fallback.
 Future<bool> probeLocationServiceEnabled() async {
+  final probeSec = (await PatrolTrackingConfigStore.load()).gpsProbeSec;
   try {
     return await Geolocator.isLocationServiceEnabled().timeout(
-      kLocationServiceProbeTimeout,
+      Duration(seconds: probeSec),
     );
   } on TimeoutException {
     return inferLocationServiceFromPermission();
@@ -220,13 +214,22 @@ Future<bool> inferLocationServiceFromPermission() async {
 abstract final class PatrolBackgroundLocationReadiness {
   PatrolBackgroundLocationReadiness._();
 
-  static const Duration _cacheTtl = Duration(minutes: 30);
+  static Duration _cacheTtl = Duration(
+    minutes: PatrolTrackingConfig.defaultLocReadyCacheMin,
+  );
 
   static DateTime? _verifiedAt;
+
+  static Future<Duration> _refreshCacheTtl() async {
+    final min = (await PatrolTrackingConfigStore.load()).locReadyCacheMin;
+    _cacheTtl = Duration(minutes: min);
+    return _cacheTtl;
+  }
 
   static void markReady() {
     final at = DateTime.now();
     _verifiedAt = at;
+    unawaited(_refreshCacheTtl());
     unawaited(_persistReadyAt(at));
   }
 
@@ -243,6 +246,7 @@ abstract final class PatrolBackgroundLocationReadiness {
 
   /// Gate passed on UI isolate — readable from [FlutterBackgroundService] isolate.
   static Future<bool> isRecentlyVerifiedAcrossIsolates() async {
+    await _refreshCacheTtl();
     if (isRecentlyVerified) return true;
     final p = await SharedPreferences.getInstance();
     final ms = p.getInt(StorageKeys.patrolBackgroundLocationReadyAt);
@@ -266,9 +270,10 @@ abstract final class PatrolBackgroundLocationReadiness {
 }
 
 Future<LocationPermission> _patrolLocationPermissionQuick() async {
+  final permSec = (await PatrolTrackingConfigStore.load()).gpsPermSec;
   try {
     return await Geolocator.checkPermission().timeout(
-      const Duration(seconds: 2),
+      Duration(seconds: permSec),
       onTimeout: () => LocationPermission.denied,
     );
   } catch (_) {

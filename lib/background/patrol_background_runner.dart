@@ -174,8 +174,14 @@ final class PatrolBackgroundRunner {
 
   void _startNextRoundConfirmExpiryTimer() {
     _nextRoundConfirmExpiryTimer?.cancel();
+    unawaited(_startNextRoundConfirmExpiryTimerImpl());
+  }
+
+  Future<void> _startNextRoundConfirmExpiryTimerImpl() async {
+    final minutes = (await PatrolTrackingConfigStore.load()).nextRoundConfirmMin;
+    _nextRoundConfirmExpiryTimer?.cancel();
     _nextRoundConfirmExpiryTimer = Timer(
-      PatrolBackgroundConstants.nextRoundConfirmVisibleDuration,
+      Duration(minutes: minutes),
       () {
         if (_shuttingDown) return;
         unawaited(_onNextRoundConfirmExpired());

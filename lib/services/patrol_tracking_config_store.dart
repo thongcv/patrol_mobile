@@ -74,6 +74,11 @@ abstract final class PatrolTrackingConfigStore {
   static Future<CheckPointMatchOrder> checkPointMatchOrder() async =>
       (await load()).checkPointMatchOrder;
 
+  static Future<double> radius() async => (await load()).radius;
+
+  static Future<double> checkpointAccM() async =>
+      (await load()).checkpointAccM;
+
   static Future<SuperGpsStreamOptions> superGpsStreamOptions({
     required bool enableBarometer,
   }) async {

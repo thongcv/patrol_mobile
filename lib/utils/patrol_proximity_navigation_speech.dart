@@ -4,7 +4,9 @@ import 'package:flutter/widgets.dart';
 
 import '../background/patrol_background_service.dart';
 import '../l10n/app_localizations.dart';
+import '../models/patrol_tracking_config.dart';
 import '../services/app_locale_store.dart';
+import '../services/patrol_tracking_config_store.dart';
 import 'check_point_proximity.dart';
 import 'patrol_checkpoint_tts.dart';
 
@@ -29,20 +31,6 @@ class PatrolProximityNavigationTtsState {
 /// Builds TTS phrases from proximity navigation hints and speaks with throttle.
 abstract final class PatrolProximityNavigationTts {
   PatrolProximityNavigationTts._();
-
-  /// Upper bound between hints while actively walking toward a checkpoint.
-  static const Duration _minInterval = Duration(seconds: 12);
-  static const Duration _backgroundReminderInterval = Duration(seconds: 10);
-
-  /// Anti-chatter floor: never speak two hints closer than this.
-  static const Duration _minGap = Duration(seconds: 5);
-
-  /// While standing still the hint won't change, so repeat it far less often.
-  static const Duration _stationaryForegroundInterval = Duration(seconds: 30);
-  static const Duration _stationaryBackgroundInterval = Duration(seconds: 20);
-
-  /// Below this ground speed (m/s) the user is treated as stationary (GPS jitter).
-  static const double _stationarySpeedMps = 0.5;
 
   /// Floor applied to noisy walking speed when estimating time-to-arrival.
   static const double _walkingFloorMps = 0.7;
@@ -85,9 +73,11 @@ abstract final class PatrolProximityNavigationTts {
     bool backgroundReminder = false,
     double? speedMps,
   }) async {
+    final config = await PatrolTrackingConfigStore.load();
     final nav = CheckPointProximityNavigationHints.fromSnapshot(snapshot);
     if (!_shouldSpeak(
       nav,
+      config: config,
       backgroundReminder: backgroundReminder,
       speedMps: speedMps,
     )) {
@@ -108,7 +98,7 @@ abstract final class PatrolProximityNavigationTts {
       message: message,
       locale: resolvedLocale,
       dedupeWindow: backgroundReminder
-          ? _backgroundReminderInterval
+          ? Duration(seconds: config.navHintBgSec)
           : null,
     );
     if (!spoke && PatrolBackgroundService.isBackgroundIsolate) {
@@ -123,9 +113,11 @@ abstract final class PatrolProximityNavigationTts {
     bool backgroundReminder = false,
     double? speedMps,
     DateTime? now,
+    PatrolTrackingConfig config = PatrolTrackingConfig.defaults,
   }) {
     return _shouldSpeak(
       nav,
+      config: config,
       backgroundReminder: backgroundReminder,
       speedMps: speedMps,
       state: state,
@@ -135,6 +127,7 @@ abstract final class PatrolProximityNavigationTts {
 
   static bool _shouldSpeak(
     CheckPointProximityNavigationHints nav, {
+    required PatrolTrackingConfig config,
     bool backgroundReminder = false,
     double? speedMps,
     PatrolProximityNavigationTtsState? state,
@@ -164,10 +157,12 @@ abstract final class PatrolProximityNavigationTts {
     if (resolvedState.lastSpokeAt == null) return true;
 
     final elapsed = clock.difference(resolvedState.lastSpokeAt!);
+    final minGap = Duration(seconds: config.navHintGapSec);
     // Never fire two hints back-to-back, even on a direction flip.
-    if (elapsed < _minGap) return false;
+    if (elapsed < minGap) return false;
 
     final interval = _resolveInterval(
+      config: config,
       backgroundReminder: backgroundReminder,
       speedMps: speedMps,
       distanceM: nav.horizontalDistanceM,
@@ -183,26 +178,31 @@ abstract final class PatrolProximityNavigationTts {
   }
 
   /// Pace between hints: ETA-based while moving (more frequent on approach),
-  /// stretched while standing still, and clamped to [_minGap]…cap.
+  /// stretched while standing still, and clamped to min gap…cap.
   static Duration _resolveInterval({
+    required PatrolTrackingConfig config,
     required bool backgroundReminder,
     required double? speedMps,
     required double distanceM,
   }) {
+    final minGap = Duration(seconds: config.navHintGapSec);
     final speed = _sanitizeSpeed(speedMps);
-    if (speed < _stationarySpeedMps) {
-      return backgroundReminder
-          ? _stationaryBackgroundInterval
-          : _stationaryForegroundInterval;
+    if (speed < config.navStationarySpeedMps) {
+      final stationarySec = backgroundReminder
+          ? config.navStationaryBgSec
+          : config.navStationaryFgSec;
+      return Duration(seconds: stationarySec);
     }
 
-    final cap = backgroundReminder ? _backgroundReminderInterval : _minInterval;
+    final cap = Duration(
+      seconds: backgroundReminder ? config.navHintBgSec : config.navHintMinSec,
+    );
     final effectiveSpeed = math.max(speed, _walkingFloorMps);
     final etaSeconds =
         distanceM.isFinite && distanceM > 0 ? distanceM / effectiveSpeed : 0.0;
     final dynamicMs = (etaSeconds * _etaIntervalFraction * 1000).round();
     final clampedMs =
-        dynamicMs.clamp(_minGap.inMilliseconds, cap.inMilliseconds);
+        dynamicMs.clamp(minGap.inMilliseconds, cap.inMilliseconds);
     return Duration(milliseconds: clampedMs);
   }
 
