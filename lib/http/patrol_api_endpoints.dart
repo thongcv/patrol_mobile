@@ -2,6 +2,7 @@ abstract final class PatrolApiEndpoints {
   PatrolApiEndpoints._();
 
   static const String accountsLoginPath = '/accounts/login';
+  static const String accountsRefreshPath = '/accounts/refresh';
   static const String accountsMePath = '/accounts/me';
   static const String accountsAvatarPath = '/accounts/avatar';
   static const String accountsUserInfoPath = '/accounts/user-info';

@@ -12,6 +12,7 @@ import '../models/patrol_location_track_payload.dart';
 
 import '../http/patrol_cookie_jar.dart';
 import '../http/patrol_dio.dart';
+import '../http/patrol_session_refresh.dart';
 
 import 'patrol_active_round_sync.dart';
 
@@ -45,6 +46,8 @@ class PatrolTrackSocketClient {
   bool _manualClose = false;
 
   Future<void>? _connectFuture;
+
+  Future<void>? _reconnectFuture;
 
   ServiceInstance? _fgsService;
 
@@ -150,9 +153,7 @@ class PatrolTrackSocketClient {
       await PatrolTrackOfflineQueue.enqueue(payload);
 
       if (reconnectOnFailure && !_manualClose) {
-        await _tearDownClient();
-
-        if (!_manualClose) unawaited(connect());
+        unawaited(_reconnectAfterFailure());
       }
 
       return false;
@@ -176,11 +177,17 @@ class PatrolTrackSocketClient {
 
     await PatrolDio.ensureReady();
 
+    if (!await PatrolSessionRefresh.ensureFreshForSocket()) return;
+
     final auth = await PatrolCookieJar.stompAuthHeaders();
     if (auth == null) return;
 
     final reconnectSec =
         (await PatrolTrackingConfigStore.load()).socketReconnectSec;
+
+    final webSocketHeaders = <String, dynamic>{};
+    final stompHeaders = <String, String>{};
+    _applyStompAuthHeaders(auth, webSocketHeaders, stompHeaders);
 
     _connecting = true;
 
@@ -195,8 +202,12 @@ class PatrolTrackSocketClient {
         config: StompConfig.sockJS(
           url: url,
           reconnectDelay: Duration(seconds: reconnectSec),
-          webSocketConnectHeaders: auth.webSocketConnectHeaders,
-          stompConnectHeaders: auth.stompConnectHeaders,
+          webSocketConnectHeaders: webSocketHeaders,
+          stompConnectHeaders: stompHeaders,
+          beforeConnect: () => _refreshStompHeaders(
+            webSocketHeaders,
+            stompHeaders,
+          ),
 
           onConnect: (frame) => _onStompConnect(client, frame),
 
@@ -204,7 +215,7 @@ class PatrolTrackSocketClient {
 
           onWebSocketError: (_) => _onTransportClosed(),
 
-          onStompError: (_) => _onTransportClosed(),
+          onStompError: (frame) => unawaited(_onStompError(frame)),
 
           onDisconnect: (_) {},
         ),
@@ -223,49 +234,37 @@ class PatrolTrackSocketClient {
   void _onStompConnect(StompClient connectedClient, StompFrame frame) {
     if (!identical(_client, connectedClient)) return;
 
+    try {
+      _subscribeAll(connectedClient);
+    } catch (_) {
+      unawaited(_reconnectAfterFailure());
+      return;
+    }
+
     if (_runsInFgs) {
       _invokeMain(PatrolFgsInvokeEvents.socketConnected);
-
-      connectedClient.subscribe(
-        destination: AppConfig.stompMockLocationAlertDestination,
-
-        callback: (_) => _invokeMain(PatrolFgsInvokeEvents.mockLocationAlert),
-      );
-
-      connectedClient.subscribe(
-        destination: AppConfig.stompActiveRoundChangedDestination,
-
-        callback: _onActiveRoundChangedFrame,
-      );
-
-      connectedClient.subscribe(
-        destination: AppConfig.stompTrackingConfigChangedDestination,
-
-        callback: _onTrackingConfigChangedFrame,
-      );
-
       unawaited(_flushOfflineQueue());
-
       return;
     }
 
     PatrolTrackSocketDispatch.onSocketConnected?.call();
+  }
 
-    connectedClient.subscribe(
+  void _subscribeAll(StompClient client) {
+    client.subscribe(
       destination: AppConfig.stompMockLocationAlertDestination,
-
-      callback: _onMockAlertFrame,
+      callback: _runsInFgs
+          ? (_) => _invokeMain(PatrolFgsInvokeEvents.mockLocationAlert)
+          : _onMockAlertFrame,
     );
 
-    connectedClient.subscribe(
+    client.subscribe(
       destination: AppConfig.stompActiveRoundChangedDestination,
-
       callback: _onActiveRoundChangedFrame,
     );
 
-    connectedClient.subscribe(
+    client.subscribe(
       destination: AppConfig.stompTrackingConfigChangedDestination,
-
       callback: _onTrackingConfigChangedFrame,
     );
   }
@@ -366,6 +365,60 @@ class PatrolTrackSocketClient {
     if (_manualClose) return;
   }
 
+  Future<void> _onStompError(StompFrame frame) async {
+    await _reconnectAfterFailure(
+      forceRefresh: _isAuthStompError(frame),
+    );
+  }
+
+  /// SUBSCRIBE / STOMP ERROR auth failure — same recovery as [sendTrackLocation].
+  Future<void> _reconnectAfterFailure({bool forceRefresh = false}) async {
+    if (_manualClose) return;
+
+    final inFlight = _reconnectFuture;
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
+
+    final future = _reconnectAfterFailureImpl(forceRefresh: forceRefresh);
+    _reconnectFuture = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_reconnectFuture, future)) {
+        _reconnectFuture = null;
+      }
+    }
+  }
+
+  Future<void> _reconnectAfterFailureImpl({required bool forceRefresh}) async {
+    if (_manualClose) return;
+
+    await _tearDownClient();
+    if (_manualClose) return;
+
+    await PatrolSessionRefresh.ensureFreshForSocket(force: forceRefresh);
+    if (_manualClose) return;
+
+    await connect();
+  }
+
+  static bool _isAuthStompError(StompFrame frame) {
+    final parts = <String>[
+      frame.body ?? '',
+      frame.headers['message'] ?? '',
+    ];
+    final text = parts.join(' ').toLowerCase();
+    return text.contains('401') ||
+        text.contains('403') ||
+        text.contains('unauthorized') ||
+        text.contains('forbidden') ||
+        text.contains('expired') ||
+        text.contains('access_token') ||
+        text.contains('access token');
+  }
+
   Future<void> _flushOfflineQueue() async {
     if (!isConnected) return;
 
@@ -390,5 +443,31 @@ class PatrolTrackSocketClient {
     _client = null;
 
     client?.deactivate();
+  }
+
+  static void _applyStompAuthHeaders(
+    PatrolStompAuthHeaders auth,
+    Map<String, dynamic> webSocketHeaders,
+    Map<String, String> stompHeaders,
+  ) {
+    webSocketHeaders
+      ..clear()
+      ..addAll(auth.webSocketConnectHeaders);
+    stompHeaders
+      ..clear()
+      ..addAll(auth.stompConnectHeaders);
+  }
+
+  /// Runs before every SockJS/WebSocket attempt (including library auto-reconnect).
+  static Future<void> _refreshStompHeaders(
+    Map<String, dynamic> webSocketHeaders,
+    Map<String, String> stompHeaders,
+  ) async {
+    if (!await PatrolSessionRefresh.ensureFreshForSocket()) return;
+
+    final auth = await PatrolCookieJar.stompAuthHeaders();
+    if (auth == null) return;
+
+    _applyStompAuthHeaders(auth, webSocketHeaders, stompHeaders);
   }
 }

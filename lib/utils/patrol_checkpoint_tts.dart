@@ -1,6 +1,3 @@
-import 'dart:developer' as developer;
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -204,19 +201,10 @@ abstract final class PatrolCheckpointTts {
   }) async {
     final languageTag = _resolveLanguage(locale);
     if (await _speakWithFlutterTts(message, languageTag)) {
-      if (kDebugMode) {
-        developer.log('flutter_tts spoke: $message', name: 'PatrolCheckpointTts');
-      }
       return true;
     }
     if (await PatrolTtsPlatform.speak(text: message, languageTag: languageTag)) {
-      if (kDebugMode) {
-        developer.log('native TTS spoke: $message', name: 'PatrolCheckpointTts');
-      }
       return true;
-    }
-    if (kDebugMode) {
-      developer.log('TTS failed: $message', name: 'PatrolCheckpointTts');
     }
     return false;
   }

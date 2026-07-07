@@ -16,6 +16,7 @@ class PatrolRoundService {
   Future<ApiResult<PatrolRoundHistoryPage>> searchPatrolRounds({
     int page = 0,
     int size = 12,
+    List<Map<String, dynamic>> orders = const [],
   }) async {
     final base = AppConfig.effectiveBaseUrl;
     if (base.isEmpty) {
@@ -29,7 +30,7 @@ class PatrolRoundService {
       final res = await PatrolDio.instance.postUri<dynamic>(
         uri,
         data: {
-          'orders': <dynamic>[],
+          'orders': orders,
           'paged': true,
           'page': page,
           'size': size,

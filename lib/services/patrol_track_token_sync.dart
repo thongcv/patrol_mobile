@@ -1,3 +1,4 @@
+import '../http/patrol_session_refresh.dart';
 import 'account_session_store.dart';
 import 'patrol_track_socket_client.dart';
 import 'patrol_tracking_config_store.dart';
@@ -39,6 +40,8 @@ abstract final class PatrolTrackTokenSync {
   }
 
   static Future<void> _reconnectOrConnect() async {
+    if (!await PatrolSessionRefresh.ensureFreshForSocket()) return;
+
     final client = PatrolTrackSocketClient.instance;
     if (client.isConnected) {
       await client.reconnectAfterTokenRefresh();

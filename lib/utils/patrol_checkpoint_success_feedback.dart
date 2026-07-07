@@ -1,4 +1,3 @@
-import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -16,10 +15,6 @@ abstract final class PatrolCheckpointSuccessFeedback {
 
   /// Notification + TTS when background auto-scan completes every checkpoint.
   static Future<void> notifyRoundCompleted() async {
-    developer.log(
-      'Patrol round fully scanned in background',
-      name: 'PatrolCheckpointSuccessFeedback',
-    );
     try {
       await PatrolBackgroundService.showRoundCompletedNotification();
     } catch (_) {}
@@ -38,10 +33,6 @@ abstract final class PatrolCheckpointSuccessFeedback {
     final name = checkpointName.trim();
     if (name.isEmpty) return;
 
-    developer.log(
-      'Checkpoint scanned successfully: $name',
-      name: 'PatrolCheckpointSuccessFeedback',
-    );
     try {
       await PatrolBackgroundService.showCheckpointScannedNotification(
         name,

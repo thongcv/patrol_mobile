@@ -13,6 +13,33 @@ class AccountService {
   AccountService._();
   static final AccountService instance = AccountService._();
 
+  /// `GET /accounts/refresh` — lightweight; BE rotates `access_token` via `Set-Cookie`.
+  Future<ApiResult<ApiUnit>> refreshSession() async {
+    final base = AppConfig.effectiveBaseUrl;
+    if (base.isEmpty) {
+      return ApiResult.failure(ApiFailure.configMissing);
+    }
+    try {
+      final uri =
+          AppConfig.resolveApiUri(PatrolApiEndpoints.accountsRefreshPath);
+      final res = await PatrolDio.instance.getUri<dynamic>(uri);
+      final status = res.statusCode ?? 0;
+      if (status == 401 || status == 403) {
+        return ApiResult.failure(ApiFailure.unauthorized(res));
+      }
+      if (status != 200 && status != 204) {
+        return ApiResult.failure(
+          apiFailureFromHttpResponse(statusCode: status, body: res),
+        );
+      }
+      return ApiResult.success(ApiUnit.instance);
+    } on DioException catch (e) {
+      return ApiResult.failure(apiFailureFromDioException(e));
+    } catch (_) {
+      return ApiResult.failure(ApiFailure.network());
+    }
+  }
+
   Future<ApiResult<AccountMe>> fetchMe() async {
     final base = AppConfig.effectiveBaseUrl;
     if (base.isEmpty) {

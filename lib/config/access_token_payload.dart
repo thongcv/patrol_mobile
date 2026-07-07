@@ -97,6 +97,34 @@ abstract final class AccessTokenPayload {
 
   /// `accountId` from JWT claim (payload segment).
   static String? accountIdFromJwt(String jwt) {
+    final claims = _jwtClaims(jwt);
+    if (claims == null) return null;
+    return jsonStr(claims['accountId']);
+  }
+
+  /// JWT `exp` claim — `null` when missing or not parseable.
+  static DateTime? jwtExpiresAt(String jwt) {
+    final claims = _jwtClaims(jwt);
+    if (claims == null) return null;
+    final exp = claims['exp'];
+    if (exp is! num) return null;
+    return DateTime.fromMillisecondsSinceEpoch(
+      exp.toInt() * 1000,
+      isUtc: true,
+    ).toLocal();
+  }
+
+  /// `true` when JWT is expired or within [margin] of expiry.
+  static bool isJwtNearOrPastExpiry(
+    String jwt, {
+    Duration margin = const Duration(seconds: 60),
+  }) {
+    final expiresAt = jwtExpiresAt(jwt);
+    if (expiresAt == null) return false;
+    return DateTime.now().add(margin).isAfter(expiresAt);
+  }
+
+  static Map<String, dynamic>? _jwtClaims(String jwt) {
     final parts = jwt.trim().split('.');
     if (parts.length < 2) return null;
     try {
@@ -104,9 +132,7 @@ abstract final class AccessTokenPayload {
       final mod = segment.length % 4;
       if (mod == 1) return null;
       if (mod > 0) segment = segment.padRight(segment.length + (4 - mod), '=');
-      final claims = jsonMapCoerce(jsonDecode(utf8.decode(base64Url.decode(segment))));
-      if (claims == null) return null;
-      return jsonStr(claims['accountId']);
+      return jsonMapCoerce(jsonDecode(utf8.decode(base64Url.decode(segment))));
     } catch (_) {
       return null;
     }

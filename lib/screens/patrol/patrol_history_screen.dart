@@ -41,6 +41,7 @@ class _PatrolHistoryScreenState extends State<PatrolHistoryScreen> {
   int _totalElements = 0;
   int _totalPages = 0;
   static const _pageSize = 12;
+  static const _maxRecords = 100;
 
   @override
   void initState() {
@@ -56,14 +57,28 @@ class _PatrolHistoryScreenState extends State<PatrolHistoryScreen> {
         _page = 0;
       });
     } else {
-      if (_loadingMore || _page + 1 >= _totalPages) return;
+      if (_loadingMore ||
+          _page + 1 >= _totalPages ||
+          _items.length >= _maxRecords) {
+        return;
+      }
       setState(() => _loadingMore = true);
     }
 
     final page = reset ? 0 : _page + 1;
+    final loaded = reset ? 0 : _items.length;
+    final size = _pageSize < _maxRecords - loaded
+        ? _pageSize
+        : _maxRecords - loaded;
     final r = await PatrolRoundService.instance.searchPatrolRounds(
       page: page,
-      size: _pageSize,
+      size: size,
+      orders: [
+        {
+          'sort': 'expectedStartTime',
+          'direction': 'DESC',
+        },
+      ],
     );
     if (!mounted) return;
 
