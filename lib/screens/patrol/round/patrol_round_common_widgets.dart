@@ -151,6 +151,7 @@ bool _bluetoothCheckPointBeaconFieldsMatch(
   int? major,
   int? minor,
   int? rssi,
+  required double rssiTolerance,
 }) {
   final scanned = scannedUuid?.trim();
   final pUuid = point.uuid?.trim();
@@ -171,8 +172,7 @@ bool _bluetoothCheckPointBeaconFieldsMatch(
   final targetRssi = point.rssi;
   if (targetRssi != null) {
     if (rssi == null) return false;
-    final tolerance = point.radius ?? kDefaultCheckPointRadiusM;
-    if ((rssi - targetRssi).abs() > tolerance) return false;
+    if ((rssi - targetRssi).abs() > rssiTolerance) return false;
   }
 
   return true;
@@ -184,6 +184,7 @@ CheckPoint? _matchBluetoothCheckPoint(
   int? major,
   int? minor,
   int? rssi,
+  required double rssiTolerance,
 }) {
   for (final p in candidates) {
     if (_bluetoothCheckPointBeaconFieldsMatch(
@@ -192,6 +193,7 @@ CheckPoint? _matchBluetoothCheckPoint(
       major: major,
       minor: minor,
       rssi: rssi,
+      rssiTolerance: rssiTolerance,
     )) {
       return p;
     }

@@ -35,6 +35,8 @@ class PatrolTrackingConfig {
     this.navStationarySpeedMps = defaultNavStationarySpeedMps,
     this.checkpointTtsDedupeSec = defaultCheckpointTtsDedupeSec,
     this.radius = kDefaultCheckPointRadiusM,
+    this.mapRadiusM = kDefaultCheckPointRadiusM,
+    this.bluetoothRssiTolerance = defaultBluetoothRssiTolerance,
     this.shiftWindowStartGraceMinutes = defaultShiftWindowStartGraceMinutes,
     this.shiftWindowEndGraceMinutes = defaultShiftWindowEndGraceMinutes,
     this.overdueGraceMinutes = defaultOverdueGraceMinutes,
@@ -62,6 +64,9 @@ class PatrolTrackingConfig {
   static const int defaultNavStationaryBgSec = 20;
   static const double defaultNavStationarySpeedMps = 0.5;
   static const int defaultCheckpointTtsDedupeSec = 8;
+
+  /// RSSI match tolerance (dBm) for Bluetooth auto-scan.
+  static const double defaultBluetoothRssiTolerance = 3.0;
 
   static const int defaultShiftWindowStartGraceMinutes = 15;
   static const int defaultShiftWindowEndGraceMinutes = 15;
@@ -145,6 +150,13 @@ class PatrolTrackingConfig {
   final int checkpointTtsDedupeSec;
 
   final double radius;
+
+  /// Checkpoint radius circles on route map (m).
+  final double mapRadiusM;
+
+  /// RSSI tolerance (dBm) when matching Bluetooth beacons.
+  final double bluetoothRssiTolerance;
+
   final int shiftWindowStartGraceMinutes;
   final int shiftWindowEndGraceMinutes;
   final int overdueGraceMinutes;
@@ -165,6 +177,8 @@ class PatrolTrackingConfig {
         defaults.autoScanMatchOrder;
     final rawMin = source['minMoveM'];
     final shiftGraces = _shiftWindowGracesFromSource(source, defaults);
+    final parsedRadius = _radiusFromJson(source['radius']);
+    final parsedMapRadius = _radiusFromJson(source['mapRadiusM']);
     return PatrolTrackingConfig(
       background: background,
       minMoveM: _minMoveMFromJson(rawMin) ?? defaults.minMoveM,
@@ -224,7 +238,11 @@ class PatrolTrackingConfig {
       checkpointTtsDedupeSec:
           _positiveSecFromJson(source['checkpointTtsDedupeSec']) ??
               defaults.checkpointTtsDedupeSec,
-      radius: _radiusFromJson(source['radius']) ?? defaults.radius,
+      radius: parsedRadius ?? defaults.radius,
+      mapRadiusM: parsedMapRadius ?? parsedRadius ?? defaults.mapRadiusM,
+      bluetoothRssiTolerance:
+          _positiveMFromJson(source['bluetoothRssiTolerance']) ??
+              defaults.bluetoothRssiTolerance,
       shiftWindowStartGraceMinutes: shiftGraces.start,
       shiftWindowEndGraceMinutes: shiftGraces.end,
       overdueGraceMinutes: _graceMinutesFromJson(
@@ -266,6 +284,8 @@ class PatrolTrackingConfig {
         'navStationarySpeedMps': navStationarySpeedMps,
         'checkpointTtsDedupeSec': checkpointTtsDedupeSec,
         'radius': radius,
+        'mapRadiusM': mapRadiusM,
+        'bluetoothRssiTolerance': bluetoothRssiTolerance,
         'shiftWindowStartGraceMinutes': shiftWindowStartGraceMinutes,
         'shiftWindowEndGraceMinutes': shiftWindowEndGraceMinutes,
         'overdueGraceMinutes': overdueGraceMinutes,
@@ -394,6 +414,15 @@ class PatrolTrackingConfig {
       radius: source.containsKey('radius')
           ? (_radiusFromJson(source['radius']) ?? current.radius)
           : current.radius,
+      mapRadiusM: source.containsKey('mapRadiusM')
+          ? (_radiusFromJson(source['mapRadiusM']) ?? current.mapRadiusM)
+          : (source.containsKey('radius')
+              ? (_radiusFromJson(source['radius']) ?? current.mapRadiusM)
+              : current.mapRadiusM),
+      bluetoothRssiTolerance: source.containsKey('bluetoothRssiTolerance')
+          ? (_positiveMFromJson(source['bluetoothRssiTolerance']) ??
+              current.bluetoothRssiTolerance)
+          : current.bluetoothRssiTolerance,
       shiftWindowStartGraceMinutes: shiftGraces.start,
       shiftWindowEndGraceMinutes: shiftGraces.end,
       overdueGraceMinutes: source.containsKey('overdueGraceMinutes')
@@ -435,6 +464,8 @@ class PatrolTrackingConfig {
     'navStationarySpeedMps',
     'checkpointTtsDedupeSec',
     'radius',
+    'mapRadiusM',
+    'bluetoothRssiTolerance',
     'shiftWindowStartGraceMinutes',
     'shiftWindowEndGraceMinutes',
     'shiftWindowGraceMinutes',
@@ -588,6 +619,8 @@ class PatrolTrackingConfig {
         navStationarySpeedMps == other.navStationarySpeedMps &&
         checkpointTtsDedupeSec == other.checkpointTtsDedupeSec &&
         radius == other.radius &&
+        mapRadiusM == other.mapRadiusM &&
+        bluetoothRssiTolerance == other.bluetoothRssiTolerance &&
         shiftWindowStartGraceMinutes == other.shiftWindowStartGraceMinutes &&
         shiftWindowEndGraceMinutes == other.shiftWindowEndGraceMinutes &&
         overdueGraceMinutes == other.overdueGraceMinutes;
@@ -626,6 +659,8 @@ class PatrolTrackingConfig {
         navStationarySpeedMps,
         checkpointTtsDedupeSec,
         radius,
+        mapRadiusM,
+        bluetoothRssiTolerance,
         shiftWindowStartGraceMinutes,
         shiftWindowEndGraceMinutes,
         overdueGraceMinutes,

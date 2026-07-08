@@ -8,12 +8,11 @@ import 'device_location.dart';
 /// Default radius (m) when checkpoint has no configured `radius`.
 const double kDefaultCheckPointRadiusM = 3;
 
-/// Effective proximity radius (m): checkpoint value, else [defaultRadiusM].
-double effectiveCheckPointRadiusM(
-  CheckPoint checkpoint, {
+/// Effective GPS proximity radius (m) from tracking config ([defaultRadiusM]).
+double effectiveCheckPointRadiusM({
   double defaultRadiusM = kDefaultCheckPointRadiusM,
 }) =>
-    checkpoint.radius ?? defaultRadiusM;
+    defaultRadiusM;
 
 /// Incremental accuracy margin: [deviceM] minus accuracy saved at checkpoint [checkpointM].
 ///
@@ -495,7 +494,6 @@ CheckPointProximitySnapshot _buildSnapshot({
   final cpLat = checkpoint.latitude!;
   final cpLng = checkpoint.longitude!;
   final allowedRadiusM = effectiveCheckPointRadiusM(
-    checkpoint,
     defaultRadiusM: defaultRadiusM,
   );
 

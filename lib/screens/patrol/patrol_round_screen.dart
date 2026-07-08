@@ -1482,6 +1482,10 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     final watch = BluetoothBeaconScanSession();
     _bluetoothScanWatch = watch;
 
+    final bluetoothRssiTolerance =
+        (await PatrolTrackingConfigStore.load()).bluetoothRssiTolerance;
+    if (!mounted) return;
+
     final btError = await watch.start(
       uuids: scanUuids.isEmpty ? null : scanUuids,
       stableHits: 1,
@@ -1524,6 +1528,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
           major: result.beacon?.major,
           minor: result.beacon?.minor,
           rssi: result.beacon?.rssi,
+          rssiTolerance: bluetoothRssiTolerance,
         );
         if (matched == null) return false;
 

@@ -28,10 +28,7 @@ List<CircleMarker> buildCheckpointRadiusCircles({
     if (center == null) continue;
     final scanned = isScanned(p);
     final stroke = scanned ? const Color(0xFF34D399) : const Color(0xFFFBBF24);
-    final radiusM = effectiveCheckPointRadiusM(
-      p,
-      defaultRadiusM: defaultRadiusM,
-    );
+    final radiusM = effectiveCheckPointRadiusM(defaultRadiusM: defaultRadiusM);
     if (!radiusM.isFinite || radiusM <= 0) continue;
     circles.add(
       CircleMarker(
