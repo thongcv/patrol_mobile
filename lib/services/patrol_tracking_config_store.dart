@@ -76,8 +76,6 @@ abstract final class PatrolTrackingConfigStore {
 
   static Future<double> radius() async => (await load()).radius;
 
-  static Future<double> mapRadiusM() async => (await load()).mapRadiusM;
-
   static Future<double> bluetoothRssiTolerance() async =>
       (await load()).bluetoothRssiTolerance;
 
