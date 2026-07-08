@@ -9,5 +9,7 @@ abstract final class PatrolApiEndpoints {
   static const String sitesAccessiblePath = '/sites/accessible';
   static const String issuesPath = '/issues';
   static const String issuesMyPostedViewPath = '/issues/my-posted-view';
+  static String issuesAssignmentsPath(int issueId) =>
+      '/issues/$issueId/assignments';
   static const String patrolRoundsSearchViewPath = '/patrol-rounds/search-view';
 }

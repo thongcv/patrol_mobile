@@ -1468,4 +1468,31 @@ class AppLocalizationsVi extends AppLocalizations {
   String issuesShowingRange(int from, int to, int total) {
     return 'HIỂN THỊ $from-$to / $total BẢN GHI';
   }
+
+  @override
+  String get issuesColReporter => 'Người báo';
+
+  @override
+  String get issuesAssignmentHistoryTitle => 'Lịch sử phân công';
+
+  @override
+  String get issuesAssignmentFrom => 'Từ';
+
+  @override
+  String get issuesAssignmentTo => 'Đến';
+
+  @override
+  String get issuesAssignmentReceivedAt => 'Thời gian nhận';
+
+  @override
+  String get issuesAssignmentStatusPending => 'Chờ xử lý';
+
+  @override
+  String get issuesAssignmentStatusAccepted => 'Đã chấp nhận';
+
+  @override
+  String get issuesAssignmentStatusRejected => 'Đã từ chối';
+
+  @override
+  String get issuesAssignmentStatusCompleted => 'Hoàn thành';
 }

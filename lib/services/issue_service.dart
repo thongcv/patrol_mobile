@@ -147,4 +147,48 @@ class IssueService {
       return ApiResult.failure(ApiFailure.network());
     }
   }
+
+  Future<ApiResult<List<IssueAssignment>>> fetchIssueAssignments(
+    int issueId,
+  ) async {
+    final base = AppConfig.effectiveBaseUrl;
+    if (base.isEmpty) {
+      return ApiResult.failure(ApiFailure.configMissing);
+    }
+
+    try {
+      final uri = AppConfig.resolveApiUri(
+        PatrolApiEndpoints.issuesAssignmentsPath(issueId),
+      );
+      final res = await PatrolDio.instance.getUri<dynamic>(uri);
+      final status = res.statusCode ?? 0;
+      if (status == 401 || status == 403) {
+        return ApiResult.failure(ApiFailure.unauthorized(res));
+      }
+      if (status != 200) {
+        return ApiResult.failure(
+          apiFailureFromHttpResponse(statusCode: status, body: res),
+        );
+      }
+
+      try {
+        final list = responseEnvelopeList(res.data);
+        if (list == null) {
+          return ApiResult.failure(ApiFailure.badResponse(res));
+        }
+        final assignments = list
+            .map(jsonMapCoerce)
+            .whereType<Map<String, dynamic>>()
+            .map(IssueAssignment.fromJson)
+            .toList();
+        return ApiResult.success(assignments);
+      } catch (_) {
+        return ApiResult.failure(ApiFailure.badResponse(res));
+      }
+    } on DioException catch (e) {
+      return ApiResult.failure(apiFailureFromDioException(e));
+    } catch (_) {
+      return ApiResult.failure(ApiFailure.network());
+    }
+  }
 }

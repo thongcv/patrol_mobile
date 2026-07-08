@@ -7,9 +7,12 @@ class Issue {
     this.description,
     required this.status,
     this.currentAssigneeId,
+    this.currentAssigneeName,
     this.siteId,
     this.note,
     this.createdDate,
+    this.createdBy,
+    this.createdByName,
     this.photoUrls = const [],
   });
 
@@ -18,9 +21,12 @@ class Issue {
   final String? description;
   final String status;
   final String? currentAssigneeId;
+  final String? currentAssigneeName;
   final int? siteId;
   final String? note;
   final String? createdDate;
+  final String? createdBy;
+  final String? createdByName;
   final List<String> photoUrls;
 
   bool get isOpen {
@@ -40,12 +46,16 @@ class Issue {
       description: jsonStr(json['description']),
       status: jsonStr(json['status']) ?? '',
       currentAssigneeId: jsonStr(json['currentAssigneeId']),
+      currentAssigneeName: jsonStr(json['currentAssigneeName']),
       siteId: jsonInt(json['siteId']),
       note: jsonStr(json['note']),
       createdDate: jsonStr(json['createdDate']),
+      createdBy: jsonStr(json['createdBy']),
+      createdByName: jsonStr(json['createdByName']) ?? jsonStr(json['reporterName']),
       photoUrls: photoList,
     );
   }
+
 }
 
 class IssuePage {
@@ -120,4 +130,48 @@ class IssueUpdateRequest {
   final String? note;
   final int? siteId;
   final List<String> filePaths;
+}
+
+class IssueAssignment {
+  IssueAssignment({
+    required this.id,
+    required this.issueId,
+    this.assignerId,
+    this.assignerName,
+    this.assigneeId,
+    this.assigneeName,
+    required this.status,
+    this.note,
+    this.assignedAt,
+    this.processedAt,
+    this.createdDate,
+  });
+
+  final int id;
+  final int issueId;
+  final String? assignerId;
+  final String? assignerName;
+  final String? assigneeId;
+  final String? assigneeName;
+  final String status;
+  final String? note;
+  final String? assignedAt;
+  final String? processedAt;
+  final String? createdDate;
+
+  factory IssueAssignment.fromJson(Map<String, dynamic> json) {
+    return IssueAssignment(
+      id: jsonInt(json['id']) ?? 0,
+      issueId: jsonInt(json['issueId']) ?? 0,
+      assignerId: jsonStr(json['assignerId']),
+      assignerName: jsonStr(json['assignerName']),
+      assigneeId: jsonStr(json['assigneeId']),
+      assigneeName: jsonStr(json['assigneeName']),
+      status: jsonStr(json['status']) ?? '',
+      note: jsonStr(json['note']),
+      assignedAt: jsonStr(json['assignedAt']),
+      processedAt: jsonStr(json['processedAt']),
+      createdDate: jsonStr(json['createdDate']),
+    );
+  }
 }

@@ -26,6 +26,12 @@ abstract final class _IssuesUi {
   static const Color resolvedFg = Color(0xFF15803D);
   static const Color openBg = Color(0xFFDBEAFE);
   static const Color openFg = Color(0xFF1D4ED8);
+  static const Color assignmentPendingBg = Color(0xFFFEF3C7);
+  static const Color assignmentPendingFg = Color(0xFFB45309);
+  static const Color assignmentAcceptedBg = Color(0xFFDCFCE7);
+  static const Color assignmentAcceptedFg = Color(0xFF15803D);
+  static const Color assignmentRejectedBg = Color(0xFFFEE2E2);
+  static const Color assignmentRejectedFg = Color(0xFFB91C1C);
 }
 
 /// Menu path `/issues` — list of issues I reported + create form.
@@ -64,6 +70,7 @@ class _IssuesScreenState extends State<IssuesScreen> {
   int _totalPages = 0;
   String? _assigneeId;
   String? _assigneeName;
+  String? _reporterName;
   static const _pageSize = 10;
 
   @override
@@ -104,24 +111,45 @@ class _IssuesScreenState extends State<IssuesScreen> {
     ]);
   }
 
-  /// Fallback when Home did not pass `managerInfo`.
+  /// Loads assignee/reporter labels from `/accounts/me` when not passed from Home.
   Future<void> _ensureAssignee() async {
-    if (_assigneeId != null && _assigneeName != null) return;
+    final needAssignee = _assigneeId == null || _assigneeName == null;
+    final needReporter = _reporterName == null;
+    if (!needAssignee && !needReporter) return;
+
     final r = await AccountService.instance.fetchMe();
     if (!mounted || !r.ok) return;
     final manager = r.data?.managerInfo;
     final id = _normalize(manager?.accountId);
     final name = _normalize(manager?.name);
-    if (id == null && name == null) return;
+    final reporter = _normalize(r.data?.userInfo.name) ??
+        _normalize(r.data?.userInfo.accountId);
+    if (!needAssignee && reporter == null) return;
+    if (needAssignee && id == null && name == null && reporter == null) return;
     setState(() {
-      _assigneeId ??= id;
-      _assigneeName ??= name;
+      if (needAssignee) {
+        _assigneeId ??= id;
+        _assigneeName ??= name;
+      }
+      _reporterName ??= reporter;
     });
   }
 
-  /// UI label for assignee: prefer manager name when accountId matches.
-  String _assigneeLabel(String? accountId) {
-    final id = _normalize(accountId);
+  String _reporterLabel(Issue issue) {
+    final apiName = _normalize(issue.createdByName);
+    if (apiName != null) return apiName;
+    final reporter = _reporterName;
+    if (reporter != null) return reporter;
+    final createdBy = _normalize(issue.createdBy);
+    if (createdBy != null) return createdBy;
+    return '—';
+  }
+
+  /// UI label for assignee: prefer [Issue.currentAssigneeName] from API.
+  String _assigneeLabel(Issue issue) {
+    final apiName = _normalize(issue.currentAssigneeName);
+    if (apiName != null) return apiName;
+    final id = _normalize(issue.currentAssigneeId);
     if (id == null) return '—';
     if (_assigneeId != null && id == _assigneeId) {
       final name = _assigneeName;
@@ -288,7 +316,8 @@ class _IssuesScreenState extends State<IssuesScreen> {
         child: _IssueDetailSheet(
           issue: issue,
           siteLabel: _siteLabel(issue.siteId),
-          assigneeLabel: _assigneeLabel(issue.currentAssigneeId),
+          assigneeLabel: _assigneeLabel(issue),
+          reporterLabel: _reporterLabel(issue),
           statusLabel: _statusLabel(issue.status, AppLocalizations.of(ctx)!),
           statusColors: _statusColors(issue.status),
           onEdit: issue.isOpen
@@ -526,7 +555,7 @@ class _IssuesScreenState extends State<IssuesScreen> {
                         _metaRow(
                           theme,
                           l10n.issuesColAssignee,
-                          _assigneeLabel(issue.currentAssigneeId),
+                          _assigneeLabel(issue),
                         ),
                         _metaRow(
                           theme,
@@ -617,11 +646,12 @@ class _IssuesScreenState extends State<IssuesScreen> {
   }
 }
 
-class _IssueDetailSheet extends StatelessWidget {
+class _IssueDetailSheet extends StatefulWidget {
   const _IssueDetailSheet({
     required this.issue,
     required this.siteLabel,
     required this.assigneeLabel,
+    required this.reporterLabel,
     required this.statusLabel,
     required this.statusColors,
     this.onEdit,
@@ -630,15 +660,87 @@ class _IssueDetailSheet extends StatelessWidget {
   final Issue issue;
   final String siteLabel;
   final String assigneeLabel;
+  final String reporterLabel;
   final String statusLabel;
   final (Color, Color) statusColors;
   final VoidCallback? onEdit;
+
+  @override
+  State<_IssueDetailSheet> createState() => _IssueDetailSheetState();
+}
+
+class _IssueDetailSheetState extends State<_IssueDetailSheet> {
+  List<IssueAssignment>? _assignments;
+  bool _loadingAssignments = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAssignments();
+  }
+
+  Future<void> _loadAssignments() async {
+    final r = await IssueService.instance.fetchIssueAssignments(widget.issue.id);
+    if (!mounted) return;
+    setState(() {
+      _loadingAssignments = false;
+      if (r.ok) {
+        final list = List<IssueAssignment>.from(r.data!);
+        list.sort((a, b) {
+          final at = b.assignedAt ?? b.createdDate ?? '';
+          final bt = a.assignedAt ?? a.createdDate ?? '';
+          return at.compareTo(bt);
+        });
+        _assignments = list;
+      } else {
+        _assignments = const [];
+      }
+    });
+  }
+
+  String _assignmentStatusLabel(String status, AppLocalizations l10n) {
+    switch (status.trim().toUpperCase()) {
+      case 'PENDING':
+        return l10n.issuesAssignmentStatusPending;
+      case 'ACCEPTED':
+        return l10n.issuesAssignmentStatusAccepted;
+      case 'REJECTED':
+        return l10n.issuesAssignmentStatusRejected;
+      case 'COMPLETED':
+        return l10n.issuesAssignmentStatusCompleted;
+      default:
+        return status.trim().isEmpty ? '—' : status;
+    }
+  }
+
+  (Color, Color) _assignmentStatusColors(String status) {
+    switch (status.trim().toUpperCase()) {
+      case 'PENDING':
+        return (_IssuesUi.assignmentPendingBg, _IssuesUi.assignmentPendingFg);
+      case 'ACCEPTED':
+      case 'COMPLETED':
+        return (_IssuesUi.assignmentAcceptedBg, _IssuesUi.assignmentAcceptedFg);
+      case 'REJECTED':
+        return (_IssuesUi.assignmentRejectedBg, _IssuesUi.assignmentRejectedFg);
+      default:
+        return (_IssuesUi.bg, _IssuesUi.muted);
+    }
+  }
+
+  String _personLabel(String? name, String? id) {
+    final n = name?.trim();
+    if (n != null && n.isNotEmpty) return n;
+    final i = id?.trim();
+    if (i != null && i.isNotEmpty) return i;
+    return '—';
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final theme = GoogleFonts.interTextTheme(Theme.of(context).textTheme);
     final bottom = MediaQuery.paddingOf(context).bottom;
+    final issue = widget.issue;
 
     return Container(
       margin: const EdgeInsets.only(top: 48),
@@ -663,8 +765,9 @@ class _IssueDetailSheet extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: Text(
@@ -681,35 +784,114 @@ class _IssueDetailSheet extends StatelessWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: statusColors.$1,
+                      color: widget.statusColors.$1,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      statusLabel,
+                      widget.statusLabel,
                       style: theme.labelSmall?.copyWith(
-                        color: statusColors.$2,
+                        color: widget.statusColors.$2,
                         fontWeight: FontWeight.w700,
                       ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                    color: _IssuesUi.muted,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
                     ),
                   ),
                 ],
               ),
               if (issue.description != null &&
-                  issue.description!.isNotEmpty) ...[
+                  issue.description!.trim().isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text(
-                  issue.description!,
-                  style: theme.bodyMedium?.copyWith(color: _IssuesUi.muted),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _IssuesUi.bg,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    issue.description!.trim(),
+                    style: theme.bodyMedium?.copyWith(color: _IssuesUi.text),
+                  ),
                 ),
               ],
               const SizedBox(height: 16),
-              _detailRow(theme, l10n.issuesColAssignee, assigneeLabel),
-              _detailRow(theme, l10n.issuesColSite, siteLabel),
-              _detailRow(
-                theme,
-                l10n.issuesColReportedAt,
-                formatPatrolIsoDateTime(issue.createdDate),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _gridCell(
+                      theme,
+                      l10n.issuesColAssignee,
+                      widget.assigneeLabel,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _gridCell(theme, l10n.issuesColSite, widget.siteLabel),
+                  ),
+                ],
               ),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _gridCell(
+                      theme,
+                      l10n.issuesColReporter,
+                      widget.reporterLabel,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _gridCell(
+                      theme,
+                      l10n.issuesColReportedAt,
+                      formatPatrolIsoDateTime(issue.createdDate),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Text(
+                l10n.issuesAssignmentHistoryTitle.toUpperCase(),
+                style: theme.labelSmall?.copyWith(
+                  color: _IssuesUi.muted,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (_loadingAssignments)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                )
+              else if (_assignments == null || _assignments!.isEmpty)
+                Text(
+                  '—',
+                  style: theme.bodyMedium?.copyWith(color: _IssuesUi.muted),
+                )
+              else
+                ..._assignments!.map(
+                  (a) => _assignmentCard(theme, l10n, a),
+                ),
               if (issue.photoUrls.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 Text(
@@ -750,10 +932,10 @@ class _IssueDetailSheet extends StatelessWidget {
                   ),
                 ),
               ],
-              if (onEdit != null) ...[
+              if (widget.onEdit != null) ...[
                 const SizedBox(height: 20),
                 FilledButton.icon(
-                  onPressed: onEdit,
+                  onPressed: widget.onEdit,
                   style: FilledButton.styleFrom(
                     backgroundColor: _IssuesUi.accent,
                     padding: const EdgeInsets.symmetric(vertical: 14),
@@ -772,27 +954,110 @@ class _IssueDetailSheet extends StatelessWidget {
     );
   }
 
-  Widget _detailRow(TextTheme theme, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _gridCell(TextTheme theme, String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: theme.labelSmall?.copyWith(
+            color: _IssuesUi.muted,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.3,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: theme.bodyMedium?.copyWith(
+            color: _IssuesUi.text,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _assignmentCard(
+    TextTheme theme,
+    AppLocalizations l10n,
+    IssueAssignment assignment,
+  ) {
+    final colors = _assignmentStatusColors(assignment.status);
+    final from = _personLabel(assignment.assignerName, assignment.assignerId);
+    final to = _personLabel(assignment.assigneeName, assignment.assigneeId);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _IssuesUi.bg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _IssuesUi.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: theme.labelMedium?.copyWith(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: RichText(
+                  text: TextSpan(
+                    style: theme.bodySmall?.copyWith(color: _IssuesUi.muted),
+                    children: [
+                      TextSpan(text: '${l10n.issuesAssignmentFrom}: '),
+                      TextSpan(
+                        text: from,
+                        style: theme.bodySmall?.copyWith(
+                          color: _IssuesUi.text,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const TextSpan(text: '  →  '),
+                      TextSpan(text: '${l10n.issuesAssignmentTo}: '),
+                      TextSpan(
+                        text: to,
+                        style: theme.bodySmall?.copyWith(
+                          color: _IssuesUi.text,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: colors.$1,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  _assignmentStatusLabel(assignment.status, l10n),
+                  style: theme.labelSmall?.copyWith(
+                    color: colors.$2,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (assignment.note != null && assignment.note!.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              assignment.note!.trim(),
+              style: theme.bodySmall?.copyWith(
                 color: _IssuesUi.muted,
-                fontWeight: FontWeight.w600,
+                fontStyle: FontStyle.italic,
               ),
             ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: theme.bodyMedium?.copyWith(color: _IssuesUi.text),
-            ),
+          ],
+          const SizedBox(height: 8),
+          Text(
+            '${l10n.issuesAssignmentReceivedAt}: ${formatPatrolIsoDateTime(assignment.assignedAt ?? assignment.createdDate)}',
+            style: theme.labelSmall?.copyWith(color: _IssuesUi.muted),
           ),
         ],
       ),

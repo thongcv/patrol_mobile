@@ -544,5 +544,14 @@
       "to": { "type": "int" },
       "total": { "type": "int" }
     }
-  }
+  },
+  "issuesColReporter": "Người báo",
+  "issuesAssignmentHistoryTitle": "Lịch sử phân công",
+  "issuesAssignmentFrom": "Từ",
+  "issuesAssignmentTo": "Đến",
+  "issuesAssignmentReceivedAt": "Thời gian nhận",
+  "issuesAssignmentStatusPending": "Chờ xử lý",
+  "issuesAssignmentStatusAccepted": "Đã chấp nhận",
+  "issuesAssignmentStatusRejected": "Đã từ chối",
+  "issuesAssignmentStatusCompleted": "Hoàn thành"
 }

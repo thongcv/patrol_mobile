@@ -722,5 +722,14 @@
       "to": { "type": "int" },
       "total": { "type": "int" }
     }
-  }
+  },
+  "issuesColReporter": "Reporter",
+  "issuesAssignmentHistoryTitle": "Assignment history",
+  "issuesAssignmentFrom": "From",
+  "issuesAssignmentTo": "To",
+  "issuesAssignmentReceivedAt": "Received at",
+  "issuesAssignmentStatusPending": "Pending",
+  "issuesAssignmentStatusAccepted": "Accepted",
+  "issuesAssignmentStatusRejected": "Rejected",
+  "issuesAssignmentStatusCompleted": "Completed"
 }

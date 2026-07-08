@@ -2640,6 +2640,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'SHOWING {from}-{to} / {total} RECORDS'**
   String issuesShowingRange(int from, int to, int total);
+
+  /// No description provided for @issuesColReporter.
+  ///
+  /// In en, this message translates to:
+  /// **'Reporter'**
+  String get issuesColReporter;
+
+  /// No description provided for @issuesAssignmentHistoryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Assignment history'**
+  String get issuesAssignmentHistoryTitle;
+
+  /// No description provided for @issuesAssignmentFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'From'**
+  String get issuesAssignmentFrom;
+
+  /// No description provided for @issuesAssignmentTo.
+  ///
+  /// In en, this message translates to:
+  /// **'To'**
+  String get issuesAssignmentTo;
+
+  /// No description provided for @issuesAssignmentReceivedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Received at'**
+  String get issuesAssignmentReceivedAt;
+
+  /// No description provided for @issuesAssignmentStatusPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get issuesAssignmentStatusPending;
+
+  /// No description provided for @issuesAssignmentStatusAccepted.
+  ///
+  /// In en, this message translates to:
+  /// **'Accepted'**
+  String get issuesAssignmentStatusAccepted;
+
+  /// No description provided for @issuesAssignmentStatusRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'Rejected'**
+  String get issuesAssignmentStatusRejected;
+
+  /// No description provided for @issuesAssignmentStatusCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get issuesAssignmentStatusCompleted;
 }
 
 class _AppLocalizationsDelegate

@@ -1473,4 +1473,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String issuesShowingRange(int from, int to, int total) {
     return 'SHOWING $from-$to / $total RECORDS';
   }
+
+  @override
+  String get issuesColReporter => 'Reporter';
+
+  @override
+  String get issuesAssignmentHistoryTitle => 'Assignment history';
+
+  @override
+  String get issuesAssignmentFrom => 'From';
+
+  @override
+  String get issuesAssignmentTo => 'To';
+
+  @override
+  String get issuesAssignmentReceivedAt => 'Received at';
+
+  @override
+  String get issuesAssignmentStatusPending => 'Pending';
+
+  @override
+  String get issuesAssignmentStatusAccepted => 'Accepted';
+
+  @override
+  String get issuesAssignmentStatusRejected => 'Rejected';
+
+  @override
+  String get issuesAssignmentStatusCompleted => 'Completed';
 }
