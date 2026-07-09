@@ -1,47 +1,48 @@
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../config/access_token_payload.dart';
 import '../config/app_config.dart';
-import '../config/storage_keys.dart';
 import '../navigation/patrol_session.dart';
 import 'api_request_headers.dart';
-import 'api_response.dart';
-import 'patrol_api_endpoints.dart';
+import 'patrol_cookie_jar.dart';
 
-const _extraRetry = '__patrol_retry';
-
-/// Dio dùng chung: interceptor gắn Bearer + locale/OS/offset và xử lý 401 → refresh + retry một lần.
-/// Response mặc định là JSON đã deserialize (`Map` / `List`).
+/// Shared Dio: cookies carry auth; locale/OS/offset headers; API 401/403 → login
+/// ([onResponse] — auth errors are not Dio errors because validateStatus accepts status < 600).
+/// Default response is deserialized JSON (`Map` / `List`).
 abstract final class PatrolDio {
   PatrolDio._();
 
-  /// POST refresh không đi qua interceptor (tránh vòng 401).
-  static final Dio refreshClient = Dio(
-    BaseOptions(
-      responseType: ResponseType.json,
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 30),
-      validateStatus: (s) => s != null && s < 600,
-    ),
-  );
-
   static Dio? _api;
+  static Future<void>? _readyFuture;
 
-  static Future<bool>? _refreshFut;
-
-  static Dio get instance => _api ??= _createApi();
-
-  static void syncBaseUrls() {
-    final b = AppConfig.effectiveBaseUrl;
-    refreshClient.options.baseUrl = b;
-    if (_api != null) _api!.options.baseUrl = b;
+  static Future<void> ensureReady() {
+    return _readyFuture ??= _bootstrap();
   }
 
-  static Dio _createApi() {
-    final dio = Dio(
+  static Future<void> _bootstrap() async {
+    await PatrolCookieJar.ensureInitialized();
+    _api ??= _createApi();
+    syncBaseUrls();
+  }
+
+  static Dio get instance {
+    final dio = _api;
+    if (dio == null) {
+      throw StateError('Call PatrolDio.ensureReady() before using PatrolDio.instance');
+    }
+    return dio;
+  }
+
+  static void syncBaseUrls({Dio? dio}) {
+    final b = AppConfig.effectiveBaseUrl;
+    if (dio != null) {
+      dio.options.baseUrl = b;
+    } else if (_api != null) {
+      _api!.options.baseUrl = b;
+    }
+  }
+
+  static Dio _newDio() {
+    return Dio(
       BaseOptions(
         responseType: ResponseType.json,
         connectTimeout: const Duration(seconds: 30),
@@ -49,145 +50,122 @@ abstract final class PatrolDio {
         validateStatus: (s) => s != null && s < 600,
       ),
     );
-    dio.interceptors.add(_PatrolInterceptors());
-    syncBaseUrls();
-    return dio;
   }
 
-  /// Các request đồng thời 401 chỉ chạy một lần refresh.
-  static Future<bool> refreshTokensShared() {
-    _refreshFut ??= () async {
-      try {
-        return await _performRefreshOnce();
-      } finally {
-        _refreshFut = null;
-      }
-    }();
-    return _refreshFut!;
+  static Dio _createApi() {
+    final dio = _newDio();
+    // CookieManager last → saves Set-Cookie before 401 interceptor on response.
+    dio.interceptors.add(_PatrolInterceptors());
+    PatrolCookieJar.attachTo(dio);
+    syncBaseUrls(dio: dio);
+    return dio;
   }
 }
 
 class _PatrolInterceptors extends Interceptor {
   @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    PatrolDio.syncBaseUrls();
-    final headers = options.headers;
+  void onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
+    try {
+      final headers = options.headers;
 
-    SharedPreferences.getInstance()
-        .then((p) {
-          headers.putIfAbsent(
-            'Accept-Language',
-            () => ApiRequestHeaders.defaultAcceptLanguage,
-          );
-          headers.putIfAbsent(
-            ApiRequestHeaders.xClientOs,
-            () => ApiRequestHeaders.defaultClientOs,
-          );
-          headers.putIfAbsent(
-            ApiRequestHeaders.xOffSet,
-            () => ApiRequestHeaders.getClientOffset(),
-          );
+      headers.putIfAbsent(
+        'Accept-Language',
+        () => ApiRequestHeaders.defaultAcceptLanguage,
+      );
+      headers.putIfAbsent(
+        ApiRequestHeaders.xClientOs,
+        () => ApiRequestHeaders.defaultClientOs,
+      );
+      headers.putIfAbsent(
+        ApiRequestHeaders.xOffSet,
+        () => ApiRequestHeaders.getClientOffset(),
+      );
+      headers.putIfAbsent(
+        ApiRequestHeaders.xClientPlatform,
+        () => ApiRequestHeaders.defaultClientPlatform,
+      );
 
-          final raw = p.getString(StorageKeys.accessToken);
-          final bearer = AccessTokenPayload.getAccessTokenStored(raw);
-          if (!headers.containsKey('Authorization') &&
-              bearer != null &&
-              bearer.isNotEmpty) {
-            headers['Authorization'] = 'Bearer $bearer';
-          }
-          handler.next(options);
-        })
-        .catchError((Object e, StackTrace st) {
-          handler.reject(
-            DioException(requestOptions: options, error: e, stackTrace: st),
-            true,
-          );
-        });
+      headers.putIfAbsent(
+        ApiRequestHeaders.xMenuCode,
+        () => ApiRequestHeaders.defaultMenuCode,
+      );
+
+      await PatrolCookieJar.applyRestAuthHeaders(options);
+      handler.next(options);
+    } catch (e, st) {
+      handler.reject(
+        DioException(
+          requestOptions: options,
+          type: DioExceptionType.unknown,
+          error: e,
+          stackTrace: st,
+          message: 'Failed to attach auth headers.',
+        ),
+        true,
+      );
+    }
   }
 
-  bool _skip401Retry(RequestOptions options) {
-    if (options.extra[_extraRetry] == true) return true;
-    final path = options.uri.path.toLowerCase();
-    return path.contains('/accounts/login') ||
-        path.contains('/accounts/refreshtoken');
+  /// Login 401 = wrong credentials — stay on login screen, do not clear session.
+  bool _isLoginRequest(RequestOptions options) {
+    return options.uri.path.toLowerCase().contains('/accounts/login');
+  }
+
+  static bool _isUnauthorizedStatus(int? status) =>
+      status == 401 || status == 403;
+
+  Future<void> _endSessionIfUnauthorized(RequestOptions options) async {
+    if (_isLoginRequest(options)) return;
+    await PatrolSession.handleUnauthorizedApiResponse();
+  }
+
+  DioException _sessionExpiredException({
+    required RequestOptions requestOptions,
+    required Response<dynamic>? response,
+  }) {
+    return DioException(
+      requestOptions: requestOptions,
+      response: response,
+      type: DioExceptionType.badResponse,
+      error: 'session_expired',
+    );
   }
 
   @override
-  void onError(DioException err, ErrorInterceptorHandler handler) async {
-    if (err.response?.statusCode != 401) return handler.next(err);
-
-    final ro = err.requestOptions;
-    if (_skip401Retry(ro)) return handler.next(err);
-
-    final refreshed = await PatrolDio.refreshTokensShared();
-    if (!refreshed) {
-      await AccessTokenPayload.clearStored();
-      PatrolSession.navigateToLoginReplaceAll();
-      return handler.next(err);
-    }
-
-    PatrolSession.notifyAuthStored();
-
-    final prefs = await SharedPreferences.getInstance();
-    final bearer = AccessTokenPayload.getAccessTokenStored(
-      prefs.getString(StorageKeys.accessToken),
-    );
-    try {
-      ro.extra[_extraRetry] = true;
-      if (bearer != null && bearer.isNotEmpty) {
-        ro.headers['Authorization'] = 'Bearer $bearer';
-      } else {
-        ro.headers.remove('Authorization');
-      }
-      final rep = await PatrolDio.instance.fetch<dynamic>(ro);
-      handler.resolve(rep);
-    } catch (e, st) {
-      if (e is DioException) {
-        handler.next(e);
-      } else {
-        handler.next(
-          DioException(
-            requestOptions: err.requestOptions,
-            error: e,
-            stackTrace: st,
+  void onResponse(
+    Response<dynamic> response,
+    ResponseInterceptorHandler handler,
+  ) async {
+    if (_isUnauthorizedStatus(response.statusCode)) {
+      await _endSessionIfUnauthorized(response.requestOptions);
+      if (!_isLoginRequest(response.requestOptions)) {
+        return handler.reject(
+          _sessionExpiredException(
+            requestOptions: response.requestOptions,
+            response: response,
           ),
         );
       }
     }
-  }
-}
-
-Future<bool> _performRefreshOnce() async {
-  final base = AppConfig.effectiveBaseUrl.trim();
-  if (base.isEmpty) return false;
-
-  final prefs = await SharedPreferences.getInstance();
-  final tokenField = AccessTokenPayload.refreshTokenForRequestBody(
-    prefs.getString(StorageKeys.accessToken),
-  );
-  if (tokenField == null) return false;
-
-  PatrolDio.refreshClient.options.baseUrl = base;
-  final uri = AppConfig.resolveApiUri(PatrolApiEndpoints.accountsRefreshPath);
-  Response<dynamic> res;
-  try {
-    res = await PatrolDio.refreshClient.postUri<dynamic>(
-      uri,
-      data: <String, dynamic>{'token': tokenField},
-      options: Options(headers: ApiRequestHeaders.jsonOnlyHeaders()),
-    );
-  } catch (_) {
-    return false;
+    handler.next(response);
   }
 
-  if (res.statusCode != 200) return false;
-
-  final root = jsonMapCoerce(res.data);
-  if (root == null) return false;
-
-  final toStore = AccessTokenPayload.persistableBlobAfterRefreshRoot(root);
-  if (toStore == null) return false;
-
-  await prefs.setString(StorageKeys.accessToken, jsonEncode(toStore));
-  return true;
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
+    if (_isUnauthorizedStatus(err.response?.statusCode)) {
+      await _endSessionIfUnauthorized(err.requestOptions);
+      if (!_isLoginRequest(err.requestOptions)) {
+        return handler.reject(
+          _sessionExpiredException(
+            requestOptions: err.requestOptions,
+            response: err.response,
+          ),
+        );
+      }
+    }
+    handler.next(err);
+  }
 }

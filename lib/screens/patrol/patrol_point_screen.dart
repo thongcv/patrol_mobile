@@ -1,21 +1,46 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../http/api_failure.dart';
 import '../../l10n/app_localizations.dart';
 import '../../l10n/patrol_coord_label.dart';
 import '../../models/check_point.dart';
+import '../../services/account_session_store.dart';
+import '../../services/beacon_device_password_store.dart';
 import '../../services/check_point_service.dart';
-import '../../utils/barometric_altitude.dart';
+import '../../services/patrol_foreground_gps_scan_session.dart';
+import '../../services/patrol_tracking_config_store.dart';
+import '../../utils/device_location.dart';
+import '../../utils/beacon/bluetooth_beacon_reader.dart';
+import '../../utils/beacon/beacon_ble_configure_devices.dart';
+import '../../utils/beacon/beacon_ble_configure_session.dart';
+import '../../utils/beacon/beacon_ble_picker_connect.dart';
+import '../../utils/beacon/beacon_ble_session.dart';
+import '../../utils/beacon/beacon_name_latin.dart';
+import '../../utils/beacon/ibeacon_configurer.dart';
+import '../../utils/beacon/joyway_beacon_raw_protocol.dart';
+import '../../utils/nfc/nfc_tag_reader.dart';
 import 'patrol_shell.dart';
 
-/// Lấy vị trí point — `link`: `patrol-point`.
-/// GET `/api/check-points/me/site`, PUT `/api/check-points` để gán lat/lng/độ cao.
+part 'point/patrol_point_types.dart';
+part 'point/patrol_point_bluetooth_helpers.dart';
+part 'point/patrol_point_nfc_dialog.dart';
+part 'point/patrol_point_summary_strip.dart';
+part 'point/patrol_point_error_block.dart';
+part 'point/patrol_point_meta_dialog.dart';
+part 'point/patrol_point_meta_icon.dart';
+part 'point/patrol_point_check_point_card.dart';
+part 'point/patrol_point_beacon_protocol_sheet.dart';
+part 'point/patrol_point_beacon_configure_picker_sheet.dart';
+part 'point/patrol_point_beacon_configure_loading.dart';
+part 'point/patrol_point_beacon_password_dialog.dart';
+part 'point/patrol_point_beacon_settings_sheet.dart';
+
+/// Capture point location — `link`: `patrol-point`.
+/// GET `/api/check-points/me/site`, PUT `/api/check-points` to assign lat/lng/altitude.
 class PatrolPointScreen extends StatefulWidget {
   const PatrolPointScreen({
     super.key,
@@ -27,7 +52,7 @@ class PatrolPointScreen extends StatefulWidget {
   final Locale locale;
   final ValueChanged<Locale> onLocaleChanged;
 
-  /// `true` khi hiển thị trong tab Trang chủ (không push route mới).
+  /// `true` when shown in Home tab (no new route push).
   final bool embedded;
 
   @override
@@ -39,83 +64,34 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
   bool _loadingPoints = true;
   ApiFailure? _pointsFailure;
 
-  bool _gpsBusy = false;
-  Position? _position;
-  String? _gpsMessageKey;
+  PatrolForegroundGpsLiveTracker? _locationTracker;
 
-  /// Độ cao từ barometer (phiên); dùng hiển thị và khi gửi điểm.
-  double? _barometricAltitude;
-
-  /// Thiết bị có barometer hợp lệ — chỉ khi đó mới ưu tiên độ cao baro trên header.
-  bool _barometerSupported = false;
-
-  /// Chống chồng lệnh khi gọi `_startGpsTracking` nhiều lần.
-  int _gpsTrackingGeneration = 0;
-
-  StreamSubscription<Position>? _positionStreamSub;
-  StreamSubscription<double>? _barometerStreamSub;
-
-  /// Điểm mốc so với stream: chỉ refresh UI khi đã dịch chuyển đủ xa (tránh nhiễu GPS).
-  Position? _streamAnchor;
-
-  /// Ngưỡng tối thiểu (m) so với lần hiển thị trước — nhỏ hơn = nhạy hơn (dễ nhấp nháy nếu GPS yếu).
-  static const double _gpsUiMoveThresholdM = 1.0;
-
-  /// Chỉ vẽ lại độ cao barometer khi thay đổi ít nhất bấy nhiêu (m).
-  static const double _altitudeUiChangeThresholdM = 0.5;
-
-  final Set<int> _updatingIds = {};
-
-  /// Điểm có `qrImage` khác rỗng từ GET danh sách gần nhất — hiện QR ngay khi parse được.
-  Set<int> _pointIdsWithQrPayloadFromLastFetch = {};
-
-  /// Điểm đã gửi tọa độ thành công (phiên) — cho phép hiện QR khi `qrImage` có dữ liệu hợp lệ.
-  final Set<int> _pointIdsRevealQrAfterGpsOk = {};
-
-  double? _altitudeForDisplay(Position position) {
-    return resolveAltitudeMeters(
-      barometricMeters:
-          _barometerSupported ? _barometricAltitude : null,
-      gpsMeters: position.altitude,
-    );
-  }
+  final Set<(int, _PatrolPointUpdatingKind)> _updatingFields = {};
 
   @override
   void initState() {
     super.initState();
     _loadPoints();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_startGpsTracking());
-    });
+    unawaited(_initLocationTracker());
+  }
+
+  Future<void> _initLocationTracker() async {
+    final tracker = await PatrolForegroundGpsLiveTracker.create(
+      isActive: () => mounted,
+    );
+    if (!mounted) {
+      tracker.dispose();
+      return;
+    }
+    _locationTracker = tracker;
+    setState(() {});
+    await tracker.start();
   }
 
   @override
   void dispose() {
-    _stopBarometerTracking();
-    _positionStreamSub?.cancel();
-    _positionStreamSub = null;
+    _locationTracker?.dispose();
     super.dispose();
-  }
-
-  void _stopBarometerTracking() {
-    _barometerStreamSub?.cancel();
-    _barometerStreamSub = null;
-  }
-
-  void _startBarometerTracking() {
-    _stopBarometerTracking();
-    _barometerStreamSub = barometricAltitudeStream().listen(
-      (alt) {
-        if (!mounted) return;
-        final prev = _barometricAltitude;
-        if (prev != null && (alt - prev).abs() < _altitudeUiChangeThresholdM) {
-          return;
-        }
-        setState(() => _barometricAltitude = alt);
-      },
-      onError: (_) {},
-      cancelOnError: false,
-    );
   }
 
   Future<void> _loadPoints() async {
@@ -134,26 +110,21 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
         _site = null;
         _loadingPoints = false;
         _pointsFailure = r.failure;
-        _pointIdsWithQrPayloadFromLastFetch = {};
       });
       final l10n = AppLocalizations.of(context)!;
       final msg = _messageForPointsFailure(r.failure!, l10n);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     }
   }
 
-  void _commitSiteFromDto(MySiteCheckPointsDto data, {required bool finishInitialLoad}) {
-    final idsWithQrPayload = <int>{
-      for (final p in data.checkPoints)
-        if (p.qrImage != null && p.qrImage!.trim().isNotEmpty) p.id,
-    };
+  void _commitSiteFromDto(
+    MySiteCheckPointsDto data, {
+    required bool finishInitialLoad,
+  }) {
     setState(() {
       _site = data;
       if (finishInitialLoad) _loadingPoints = false;
       _pointsFailure = null;
-      _pointIdsWithQrPayloadFromLastFetch = idsWithQrPayload;
     });
   }
 
@@ -172,213 +143,32 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
       configMissing: l10n.toastApiNotConfigured,
       network: l10n.toastNetworkErrorShort,
       unauthorized: l10n.patrolPointUnauthorized,
-      badResponse: l10n.patrolPointUpdateFailed,
-      server: l10n.patrolPointUpdateFailed,
+      badResponse: l10n.patrolPointFieldUpdateFailed,
+      server: l10n.patrolPointFieldUpdateFailed,
     );
   }
 
-  /// Đọc GPS một lần (dùng cho nút làm mới và cho gán tọa độ — luôn gọi `getCurrentPosition` mới).
-  Future<({Position? position, String? messageKey})> _readGps() async {
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      return (position: null, messageKey: 'service');
-    }
-
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      return (position: null, messageKey: 'denied');
-    }
-
-    try {
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.best,
-        ),
-      );
-      return (position: pos, messageKey: null);
-    } catch (_) {
-      return (position: null, messageKey: 'error');
-    }
-  }
-
-  /// Cấu hình stream theo nền tảng — `LocationSettings` chung thường không đủ trên iOS/Android.
-  LocationSettings _positionStreamSettings() {
-    if (kIsWeb) {
-      return const LocationSettings(
-        accuracy: LocationAccuracy.best,
-        distanceFilter: 0,
-      );
-    }
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        return AndroidSettings(
-          accuracy: LocationAccuracy.best,
-          distanceFilter: 0,
-          intervalDuration: const Duration(milliseconds: 500),
-        );
-      case TargetPlatform.iOS:
-      case TargetPlatform.macOS:
-        return AppleSettings(
-          accuracy: LocationAccuracy.bestForNavigation,
-          distanceFilter: 0,
-          activityType: ActivityType.fitness,
-          pauseLocationUpdatesAutomatically: false,
-        );
-      default:
-        return const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 0,
-        );
-    }
-  }
-
-  void _onPositionStreamUpdate(Position pos) {
-    if (!mounted) return;
-    final anchor = _streamAnchor ?? _position;
-    if (anchor != null) {
-      final moved = Geolocator.distanceBetween(
-        anchor.latitude,
-        anchor.longitude,
-        pos.latitude,
-        pos.longitude,
-      );
-      // Cho phép cập nhật nhỏ hơn ngưỡng nếu độ tin cậy tốt hơn rõ rệt (GPS “khóa” đường đi).
-      final acc = pos.accuracy;
-      final anchorAcc = anchor.accuracy;
-      final betterFix = acc.isFinite &&
-          anchorAcc.isFinite &&
-          acc > 0 &&
-          anchorAcc > 0 &&
-          acc < anchorAcc - 2;
-      final altDelta = pos.altitude.isFinite && anchor.altitude.isFinite
-          ? (pos.altitude - anchor.altitude).abs()
-          : 0.0;
-      final altChanged = !_barometerSupported &&
-          altDelta >= _altitudeUiChangeThresholdM;
-      if (moved < _gpsUiMoveThresholdM && !betterFix && !altChanged) return;
-    }
-    _streamAnchor = pos;
-    setState(() {
-      _position = pos;
-      _gpsMessageKey = null;
-    });
-  }
-
-  /// Lấy vị trí ngay, sau đó stream lat/lng realtime; độ cao: barometer nếu có, không thì GPS.
-  Future<void> _startGpsTracking({bool userInitiated = false}) async {
-    final generation = ++_gpsTrackingGeneration;
-
-    _stopBarometerTracking();
-    await _positionStreamSub?.cancel();
-    _positionStreamSub = null;
-    _streamAnchor = null;
-    _barometricAltitude = null;
-    _barometerSupported = false;
-
-    if (!mounted || generation != _gpsTrackingGeneration) return;
-    setState(() {
-      _gpsBusy = true;
-      if (userInitiated) _gpsMessageKey = null;
-    });
-
-    final r = await _readGps();
-    if (!mounted || generation != _gpsTrackingGeneration) return;
-
-    if (r.position == null) {
-      setState(() {
-        _gpsBusy = false;
-        _position = null;
-        _gpsMessageKey = r.messageKey;
-      });
-      return;
-    }
-
-    final initialBaro = await readBarometricAltitudeOnce();
-    if (!mounted || generation != _gpsTrackingGeneration) return;
-
-    _barometerSupported = initialBaro != null;
-    _barometricAltitude = initialBaro;
-    if (_barometerSupported) {
-      _startBarometerTracking();
-    }
-
-    setState(() {
-      _position = r.position;
-      _gpsMessageKey = null;
-      _gpsBusy = false;
-    });
-    _streamAnchor = r.position;
-
-    if (generation != _gpsTrackingGeneration) return;
-    await _positionStreamSub?.cancel();
-    _positionStreamSub = Geolocator.getPositionStream(
-      locationSettings: _positionStreamSettings(),
-    ).listen(
-      _onPositionStreamUpdate,
-      onError: (_) {
-        if (!mounted) return;
-        setState(() => _gpsMessageKey = 'error');
-      },
+  void _replacePointInSite(CheckPoint merged) {
+    final site = _site;
+    if (site == null) return;
+    _site = MySiteCheckPointsDto(
+      siteId: site.siteId,
+      siteName: site.siteName,
+      siteAddress: site.siteAddress,
+      checkPoints: [
+        for (final p in site.checkPoints)
+          if (p.id == merged.id) merged else p,
+      ],
     );
   }
 
-  Future<void> _applyGpsToPoint(CheckPoint point) async {
-    setState(() => _updatingIds.add(point.id));
-
-    final gpsFuture = _readGps();
-    final baroFuture = _barometerSupported
-        ? readBarometricAltitudeOnce()
-        : Future<double?>.value(null);
-    final gps = await gpsFuture;
-    final freshBaro = await baroFuture;
-
-    if (!mounted) return;
-
-    if (gps.position == null) {
-      setState(() => _updatingIds.remove(point.id));
-      final l10n = AppLocalizations.of(context)!;
-      final msg = switch (gps.messageKey) {
-        'service' => l10n.patrolPointGpsServiceOff,
-        'denied' => l10n.patrolPointGpsDenied,
-        'error' => l10n.patrolPointGpsError,
-        _ => l10n.patrolPointUpdateNeedGps,
-      };
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg)),
-      );
-      return;
-    }
-
-    final baroAltitude = _barometerSupported
-        ? (freshBaro ?? _barometricAltitude ?? point.baroAltitude)
-        : point.baroAltitude;
-
-    setState(() {
-      _position = gps.position;
-      _gpsMessageKey = null;
-      if (freshBaro != null) _barometricAltitude = freshBaro;
-    });
-    _streamAnchor = gps.position;
-
-    final gpsAlt = gps.position!.altitude;
-    final gpsAltitude = gpsAlt.isFinite ? gpsAlt : point.gpsAltitude;
-
-    final payload = point.copyWith(
-      latitude: gps.position!.latitude,
-      longitude: gps.position!.longitude,
-      gpsAltitude: gpsAltitude,
-      baroAltitude: baroAltitude,
-      accuracy: gps.position!.accuracy,
-      altitudeAccuracy: gps.position!.altitudeAccuracy,
-    );
+  Future<bool> _persistCheckPointUpdate(
+    CheckPoint payload,
+    _PatrolPointUpdatingKind updatingKind,
+  ) async {
     final r = await CheckPointService.instance.updateCheckPoint(payload);
 
-    if (!mounted) return;
+    if (!mounted) return false;
 
     if (r.ok) {
       final server = r.data;
@@ -391,69 +181,406 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
           longitude: server.longitude ?? payload.longitude,
           gpsAltitude: server.gpsAltitude ?? payload.gpsAltitude,
           baroAltitude: server.baroAltitude ?? payload.baroAltitude,
+          nfc: server.nfc ?? payload.nfc,
+          uuid: server.uuid ?? payload.uuid,
+          remoteId: server.remoteId ?? payload.remoteId,
+          major: server.major ?? payload.major,
+          minor: server.minor ?? payload.minor,
+          devicePassword: server.devicePassword ?? payload.devicePassword,
+          beaconProtocol: server.beaconProtocol ?? payload.beaconProtocol,
+          rssi: server.rssi ?? payload.rssi,
         );
       }
       final site = _site;
       setState(() {
-        _updatingIds.remove(point.id);
-        _pointIdsRevealQrAfterGpsOk.add(merged.id);
-        final mergedQr = merged.qrImage?.trim();
-        if (mergedQr != null && mergedQr.isNotEmpty) {
-          _pointIdsWithQrPayloadFromLastFetch = {
-            ..._pointIdsWithQrPayloadFromLastFetch,
-            merged.id,
-          };
-        }
-        if (site != null) {
-          _site = MySiteCheckPointsDto(
-            siteId: site.siteId,
-            siteName: site.siteName,
-            siteAddress: site.siteAddress,
-            checkPoints: [
-              for (final p in site.checkPoints)
-                if (p.id == merged.id) merged else p,
-            ],
-          );
-        }
+        _updatingFields.remove((payload.id, updatingKind));
+        if (site != null) _replacePointInSite(merged);
       });
       if (site == null) {
         await _loadPoints();
       }
+      return true;
+    }
+
+    setState(() => _updatingFields.remove((payload.id, updatingKind)));
+    final l10nFail = AppLocalizations.of(context)!;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_messageForUpdateFailure(r.failure!, l10nFail))),
+    );
+    return false;
+  }
+
+  Future<String?> _promptNfcIdentifier({String? initial}) {
+    final messenger = ScaffoldMessenger.of(context);
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => _NfcIdentifierInputDialog(
+        initial: initial,
+        messenger: messenger,
+      ),
+    );
+  }
+
+  Future<void> _applyNfcToPoint(CheckPoint point) async {
+    final l10n = AppLocalizations.of(context)!;
+    final value = await _promptNfcIdentifier(initial: point.nfc);
+    if (value == null || !mounted) return;
+    if (value.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolPointIdentifierEmpty)),
+      );
+      return;
+    }
+
+    setState(
+      () => _updatingFields.add((point.id, _PatrolPointUpdatingKind.nfc)),
+    );
+    final ok = await _persistCheckPointUpdate(
+      point.copyWith(nfc: value),
+      _PatrolPointUpdatingKind.nfc,
+    );
+    if (!mounted || !ok) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(l10n.patrolPointFieldUpdateSuccess)),
+    );
+  }
+
+  Future<void> _applyBluetoothToPoint(CheckPoint point) async {
+    final l10n = AppLocalizations.of(context)!;
+    await BeaconBleConfigureSession.clear();
+    await beaconBleCancelWarmConnect();
+    if (!mounted) return;
+    final beaconUuid = AccountSessionStore.instance.companyBeaconUuid;
+    if (beaconUuid == null || beaconUuid.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolPointCompanyBeaconUuidMissing)),
+      );
+      return;
+    }
+
+    if (!isIBeaconConfigureSupported) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolPointBluetoothUnavailable)),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    final selected = await _showPatrolBeaconConfigurePickerSheet(context);
+    if (!mounted || selected == null) return;
+
+    final checkpointProtocol = _checkpointBeaconProtocol(point);
+    final picked = await _pickBeaconConfigureProtocol(
+      context,
+      initial:
+          checkpointProtocol ?? BeaconConfigureProtocol.defaultProtocol,
+      checkpointProtocol: checkpointProtocol,
+    );
+    if (!mounted || picked == null) {
+      await BeaconBleConfigureSession.clear();
+      await beaconBleCancelWarmConnect(selected.remoteId);
+      return;
+    }
+    final protocol = picked;
+
+    final storedDevicePassword = await BeaconDevicePasswordStore.read();
+    final passwordLocked = storedDevicePassword?.trim().isNotEmpty == true;
+    var loginPwd = '';
+    while (mounted) {
+      await beaconBleCancelWarmConnect(selected.remoteId);
       if (!mounted) return;
+      final loginPassword = await _promptBeaconLoginPasswordAfterConnect(
+        context,
+        protocol: protocol,
+      );
+      if (!mounted || loginPassword == null) {
+        await BeaconBleConfigureSession.clear();
+        await beaconBleCancelWarmConnect(selected.remoteId);
+        return;
+      }
+      loginPwd = loginPassword;
+
+      final loginFailure = await _withPatrolBeaconConfigureLoading(
+        context,
+        title: l10n.patrolPointBeaconLoginVerifying,
+        hint: l10n.patrolPointBeaconLoginVerifyingHint,
+        task: () => validateBeaconDeviceLogin(
+          protocol: protocol,
+          targetRemoteId: selected.remoteId,
+          targetRssi: selected.rssi,
+          devicePassword: protocol == BeaconConfigureProtocol.joyway
+              ? loginPwd
+              : (loginPwd.isEmpty ? null : loginPwd),
+        ),
+      );
+
+      if (!mounted) return;
+      if (loginFailure == null) break;
+
+      final msg = _iBeaconConfigureFailureMessage(
+        l10n,
+        loginFailure,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      if (loginFailure != IBeaconConfigureFailure.wrongPassword) return;
+    }
+
+    if (!mounted) return;
+
+    final reconfigure = point.uuid != null && point.uuid!.trim().isNotEmpty;
+    final form = await _showPatrolBeaconSettingsSheet(
+      context,
+      device: selected,
+      protocol: protocol,
+      targetUuid: reconfigure ? point.uuid!.trim() : beaconUuid,
+      targetMajor: reconfigure ? (point.major ?? point.siteId) : point.siteId,
+      targetMinor:
+          reconfigure ? (point.minor ?? point.sequenceOrder) : point.sequenceOrder,
+      pointName: point.name,
+      initialNewBeaconPassword:
+          passwordLocked ? storedDevicePassword : loginPwd,
+      lockNewBeaconPassword: passwordLocked,
+    );
+    if (!mounted || form == null) {
+      await BeaconBleConfigureSession.clear();
+      return;
+    }
+
+    setState(
+      () => _updatingFields.add((point.id, _PatrolPointUpdatingKind.bluetooth)),
+    );
+
+    late IBeaconConfigureResult configResult;
+    while (mounted) {
+      if (!mounted) return;
+      configResult = await _withPatrolBeaconConfigureLoading(
+        context,
+        task: () => configureNearestIBeacon(
+          IBeaconSettings(
+            uuid: form.uuid,
+            major: form.major,
+            minor: form.minor,
+            txPowerAt1m: form.txPowerAt1m,
+            advertisingName: form.name.isEmpty ? null : form.name,
+          ),
+          protocol: protocol,
+          devicePassword: protocol == BeaconConfigureProtocol.joyway
+              ? loginPwd
+              : (loginPwd.isEmpty ? null : loginPwd),
+          newBeaconPassword: form.newBeaconPassword.isEmpty
+              ? null
+              : form.newBeaconPassword,
+          joywayExtended: form.joywayExtended,
+          targetRemoteId: selected.remoteId,
+          targetRssi: selected.rssi,
+        ),
+      );
+
+      if (!mounted) return;
+
+      if (configResult.ok) break;
+
+      if (configResult.failure != IBeaconConfigureFailure.wrongPassword) {
+        setState(
+          () => _updatingFields.remove(
+            (point.id, _PatrolPointUpdatingKind.bluetooth),
+          ),
+        );
+        final msg = configResult.failure != null
+            ? _iBeaconConfigureFailureMessage(l10n, configResult.failure!)
+            : l10n.patrolPointIBeaconConfigureFailed;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolPointIBeaconWrongPassword)),
+      );
+      await BeaconBleConfigureSession.clear();
+
+      while (mounted) {
+        if (!mounted) return;
+        final loginPassword = await _promptBeaconLoginPasswordAfterConnect(
+          context,
+          protocol: protocol,
+        );
+        if (!mounted || loginPassword == null) {
+          setState(
+            () => _updatingFields.remove(
+              (point.id, _PatrolPointUpdatingKind.bluetooth),
+            ),
+          );
+          await BeaconBleConfigureSession.clear();
+          return;
+        }
+        loginPwd = loginPassword;
+
+        final loginFailure = await _withPatrolBeaconConfigureLoading(
+          context,
+          title: l10n.patrolPointBeaconLoginVerifying,
+          hint: l10n.patrolPointBeaconLoginVerifyingHint,
+          task: () => validateBeaconDeviceLogin(
+            protocol: protocol,
+            targetRemoteId: selected.remoteId,
+            targetRssi: selected.rssi,
+            devicePassword: protocol == BeaconConfigureProtocol.joyway
+                ? loginPwd
+                : (loginPwd.isEmpty ? null : loginPwd),
+          ),
+        );
+
+        if (!mounted) return;
+        if (loginFailure == null) break;
+
+        final loginMsg = _iBeaconConfigureFailureMessage(
+          l10n,
+          loginFailure,
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(loginMsg)),
+        );
+        if (loginFailure != IBeaconConfigureFailure.wrongPassword) {
+          setState(
+            () => _updatingFields.remove(
+              (point.id, _PatrolPointUpdatingKind.bluetooth),
+            ),
+          );
+          return;
+        }
+      }
+    }
+
+    if (!mounted) return;
+
+    final configuredRemote = configResult.remoteId?.trim();
+    final ok = await _persistCheckPointUpdate(
+      point.copyWith(
+        uuid: form.uuid,
+        major: form.major,
+        minor: form.minor,
+        remoteId: configuredRemote != null && configuredRemote.isNotEmpty
+            ? configuredRemote
+            : point.remoteId,
+        devicePassword: form.newBeaconPassword.isNotEmpty
+            ? form.newBeaconPassword
+            : loginPwd,
+        beaconProtocol: protocol.storageValue,
+        rssi: configResult.beacon?.rssi.toDouble(),
+      ),
+      _PatrolPointUpdatingKind.bluetooth,
+    );
+    if (!mounted || !ok) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(l10n.patrolPointFieldUpdateSuccess)),
+    );
+  }
+
+  Future<void> _applyGpsToPoint(CheckPoint point) async {
+    setState(
+      () => _updatingFields.add((point.id, _PatrolPointUpdatingKind.gps)),
+    );
+
+    final tracker = _locationTracker;
+    final wantBaro = tracker != null && tracker.barometerSupported;
+    final gpsAccM = await PatrolTrackingConfigStore.gpsAccM();
+    final gps = await readDeviceGpsOnce(
+      enableBarometer: wantBaro,
+      targetAccuracyM: gpsAccM,
+    );
+    final freshBaro = gps.barometricAltitude;
+
+    if (!mounted) return;
+
+    if (gps.position == null) {
+      setState(
+        () => _updatingFields.remove((point.id, _PatrolPointUpdatingKind.gps)),
+      );
+      final l10n = AppLocalizations.of(context)!;
+      final msg = switch (gps.messageKey) {
+        'service' => l10n.patrolPointGpsServiceOff,
+        'denied' => l10n.patrolPointGpsDenied,
+        'error' => l10n.patrolPointGpsError,
+        'unavailable' => l10n.patrolPointUpdateNeedGps,
+        _ => l10n.patrolPointUpdateNeedGps,
+      };
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      return;
+    }
+
+    if (gps.position!.isMocked) {
+      setState(
+        () => _updatingFields.remove((point.id, _PatrolPointUpdatingKind.gps)),
+      );
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolPointGpsMocked)),
+      );
+      return;
+    }
+
+    final baroAltitude = tracker != null && tracker.barometerSupported
+        ? (freshBaro ?? point.baroAltitude)
+        : point.baroAltitude;
+
+    tracker?.applyGpsReading(
+      position: gps.position!,
+      freshBarometricAltitude: freshBaro,
+    );
+
+    final gpsAlt = gps.position!.altitude;
+    final gpsAltitude = gpsAlt.isFinite ? gpsAlt : point.gpsAltitude;
+
+    final payload = point.copyWith(
+      latitude: gps.position!.latitude,
+      longitude: gps.position!.longitude,
+      gpsAltitude: gpsAltitude,
+      baroAltitude: baroAltitude,
+      accuracy: gps.position!.accuracy,
+      altitudeAccuracy: gps.position!.altitudeAccuracy,
+    );
+    final ok = await _persistCheckPointUpdate(
+      payload,
+      _PatrolPointUpdatingKind.gps,
+    );
+    if (!mounted) return;
+
+    if (ok) {
       final l10nOk = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(l10nOk.patrolPointUpdateSuccess)),
       );
-    } else {
-      setState(() => _updatingIds.remove(point.id));
-      final l10nFail = AppLocalizations.of(context)!;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_messageForUpdateFailure(r.failure!, l10nFail))),
-      );
     }
   }
+
   String _gpsStatusText(AppLocalizations l10n) {
-    if (_gpsBusy) return l10n.patrolPointGpsLoading;
-    switch (_gpsMessageKey) {
+    final t = _locationTracker;
+    if (t == null || t.busy) return l10n.patrolPointGpsLoading;
+    switch (t.messageKey) {
       case 'service':
         return l10n.patrolPointGpsServiceOff;
       case 'denied':
         return l10n.patrolPointGpsDenied;
       case 'error':
         return l10n.patrolPointGpsError;
+      case 'unavailable':
+        return l10n.patrolPointUpdateNeedGps;
       default:
         break;
     }
-    if (_position != null) {
+    final pos = t.position;
+    if (pos != null) {
       return patrolServerCoordLabel(
         l10n,
-        _position!.latitude,
-        _position!.longitude,
-        altitude: _altitudeForDisplay(_position!),
+        pos.latitude,
+        pos.longitude,
+        altitude: t.altitudeForDisplay(pos),
       );
     }
     return l10n.patrolPointGpsTapRefresh;
   }
+
   @override
   Widget build(BuildContext context) {
     final theme = GoogleFonts.interTextTheme(Theme.of(context).textTheme);
@@ -465,53 +592,67 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
       height: 1.2,
     );
 
+    Widget gpsSubtitleRow() => Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Text(
+            _gpsStatusText(l10n),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: subtitleStyle,
+          ),
+        ),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+          onPressed: _locationTracker == null || _locationTracker!.busy
+              ? null
+              : () => unawaited(
+                    _locationTracker!.start(userInitiated: true),
+                  ),
+          icon: _locationTracker == null || _locationTracker!.busy
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: PatrolShellColors.accent,
+                  ),
+                )
+              : Icon(
+                  Icons.gps_fixed_rounded,
+                  color: PatrolShellColors.accent,
+                  size: 22,
+                ),
+        ),
+      ],
+    );
+
+    final tracker = _locationTracker;
+    final subtitleSlot = tracker == null
+        ? gpsSubtitleRow()
+        : ListenableBuilder(
+            listenable: tracker,
+            builder: (context, _) => gpsSubtitleRow(),
+          );
+
     return PatrolFeatureScaffold(
       useOuterScaffold: !widget.embedded,
       locale: widget.locale,
       title: widget.embedded ? null : l10n.patrolPointTitle,
       heroIcon: Icons.my_location_rounded,
       heroColor: PatrolShellColors.accent,
-      subtitleSlot: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Text(
-              _gpsStatusText(l10n),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: subtitleStyle,
-            ),
-          ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-            onPressed: _gpsBusy
-                ? null
-                : () => unawaited(_startGpsTracking(userInitiated: true)),
-            icon: _gpsBusy
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: PatrolShellColors.accent,
-                    ),
-                  )
-                : Icon(
-                    Icons.gps_fixed_rounded,
-                    color: PatrolShellColors.accent,
-                    size: 22,
-                  ),
-          ),
-        ],
-      ),
+      subtitleSlot: subtitleSlot,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _SummaryStrip(
             theme: theme,
             loading: _loadingPoints,
+            siteId: _site?.siteId,
+            beaconUuid: AccountSessionStore.instance.companyBeaconUuid,
             siteName: _site?.siteName,
             siteAddress: _site?.siteAddress,
             points: points,
@@ -556,10 +697,14 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
                   theme: theme,
                   point: p,
                   l10n: l10n,
-                  busy: _updatingIds.contains(p.id),
-                  showQrImage: _pointIdsWithQrPayloadFromLastFetch
-                          .contains(p.id) ||
-                      _pointIdsRevealQrAfterGpsOk.contains(p.id),
+                  nfcBusy: _updatingFields
+                      .contains((p.id, _PatrolPointUpdatingKind.nfc)),
+                  bluetoothBusy: _updatingFields
+                      .contains((p.id, _PatrolPointUpdatingKind.bluetooth)),
+                  gpsBusy: _updatingFields
+                      .contains((p.id, _PatrolPointUpdatingKind.gps)),
+                  onApplyNfc: () => _applyNfcToPoint(p),
+                  onApplyBluetooth: () => _applyBluetoothToPoint(p),
                   onApplyGps: () => _applyGpsToPoint(p),
                 ),
               ),
@@ -570,422 +715,3 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
   }
 }
 
-class _SummaryStrip extends StatelessWidget {
-  const _SummaryStrip({
-    required this.theme,
-    required this.loading,
-    this.siteName,
-    this.siteAddress,
-    required this.points,
-    required this.failure,
-    required this.onReload,
-    required this.l10n,
-  });
-
-  final TextTheme theme;
-  final bool loading;
-  final String? siteName;
-  final String? siteAddress;
-  final List<CheckPoint>? points;
-  final ApiFailure? failure;
-  final VoidCallback onReload;
-  final AppLocalizations l10n;
-
-  @override
-  Widget build(BuildContext context) {
-    final n = points?.length ?? 0;
-    final missing = points == null
-        ? 0
-        : points!.where((p) => !p.hasCoordinates).length;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: PatrolShellColors.surfaceElevated.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: loading
-                ? Text(
-                    l10n.patrolPointListLoading,
-                    style: theme.bodySmall?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.6),
-                    ),
-                  )
-                : failure != null
-                    ? Text(
-                        failure!.userMessage(
-                          configMissing: l10n.toastApiNotConfigured,
-                          network: l10n.toastNetworkErrorShort,
-                          unauthorized: l10n.patrolPointUnauthorized,
-                          badResponse: l10n.patrolPointLoadFailed,
-                          server: l10n.patrolPointLoadFailed,
-                        ),
-                        style: theme.bodySmall?.copyWith(
-                          color: Colors.orangeAccent.withValues(alpha: 0.9),
-                        ),
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (siteName != null && siteName!.trim().isNotEmpty) ...[
-                            Text(
-                              siteName!.trim(),
-                              style: theme.titleSmall?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                          ],
-                          if (siteAddress != null &&
-                              siteAddress!.trim().isNotEmpty) ...[
-                            Text(
-                              '${l10n.patrolPointSiteAddressLabel}: ${siteAddress!.trim()}',
-                              style: theme.bodySmall?.copyWith(
-                                color: Colors.white.withValues(alpha: 0.55),
-                                height: 1.35,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                          ],
-                          Text(
-                            l10n.patrolPointCountSummary(n),
-                            style: theme.labelLarge?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.92),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          if (n > 0 && missing > 0) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              l10n.patrolPointMissingCoordsSummary(missing),
-                              style: theme.bodySmall?.copyWith(
-                                color: PatrolShellColors.accentMuted
-                                    .withValues(alpha: 0.85),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-          ),
-          IconButton.filledTonal(
-            onPressed: loading ? null : onReload,
-            style: IconButton.styleFrom(
-              backgroundColor: PatrolShellColors.accent.withValues(alpha: 0.18),
-              foregroundColor: PatrolShellColors.accent,
-            ),
-            tooltip: l10n.patrolPointReload,
-            icon: loading
-                ? SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: PatrolShellColors.accent,
-                    ),
-                  )
-                : const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorBlock extends StatelessWidget {
-  const _ErrorBlock({
-    required this.theme,
-    required this.l10n,
-    required this.onRetry,
-  });
-
-  final TextTheme theme;
-  final AppLocalizations l10n;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: PatrolShellColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            l10n.patrolPointLoadFailed,
-            style: theme.bodyMedium?.copyWith(
-              color: Colors.orangeAccent.withValues(alpha: 0.9),
-            ),
-          ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: onRetry,
-            style: FilledButton.styleFrom(
-              backgroundColor: PatrolShellColors.accent,
-              foregroundColor: PatrolShellColors.background,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-            icon: const Icon(Icons.refresh_rounded, size: 20),
-            label: Text(l10n.patrolPointReload),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CheckPointCard extends StatelessWidget {
-  const _CheckPointCard({
-    required this.theme,
-    required this.point,
-    required this.l10n,
-    required this.busy,
-    required this.showQrImage,
-    required this.onApplyGps,
-  });
-
-  final TextTheme theme;
-  final CheckPoint point;
-  final AppLocalizations l10n;
-  final bool busy;
-  final bool showQrImage;
-  final VoidCallback onApplyGps;
-
-  @override
-  Widget build(BuildContext context) {
-    final coordLabel = point.hasCoordinates
-        ? patrolServerCoordLabel(
-            l10n,
-            point.latitude!,
-            point.longitude!,
-            altitude: resolveAltitudeMeters(
-              barometricMeters: point.baroAltitude,
-              gpsMeters: point.gpsAltitude ?? double.nan,
-            ),
-          )
-        : l10n.patrolPointServerNoCoords;
-    final qrPreview = showQrImage
-        ? _checkPointQrPreview(point.qrImage, size: 64)
-        : null;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
-      decoration: BoxDecoration(
-        color: PatrolShellColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: PatrolShellColors.accent.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.1),
-                  ),
-                ),
-                child: Text(
-                  '${point.sequenceOrder}',
-                  style: theme.titleSmall?.copyWith(
-                    color: PatrolShellColors.accent,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        point.name,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.titleSmall?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          height: 1.25,
-                        ),
-                      ),
-                    ),
-                    if (!point.active)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 6),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            l10n.patrolPointInactive,
-                            style: theme.labelSmall?.copyWith(
-                              color: Colors.white54,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Tooltip(
-                message: l10n.patrolPointUpdateCoordsTooltip,
-                child: IconButton.filledTonal(
-                  onPressed: busy ? null : onApplyGps,
-                  style: IconButton.styleFrom(
-                    backgroundColor:
-                        PatrolShellColors.accent.withValues(alpha: 0.22),
-                    foregroundColor: PatrolShellColors.accent,
-                  ),
-                  icon: busy
-                      ? SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: PatrolShellColors.accent,
-                          ),
-                        )
-                      : const Icon(Icons.add_location_alt_rounded, size: 24),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (qrPreview != null) ...[
-                qrPreview,
-                const SizedBox(width: 10),
-              ],
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 1),
-                      child: Icon(
-                        point.hasCoordinates
-                            ? Icons.check_circle_outline_rounded
-                            : Icons.warning_amber_rounded,
-                        size: 17,
-                        color: point.hasCoordinates
-                            ? PatrolShellColors.accentMuted
-                            : Colors.amberAccent.withValues(alpha: 0.85),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        coordLabel,
-                        style: theme.bodySmall?.copyWith(
-                          color: Colors.white.withValues(alpha: 0.68),
-                          height: 1.35,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// QR từ API: URL `http(s)://`, `data:image/...;base64,...`, hoặc chuỗi base64 thuần.
-Widget? _checkPointQrPreview(String? qrImage, {double size = 88}) {
-  final raw = qrImage?.trim();
-  if (raw == null || raw.isEmpty) return null;
-
-  Widget framed(Widget child) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        width: size,
-        height: size,
-        color: Colors.white,
-        alignment: Alignment.center,
-        child: child,
-      ),
-    );
-  }
-
-  if (raw.startsWith('http://') || raw.startsWith('https://')) {
-    return framed(
-      Image.network(
-        raw,
-        width: size,
-        height: size,
-        fit: BoxFit.contain,
-        errorBuilder: (_, _, _) => Icon(
-          Icons.broken_image_outlined,
-          size: size * 0.35,
-          color: Colors.black38,
-        ),
-      ),
-    );
-  }
-
-  String? b64Payload;
-  if (raw.startsWith('data:image')) {
-    final comma = raw.indexOf(',');
-    if (comma != -1) {
-      b64Payload = raw.substring(comma + 1);
-    }
-  } else {
-    b64Payload = raw;
-  }
-
-  if (b64Payload == null || b64Payload.isEmpty) return null;
-
-  try {
-    final bytes = base64Decode(b64Payload.replaceAll(RegExp(r'\s'), ''));
-    return framed(
-      Image.memory(
-        bytes,
-        width: size,
-        height: size,
-        fit: BoxFit.contain,
-      ),
-    );
-  } catch (_) {
-    return null;
-  }
-}

@@ -2,7 +2,7 @@ import 'check_point.dart';
 import 'patrol_round.dart';
 import 'patrol_schedule.dart';
 
-/// Payload `data` từ GET `/api/patrol-rounds/me/active`.
+/// `data` payload from GET `/api/patrol-rounds/me/active`.
 class ActivePatrolRound {
   ActivePatrolRound({
     required this.schedule,

@@ -5,8 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../http/api_response.dart';
 import 'storage_keys.dart';
 
-/// Parse giá trị lưu trong prefs: JSON object `data` từ login/refresh (giống FE localStorage).
-/// Hỗ trợ bản cũ lưu JWT thuần (một chuỗi).
+/// Parses prefs value: JSON `data` object from login/refresh (same as FE localStorage).
+/// Supports legacy plain JWT string storage.
 abstract final class AccessTokenPayload {
   AccessTokenPayload._();
 
@@ -37,7 +37,7 @@ abstract final class AccessTokenPayload {
     return null;
   }
 
-  /// Body `token` khi POST refresh — FE: `JSON.parse(localStorage.getItem(tokenKey))`.
+  /// Body `token` for POST refresh — FE: `JSON.parse(localStorage.getItem(tokenKey))`.
   static Object? refreshTokenForRequestBody(String? raw) {
     final m = mapFromStored(raw);
     if (m != null && m.isNotEmpty) return m;
@@ -46,8 +46,8 @@ abstract final class AccessTokenPayload {
     return t;
   }
 
-  /// Lưu prefs sau login/refresh — giống FE `storeAuth(data.accessToken, …)`:
-  /// ưu tiên object token lồng trong `data.accessToken`, không lưu cả envelope (`path`, …).
+  /// Persists prefs after login/refresh — like FE `storeAuth(data.accessToken, …)`:
+  /// prefers nested token in `data.accessToken`, not the full envelope (`path`, …).
   static Map<String, dynamic>? persistableBlobFromApiEnvelope(
     Map<String, dynamic>? envelope,
   ) {
@@ -93,5 +93,48 @@ abstract final class AccessTokenPayload {
     final token = m['token'];
     if (token is String && token.isNotEmpty) return token;
     return null;
+  }
+
+  /// `accountId` from JWT claim (payload segment).
+  static String? accountIdFromJwt(String jwt) {
+    final claims = _jwtClaims(jwt);
+    if (claims == null) return null;
+    return jsonStr(claims['accountId']);
+  }
+
+  /// JWT `exp` claim — `null` when missing or not parseable.
+  static DateTime? jwtExpiresAt(String jwt) {
+    final claims = _jwtClaims(jwt);
+    if (claims == null) return null;
+    final exp = claims['exp'];
+    if (exp is! num) return null;
+    return DateTime.fromMillisecondsSinceEpoch(
+      exp.toInt() * 1000,
+      isUtc: true,
+    ).toLocal();
+  }
+
+  /// `true` when JWT is expired or within [margin] of expiry.
+  static bool isJwtNearOrPastExpiry(
+    String jwt, {
+    Duration margin = const Duration(seconds: 60),
+  }) {
+    final expiresAt = jwtExpiresAt(jwt);
+    if (expiresAt == null) return false;
+    return DateTime.now().add(margin).isAfter(expiresAt);
+  }
+
+  static Map<String, dynamic>? _jwtClaims(String jwt) {
+    final parts = jwt.trim().split('.');
+    if (parts.length < 2) return null;
+    try {
+      var segment = parts[1];
+      final mod = segment.length % 4;
+      if (mod == 1) return null;
+      if (mod > 0) segment = segment.padRight(segment.length + (4 - mod), '=');
+      return jsonMapCoerce(jsonDecode(utf8.decode(base64Url.decode(segment))));
+    } catch (_) {
+      return null;
+    }
   }
 }

@@ -1,11 +1,8 @@
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../config/access_token_payload.dart';
 import '../config/app_config.dart';
 import '../config/storage_keys.dart';
 import '../http/api_failure.dart';
@@ -13,39 +10,16 @@ import '../http/api_response.dart';
 import '../http/api_result.dart';
 import '../http/patrol_api_endpoints.dart';
 import '../http/patrol_dio.dart';
-import '../navigation/patrol_session.dart';
+import '../models/patrol_tracking_config.dart';
+import 'account_service.dart';
+import 'account_session_store.dart';
+import 'beacon_device_password_store.dart';
+import 'patrol_tracking_config_store.dart';
+import 'patrol_active_round_sync.dart';
 
 class AuthService {
   AuthService._();
   static final AuthService instance = AuthService._();
-
-  Future<String?> getStoredAccessToken() async {
-    final p = await SharedPreferences.getInstance();
-    return AccessTokenPayload.getAccessTokenStored(
-      p.getString(StorageKeys.accessToken),
-    );
-  }
-
-  Future<Map<String, dynamic>?> getStoredAccessTokenObject() async {
-    final p = await SharedPreferences.getInstance();
-    return AccessTokenPayload.mapFromStored(
-      p.getString(StorageKeys.accessToken),
-    );
-  }
-
-  Future<void> clearToken() async {
-    await AccessTokenPayload.clearStored();
-  }
-
-  Future<void> cacheDevicePushToken(String? token) async {
-    final p = await SharedPreferences.getInstance();
-    final t = token?.trim();
-    if (t == null || t.isEmpty) {
-      await p.remove(StorageKeys.devicePushToken);
-    } else {
-      await p.setString(StorageKeys.devicePushToken, t);
-    }
-  }
 
   Future<ApiResult<LoginSuccess>> login({
     required String username,
@@ -56,7 +30,6 @@ class AuthService {
       return ApiResult.failure(ApiFailure.configMissing);
     }
 
-    PatrolDio.syncBaseUrls();
     final fcmToken = await _fcmTokenForLogin();
     final loginUri = AppConfig.resolveApiUri(PatrolApiEndpoints.accountsLoginPath);
 
@@ -78,19 +51,27 @@ class AuthService {
         if (data == null) {
           return ApiResult.failure(ApiFailure.badResponse(res));
         }
-        final accessToken = AccessTokenPayload.persistableBlobFromApiEnvelope(data);
-        final bearer = accessToken != null
-            ? AccessTokenPayload.bearerJwtFromAuthMap(accessToken)
-            : null;
-        if (accessToken != null && bearer != null && bearer.isNotEmpty) {
-          final p = await SharedPreferences.getInstance();
-          await p.setString(StorageKeys.accessToken, jsonEncode(accessToken));
-          PatrolSession.notifyAuthStored();
-          return ApiResult.success(
-            LoginSuccess(token: bearer, accessToken: accessToken),
-          );
+        if (!await AccountSessionStore.instance.hasStoredSession()) {
+          return ApiResult.failure(ApiFailure.badResponse(res));
         }
-        return ApiResult.failure(ApiFailure.badResponse(res));
+        await PatrolTrackingConfigStore.save(
+          PatrolTrackingConfig.fromLoginEnvelope(data),
+        );
+        await BeaconDevicePasswordStore.saveFromLoginEnvelope(data);
+        await PatrolActiveRoundSync.clearBackgroundAutoScanArmed();
+        // BE sets `XSRF-TOKEN` on GET /accounts/me — bootstrap before STOMP/patrol APIs.
+        final me = await AccountService.instance.fetchMe();
+        if (!me.ok) {
+          final failure = me.failure;
+          if (failure?.kind == ApiFailureKind.unauthorized) {
+            return ApiResult.failure(failure!);
+          }
+        }
+        await AccountSessionStore.instance.notifySessionAuthenticated();
+        final bearer = await AccountSessionStore.instance.getStoredAccessToken();
+        return ApiResult.success(
+          LoginSuccess(token: bearer ?? ''),
+        );
       }
       return ApiResult.failure(
         apiFailureFromHttpResponse(statusCode: status, body: res),
@@ -110,10 +91,10 @@ class AuthService {
     if (base.isEmpty) {
       return ApiResult.failure(ApiFailure.configMissing);
     }
-    PatrolDio.syncBaseUrls();
+    final uri = AppConfig.resolveApiUri('/accounts/forget-password');
     try {
-      final res = await PatrolDio.instance.post<dynamic>(
-        '/api/accounts/forget-password',
+      final res = await PatrolDio.instance.postUri<dynamic>(
+        uri,
         data: <String, dynamic>{
           'email': email.trim(),
           'username': usernameOrPhone.trim(),
@@ -140,9 +121,9 @@ class AuthService {
       return ApiResult.failure(ApiFailure.configMissing);
     }
 
-    PatrolDio.syncBaseUrls();
+    final uri = AppConfig.resolveApiUri('/accounts/logout');
     try {
-      final res = await PatrolDio.instance.get<dynamic>('/api/accounts/logout');
+      final res = await PatrolDio.instance.getUri<dynamic>(uri);
       final status = res.statusCode ?? 0;
       
       if (status == 200 || status == 204) {
@@ -167,7 +148,7 @@ class AuthService {
       final t = await FirebaseMessaging.instance.getToken();
       final s = t?.trim();
       if (s != null && s.isNotEmpty) {
-        await cacheDevicePushToken(s);
+        await AccountSessionStore.instance.cacheDevicePushToken(s);
         return s;
       }
     } catch (_) {
@@ -179,8 +160,7 @@ class AuthService {
 }
 
 class LoginSuccess {
-  const LoginSuccess({required this.token, this.accessToken});
+  const LoginSuccess({required this.token});
 
   final String token;
-  final Map<String, dynamic>? accessToken;
 }

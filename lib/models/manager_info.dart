@@ -17,7 +17,9 @@ class ManagerInfo {
 
   factory ManagerInfo.fromJson(Map<String, dynamic> json) {
     return ManagerInfo(
-      accountId: jsonStr(json['accountId']),
+      accountId: jsonStr(json['accountId']) ??
+          jsonStr(json['username']) ??
+          jsonStr(json['userId']),
       name: jsonStr(json['name']),
       email: jsonStr(json['email']),
       phone: jsonStr(json['phone']),

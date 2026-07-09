@@ -1,4 +1,8 @@
-/// Lịch tuần tra (`schedule` trong GET active round).
+/// Patrol schedule (`schedule` in GET active round).
+///
+/// Date/time fields from API:
+/// - [startTime] / [endTime]: local time (`HH:mm` or `HH:mm:ss`).
+/// - [startEffectiveDate] / [endEffectiveDate]: local calendar date (`yyyy-MM-dd`).
 class PatrolSchedule {
   PatrolSchedule({
     required this.id,
@@ -24,9 +28,17 @@ class PatrolSchedule {
   final int siteId;
   final bool active;
   final int? merchantId;
+
+  /// Local time, e.g. `08:00` or `08:00:00`.
   final String? startTime;
+
+  /// Local time, e.g. `17:00` or `17:00:00`.
   final String? endTime;
+
+  /// LocalDate, e.g. `2026-01-01`.
   final String? startEffectiveDate;
+
+  /// LocalDate, e.g. `2026-12-31`.
   final String? endEffectiveDate;
   final int? frequencyMinutes;
   final int? roundMinutes;

@@ -233,13 +233,13 @@ abstract class AppLocalizations {
   /// No description provided for @locationTitle.
   ///
   /// In en, this message translates to:
-  /// **'GPS & location required'**
+  /// **'GPS & always-on location'**
   String get locationTitle;
 
   /// No description provided for @locationBody.
   ///
   /// In en, this message translates to:
-  /// **'Patrol requires location services on and location permission before sign-in.'**
+  /// **'Turn on location services and choose \"Always allow\" so patrol tracking works when the screen is off.'**
   String get locationBody;
 
   /// No description provided for @locationServiceOff.
@@ -254,11 +254,29 @@ abstract class AppLocalizations {
   /// **'Location permission was not granted.'**
   String get locationPermissionDenied;
 
+  /// No description provided for @locationPermissionBackground.
+  ///
+  /// In en, this message translates to:
+  /// **'Only \"While using the app\" was granted. Choose \"Always allow\" for background patrol.'**
+  String get locationPermissionBackground;
+
   /// No description provided for @locationPermissionForever.
   ///
   /// In en, this message translates to:
   /// **'Location permission permanently denied. Open app settings to enable.'**
   String get locationPermissionForever;
+
+  /// No description provided for @notificationPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are disabled. Enable them in app settings to get next-round alerts when the app is closed.'**
+  String get notificationPermissionDenied;
+
+  /// No description provided for @dndPolicyPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Do Not Disturb access was not granted. Allow SPS Patrol to modify notification policy so next-round popups can break through silent mode.'**
+  String get dndPolicyPermissionDenied;
 
   /// No description provided for @openLocationSettings.
   ///
@@ -271,6 +289,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open app settings'**
   String get openAppSettings;
+
+  /// No description provided for @openDndPolicySettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Do Not Disturb settings'**
+  String get openDndPolicySettings;
 
   /// No description provided for @retry.
   ///
@@ -398,11 +422,95 @@ abstract class AppLocalizations {
   /// **'Patrol history'**
   String get historyTitle;
 
+  /// No description provided for @historySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'List of past patrol rounds'**
+  String get historySubtitle;
+
+  /// No description provided for @historyEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No patrol history yet.'**
+  String get historyEmpty;
+
   /// No description provided for @historyInDevelopment.
   ///
   /// In en, this message translates to:
   /// **'This feature is under development.'**
   String get historyInDevelopment;
+
+  /// No description provided for @historyColWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Time window'**
+  String get historyColWindow;
+
+  /// No description provided for @historyColAssignee.
+  ///
+  /// In en, this message translates to:
+  /// **'Patrol officer'**
+  String get historyColAssignee;
+
+  /// No description provided for @historyColAssignees.
+  ///
+  /// In en, this message translates to:
+  /// **'Assignees'**
+  String get historyColAssignees;
+
+  /// No description provided for @historyColSite.
+  ///
+  /// In en, this message translates to:
+  /// **'Area'**
+  String get historyColSite;
+
+  /// No description provided for @historyColUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated at'**
+  String get historyColUpdated;
+
+  /// No description provided for @historyStatusCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get historyStatusCompleted;
+
+  /// No description provided for @historyStatusMissed.
+  ///
+  /// In en, this message translates to:
+  /// **'Missed'**
+  String get historyStatusMissed;
+
+  /// No description provided for @historyStatusInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'In progress'**
+  String get historyStatusInProgress;
+
+  /// No description provided for @historyStatusPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get historyStatusPending;
+
+  /// No description provided for @historyStatusCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get historyStatusCancelled;
+
+  /// No description provided for @historyRoundFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Round #{id}'**
+  String historyRoundFallback(int id);
+
+  /// No description provided for @historyShowingRange.
+  ///
+  /// In en, this message translates to:
+  /// **'SHOWING {from}-{to} / {total} RECORDS'**
+  String historyShowingRange(int from, int to, int total);
 
   /// No description provided for @labelEmail.
   ///
@@ -434,6 +542,12 @@ abstract class AppLocalizations {
   /// **'Address'**
   String get profileFieldAddress;
 
+  /// No description provided for @profileFieldNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Note'**
+  String get profileFieldNote;
+
   /// No description provided for @profileFieldBranch.
   ///
   /// In en, this message translates to:
@@ -463,6 +577,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Manager phone'**
   String get profileFieldManagerPhone;
+
+  /// No description provided for @profileLanguageHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get profileLanguageHeading;
+
+  /// No description provided for @profileSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get profileSave;
+
+  /// No description provided for @profileSaveSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile updated.'**
+  String get profileSaveSuccess;
 
   /// No description provided for @signOut.
   ///
@@ -542,6 +674,36 @@ abstract class AppLocalizations {
   /// **'Schedule'**
   String get patrolRoundScheduleHeading;
 
+  /// No description provided for @patrolRoundMap.
+  ///
+  /// In en, this message translates to:
+  /// **'Route map'**
+  String get patrolRoundMap;
+
+  /// No description provided for @patrolRoundMapYou.
+  ///
+  /// In en, this message translates to:
+  /// **'You'**
+  String get patrolRoundMapYou;
+
+  /// No description provided for @patrolRoundMapSwipeDismiss.
+  ///
+  /// In en, this message translates to:
+  /// **'Swipe up or down to close'**
+  String get patrolRoundMapSwipeDismiss;
+
+  /// No description provided for @patrolRoundMapCheckpointScanned.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanned checkpoint'**
+  String get patrolRoundMapCheckpointScanned;
+
+  /// No description provided for @patrolRoundMapCheckpointPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending checkpoint'**
+  String get patrolRoundMapCheckpointPending;
+
   /// No description provided for @patrolRoundRoundHeading.
   ///
   /// In en, this message translates to:
@@ -601,6 +763,168 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Overdue'**
   String get patrolRoundOverdue;
+
+  /// No description provided for @patrolRoundOverdueNoteTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Report objective delay'**
+  String get patrolRoundOverdueNoteTooltip;
+
+  /// No description provided for @patrolRoundOverdueNoteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Objective delay'**
+  String get patrolRoundOverdueNoteTitle;
+
+  /// No description provided for @patrolRoundOverdueNoteMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter why this checkpoint could not be completed on time. The checkpoint will be marked as scanned.'**
+  String get patrolRoundOverdueNoteMessage;
+
+  /// No description provided for @patrolRoundOverdueNoteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. elevator out of service, area blocked…'**
+  String get patrolRoundOverdueNoteHint;
+
+  /// No description provided for @patrolRoundOverdueNoteSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Submit'**
+  String get patrolRoundOverdueNoteSubmit;
+
+  /// No description provided for @patrolRoundOverdueNotePrefix.
+  ///
+  /// In en, this message translates to:
+  /// **'[Objective delay] '**
+  String get patrolRoundOverdueNotePrefix;
+
+  /// No description provided for @patrolRoundOverdueNoteEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a reason.'**
+  String get patrolRoundOverdueNoteEmpty;
+
+  /// No description provided for @patrolRoundOverdueNoteSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Checkpoint recorded with delay reason.'**
+  String get patrolRoundOverdueNoteSuccess;
+
+  /// No description provided for @patrolRoundOverdueNoteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the patrol log.'**
+  String get patrolRoundOverdueNoteFailed;
+
+  /// No description provided for @patrolRoundOverdueNoteNoGps.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS unavailable and checkpoint has no coordinates.'**
+  String get patrolRoundOverdueNoteNoGps;
+
+  /// No description provided for @patrolRoundScanQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan checkpoint QR'**
+  String get patrolRoundScanQr;
+
+  /// No description provided for @patrolRoundQrNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No checkpoint on this route matches that QR code.'**
+  String get patrolRoundQrNotFound;
+
+  /// No description provided for @patrolRoundQrAlreadyScanned.
+  ///
+  /// In en, this message translates to:
+  /// **'This checkpoint was already scanned.'**
+  String get patrolRoundQrAlreadyScanned;
+
+  /// No description provided for @patrolRoundQrCameraDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera permission is required to scan QR codes.'**
+  String get patrolRoundQrCameraDenied;
+
+  /// No description provided for @patrolRoundAutoScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto scan GPS'**
+  String get patrolRoundAutoScan;
+
+  /// No description provided for @patrolRoundAutoScanBluetooth.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto scan Bluetooth'**
+  String get patrolRoundAutoScanBluetooth;
+
+  /// No description provided for @patrolRoundAutoScanBluetoothNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No checkpoints with Bluetooth left to scan on this route.'**
+  String get patrolRoundAutoScanBluetoothNone;
+
+  /// No description provided for @patrolRoundBluetoothWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching for Bluetooth beacon…'**
+  String get patrolRoundBluetoothWaiting;
+
+  /// No description provided for @patrolRoundBluetoothScanFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read a nearby Bluetooth beacon.'**
+  String get patrolRoundBluetoothScanFailed;
+
+  /// No description provided for @patrolRoundAutoScanNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No checkpoints left to scan on this route.'**
+  String get patrolRoundAutoScanNone;
+
+  /// No description provided for @patrolRoundAutoScanComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'All checkpoints on this route have been scanned.'**
+  String get patrolRoundAutoScanComplete;
+
+  /// No description provided for @patrolRoundResumeBackgroundScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Background scan'**
+  String get patrolRoundResumeBackgroundScan;
+
+  /// No description provided for @patrolRoundPauseBackgroundScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause background scan'**
+  String get patrolRoundPauseBackgroundScan;
+
+  /// No description provided for @patrolRoundBackgroundScanResumed.
+  ///
+  /// In en, this message translates to:
+  /// **'Background scanning resumed.'**
+  String get patrolRoundBackgroundScanResumed;
+
+  /// No description provided for @patrolRoundBackgroundScanPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Background scanning paused.'**
+  String get patrolRoundBackgroundScanPaused;
+
+  /// No description provided for @patrolRoundNfcNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No checkpoint on this route matches that NFC tag.'**
+  String get patrolRoundNfcNotFound;
+
+  /// No description provided for @patrolRoundNfcAlreadyScanned.
+  ///
+  /// In en, this message translates to:
+  /// **'This checkpoint was already scanned.'**
+  String get patrolRoundNfcAlreadyScanned;
 
   /// No description provided for @patrolRoundAssigned.
   ///
@@ -704,6 +1028,12 @@ abstract class AppLocalizations {
   /// **'NFC'**
   String get patrolRoundChipNfc;
 
+  /// No description provided for @patrolRoundChipBluetooth.
+  ///
+  /// In en, this message translates to:
+  /// **'BT'**
+  String get patrolRoundChipBluetooth;
+
   /// No description provided for @patrolRoundChipScanned.
   ///
   /// In en, this message translates to:
@@ -719,13 +1049,13 @@ abstract class AppLocalizations {
   /// No description provided for @patrolRoundQrPhotoTitle.
   ///
   /// In en, this message translates to:
-  /// **'Take a photo?'**
+  /// **'Take photos?'**
   String get patrolRoundQrPhotoTitle;
 
   /// No description provided for @patrolRoundQrPhotoMessage.
   ///
   /// In en, this message translates to:
-  /// **'You can attach a photo to this checkpoint scan.'**
+  /// **'You can attach one or more photos to this checkpoint scan.'**
   String get patrolRoundQrPhotoMessage;
 
   /// No description provided for @patrolRoundQrPhotoTake.
@@ -733,6 +1063,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Take photo'**
   String get patrolRoundQrPhotoTake;
+
+  /// No description provided for @patrolRoundQrPhotoAddMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Add another photo'**
+  String get patrolRoundQrPhotoAddMore;
+
+  /// No description provided for @patrolRoundQrPhotoDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue ({count})'**
+  String patrolRoundQrPhotoDone(int count);
+
+  /// No description provided for @patrolRoundQrPhotoRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove photo'**
+  String get patrolRoundQrPhotoRemove;
 
   /// No description provided for @patrolRoundQrPhotoSkip.
   ///
@@ -749,13 +1097,13 @@ abstract class AppLocalizations {
   /// No description provided for @patrolRoundQrOutOfRange.
   ///
   /// In en, this message translates to:
-  /// **'You are about {distance} m from the checkpoint (allowed {radius} m). Move closer to the saved location.'**
+  /// **'Move about {distance} m closer to enter the allowed zone (radius {radius} m).'**
   String patrolRoundQrOutOfRange(String distance, String radius);
 
   /// No description provided for @patrolRoundQrAltitudeOutOfRange.
   ///
   /// In en, this message translates to:
-  /// **'Altitude does not match the saved checkpoint (difference {distance} m, allowed {radius} m).'**
+  /// **'Adjust altitude by about {distance} m (radius {radius} m).'**
   String patrolRoundQrAltitudeOutOfRange(String distance, String radius);
 
   /// No description provided for @patrolRoundQrNoCheckpointGps.
@@ -885,7 +1233,7 @@ abstract class AppLocalizations {
   /// No description provided for @patrolRoundQrDeltaHorizontal.
   ///
   /// In en, this message translates to:
-  /// **'Distance to checkpoint: {delta} m (max {radius} m)'**
+  /// **'Move closer by: {delta} m (radius {radius} m)'**
   String patrolRoundQrDeltaHorizontal(String delta, String radius);
 
   /// No description provided for @patrolRoundQrGpsAccuracy.
@@ -903,7 +1251,7 @@ abstract class AppLocalizations {
   /// No description provided for @patrolRoundQrDeltaAltitude.
   ///
   /// In en, this message translates to:
-  /// **'Δ altitude: {delta} m (max {radius} m)'**
+  /// **'Adjust altitude by: {delta} m (radius {radius} m)'**
   String patrolRoundQrDeltaAltitude(String delta, String radius);
 
   /// No description provided for @patrolRoundQrMoveNorth.
@@ -947,6 +1295,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'on target'**
   String get patrolRoundQrMoveOnTarget;
+
+  /// No description provided for @patrolProximityTtsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Distance to checkpoint {distance} meters. {moves}'**
+  String patrolProximityTtsHint(String distance, String moves);
+
+  /// No description provided for @patrolProximityTtsNearCheckpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'You are near the checkpoint, {distance} meters away'**
+  String patrolProximityTtsNearCheckpoint(String distance);
+
+  /// No description provided for @patrolProximityTtsMove.
+  ///
+  /// In en, this message translates to:
+  /// **'move {direction} {distance} meters'**
+  String patrolProximityTtsMove(String direction, String distance);
+
+  /// No description provided for @patrolProximityTtsMoveVertical.
+  ///
+  /// In en, this message translates to:
+  /// **'move {direction} {distance} meters'**
+  String patrolProximityTtsMoveVertical(String direction, String distance);
+
+  /// No description provided for @patrolProximityTtsMoveSeparator.
+  ///
+  /// In en, this message translates to:
+  /// **', '**
+  String get patrolProximityTtsMoveSeparator;
 
   /// No description provided for @patrolRoundSubtitleActive.
   ///
@@ -1050,6 +1428,12 @@ abstract class AppLocalizations {
   /// **'Could not read position.'**
   String get patrolPointGpsError;
 
+  /// No description provided for @patrolPointGpsMocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Mock location detected. Disable fake GPS to assign coordinates.'**
+  String get patrolPointGpsMocked;
+
   /// No description provided for @patrolPointCountSummary.
   ///
   /// In en, this message translates to:
@@ -1079,6 +1463,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Current position: {lat}, {lng} · altitude {alt} m'**
   String patrolPointServerCoordsWithAlt(String lat, String lng, String alt);
+
+  /// No description provided for @patrolPointCheckpointCoordsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Coordinates'**
+  String get patrolPointCheckpointCoordsLabel;
 
   /// No description provided for @patrolPointInactive.
   ///
@@ -1116,6 +1506,829 @@ abstract class AppLocalizations {
   /// **'Address'**
   String get patrolPointSiteAddressLabel;
 
+  /// No description provided for @patrolPointSiteIdLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Site ID'**
+  String get patrolPointSiteIdLabel;
+
+  /// No description provided for @patrolPointBeaconUuidLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Beacon UUID'**
+  String get patrolPointBeaconUuidLabel;
+
+  /// No description provided for @patrolPointBeaconProtocolLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Beacon programming protocol'**
+  String get patrolPointBeaconProtocolLabel;
+
+  /// No description provided for @patrolPointBeaconProtocolHm10.
+  ///
+  /// In en, this message translates to:
+  /// **'HM-10 / FFE0 (AT commands)'**
+  String get patrolPointBeaconProtocolHm10;
+
+  /// No description provided for @patrolPointBeaconProtocolHm10Hint.
+  ///
+  /// In en, this message translates to:
+  /// **'TQ clones, UART service FFE0 · char FFE1'**
+  String get patrolPointBeaconProtocolHm10Hint;
+
+  /// No description provided for @patrolPointBeaconProtocolNordic.
+  ///
+  /// In en, this message translates to:
+  /// **'Nordic nRF52 OEM'**
+  String get patrolPointBeaconProtocolNordic;
+
+  /// No description provided for @patrolPointBeaconProtocolNordicHint.
+  ///
+  /// In en, this message translates to:
+  /// **'21-byte write to advertisement content (7650/7651)'**
+  String get patrolPointBeaconProtocolNordicHint;
+
+  /// No description provided for @patrolPointBeaconProtocolJoyway.
+  ///
+  /// In en, this message translates to:
+  /// **'Joyway'**
+  String get patrolPointBeaconProtocolJoyway;
+
+  /// No description provided for @patrolPointBeaconProtocolJoywayHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Joyway JW1404 — BLE scan, pick beacon, program via UART (hold config button if connect fails)'**
+  String get patrolPointBeaconProtocolJoywayHint;
+
+  /// No description provided for @patrolPointBeaconProtocolFeasycom.
+  ///
+  /// In en, this message translates to:
+  /// **'Feasycom (FeasyBeacon)'**
+  String get patrolPointBeaconProtocolFeasycom;
+
+  /// No description provided for @patrolPointBeaconProtocolMinew.
+  ///
+  /// In en, this message translates to:
+  /// **'Minew (mBeacon)'**
+  String get patrolPointBeaconProtocolMinew;
+
+  /// No description provided for @patrolPointBeaconProtocolEddystone.
+  ///
+  /// In en, this message translates to:
+  /// **'Eddystone-GATT (FEAA)'**
+  String get patrolPointBeaconProtocolEddystone;
+
+  /// No description provided for @patrolPointBeaconProtocolComingSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Requires vendor SDK — not available in this app yet'**
+  String get patrolPointBeaconProtocolComingSoon;
+
+  /// No description provided for @patrolPointBeaconProtocolUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'This protocol is not supported yet. Choose HM-10, Nordic nRF52, or Joyway.'**
+  String get patrolPointBeaconProtocolUnsupported;
+
+  /// No description provided for @patrolPointBeaconProtocolUseCheckpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue with checkpoint protocol ({protocol})'**
+  String patrolPointBeaconProtocolUseCheckpoint(String protocol);
+
+  /// No description provided for @patrolPointCompanyBeaconUuidMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Company beacon UUID is not configured.'**
+  String get patrolPointCompanyBeaconUuidMissing;
+
+  /// No description provided for @patrolPointIBeaconConfigModeRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'No configurable beacon found. Press the beacon button to enter config mode, then try again.'**
+  String get patrolPointIBeaconConfigModeRequired;
+
+  /// No description provided for @patrolPointIBeaconConfigureFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not program the iBeacon. Try again near the device.'**
+  String get patrolPointIBeaconConfigureFailed;
+
+  /// No description provided for @patrolPointBeaconConfiguring.
+  ///
+  /// In en, this message translates to:
+  /// **'Programming beacon…'**
+  String get patrolPointBeaconConfiguring;
+
+  /// No description provided for @patrolPointBeaconConfiguringHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep the phone close to the device. Do not leave the app.'**
+  String get patrolPointBeaconConfiguringHint;
+
+  /// No description provided for @patrolPointBeaconLoginVerifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to beacon…'**
+  String get patrolPointBeaconLoginVerifying;
+
+  /// No description provided for @patrolPointBeaconLoginVerifyingHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking the password. Stay close to the device.'**
+  String get patrolPointBeaconLoginVerifyingHint;
+
+  /// No description provided for @patrolPointIBeaconWrongPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Beacon password/PIN was rejected. Check the password and try again.'**
+  String get patrolPointIBeaconWrongPassword;
+
+  /// No description provided for @patrolPointBeaconLoginDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in to beacon'**
+  String get patrolPointBeaconLoginDialogTitle;
+
+  /// No description provided for @patrolPointBeaconPasswordDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Beacon password (optional)'**
+  String get patrolPointBeaconPasswordDialogTitle;
+
+  /// No description provided for @patrolPointBeaconPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Current password / PIN'**
+  String get patrolPointBeaconPasswordLabel;
+
+  /// No description provided for @patrolPointBeaconPasswordOptionalHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty if not required'**
+  String get patrolPointBeaconPasswordOptionalHint;
+
+  /// No description provided for @patrolPointBeaconLoginHm10Hint.
+  ///
+  /// In en, this message translates to:
+  /// **'HM-10 / FFE0: enter the current 6-digit PIN to unlock config. Leave empty for factory default (000000) or open config.'**
+  String get patrolPointBeaconLoginHm10Hint;
+
+  /// No description provided for @patrolPointBeaconLoginJoywayHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Joyway: enter the current password to unlock the beacon (max 12 characters). Leave empty for factory default. Press the config button and stay close.'**
+  String get patrolPointBeaconLoginJoywayHint;
+
+  /// No description provided for @patrolPointBeaconPasswordHm10Hint.
+  ///
+  /// In en, this message translates to:
+  /// **'HM-10 / FFE0: enter the 6-digit PIN if the module requires it. Leave empty for factory default (000000) or open config.'**
+  String get patrolPointBeaconPasswordHm10Hint;
+
+  /// No description provided for @patrolPointBeaconPasswordJoywayHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Joyway: max 12 characters. This password is saved on the beacon (empty = factory default). If the beacon is new, leave empty once; if it already has a password, enter that password first. Press the config button and stay close.'**
+  String get patrolPointBeaconPasswordJoywayHint;
+
+  /// No description provided for @patrolPointBeaconPasswordNordicHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Nordic nRF52: password is not used for GATT programming in this app — leave empty.'**
+  String get patrolPointBeaconPasswordNordicHint;
+
+  /// No description provided for @patrolPointBeaconPasswordRemember.
+  ///
+  /// In en, this message translates to:
+  /// **'Remember password on this device'**
+  String get patrolPointBeaconPasswordRemember;
+
+  /// No description provided for @patrolPointBeaconPasswordContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get patrolPointBeaconPasswordContinue;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select beacon to program'**
+  String get patrolPointBeaconConfigurePickerTitle;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Only devices advertising iBeacon (UUID/Major/Minor on air). Select a device and tap Connect — keep the phone close (~1 m).'**
+  String get patrolPointBeaconConfigurePickerHint;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerManualMacLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'MAC from BLE Scanner'**
+  String get patrolPointBeaconConfigurePickerManualMacLabel;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerManualMacUse.
+  ///
+  /// In en, this message translates to:
+  /// **'Use MAC'**
+  String get patrolPointBeaconConfigurePickerManualMacUse;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerScanning.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning Bluetooth (BLE)…'**
+  String get patrolPointBeaconConfigurePickerScanning;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerScanningCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning… {count} device(s) seen'**
+  String patrolPointBeaconConfigurePickerScanningCount(int count);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerJoywayFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not start Joyway scan. Enable Bluetooth, grant Location and Bluetooth permissions, rebuild the app, then tap Rescan.'**
+  String get patrolPointBeaconConfigurePickerJoywayFailed;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No iBeacon found. Tap Rescan and keep the phone close to the beacon (~1 m).'**
+  String get patrolPointBeaconConfigurePickerEmpty;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerIBeaconSection.
+  ///
+  /// In en, this message translates to:
+  /// **'iBeacon (UUID in advert)'**
+  String get patrolPointBeaconConfigurePickerIBeaconSection;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerLikelyJoywaySection.
+  ///
+  /// In en, this message translates to:
+  /// **'Possible Joyway (press beacon button if no iBeacon row)'**
+  String get patrolPointBeaconConfigurePickerLikelyJoywaySection;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerLikelyJoywayBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Joyway?'**
+  String get patrolPointBeaconConfigurePickerLikelyJoywayBadge;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerOtherDevicesSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Other Bluetooth devices'**
+  String get patrolPointBeaconConfigurePickerOtherDevicesSection;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerConfigModeSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Config mode (no UUID on air — press beacon button; UUID shows after programming or in normal broadcast mode)'**
+  String get patrolPointBeaconConfigurePickerConfigModeSection;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerConfigModeBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Config'**
+  String get patrolPointBeaconConfigurePickerConfigModeBadge;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerRescan.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescan'**
+  String get patrolPointBeaconConfigurePickerRescan;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerCompanyUuid.
+  ///
+  /// In en, this message translates to:
+  /// **'Company beacon UUID'**
+  String get patrolPointBeaconConfigurePickerCompanyUuid;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerOtherIBeacon.
+  ///
+  /// In en, this message translates to:
+  /// **'Other iBeacon (different UUID)'**
+  String get patrolPointBeaconConfigurePickerOtherIBeacon;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerRecommended.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended'**
+  String get patrolPointBeaconConfigurePickerRecommended;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other nearby devices'**
+  String get patrolPointBeaconConfigurePickerOther;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerRssi.
+  ///
+  /// In en, this message translates to:
+  /// **'RSSI: {rssi} dBm'**
+  String patrolPointBeaconConfigurePickerRssi(int rssi);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerMacLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'MAC: {mac}'**
+  String patrolPointBeaconConfigurePickerMacLabel(String mac);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerUuidLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'UUID: {uuid}'**
+  String patrolPointBeaconConfigurePickerUuidLabel(String uuid);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerMajorMinorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Major/Minor: {major}/{minor}'**
+  String patrolPointBeaconConfigurePickerMajorMinorLabel(
+    String major,
+    String minor,
+  );
+
+  /// No description provided for @patrolPointBeaconConfigurePickerMacRssiLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'MAC: {mac} · {rssi} dBm'**
+  String patrolPointBeaconConfigurePickerMacRssiLabel(String mac, int rssi);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerBroadcastNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Broadcast: {name}'**
+  String patrolPointBeaconConfigurePickerBroadcastNameLabel(String name);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerConnectable.
+  ///
+  /// In en, this message translates to:
+  /// **'Connectable'**
+  String get patrolPointBeaconConfigurePickerConnectable;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerProtocolLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Protocol: {protocols}'**
+  String patrolPointBeaconConfigurePickerProtocolLabel(String protocols);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerProtocolUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Protocol: not detected from advert (choose after connect)'**
+  String get patrolPointBeaconConfigurePickerProtocolUnknown;
+
+  /// No description provided for @patrolPointBeaconConfigurePickerServicesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'BLE services: {services}'**
+  String patrolPointBeaconConfigurePickerServicesLabel(String services);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerCheckpointProtocol.
+  ///
+  /// In en, this message translates to:
+  /// **'Checkpoint protocol: {protocol}'**
+  String patrolPointBeaconConfigurePickerCheckpointProtocol(String protocol);
+
+  /// No description provided for @patrolPointBeaconConfigurePickerConnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect'**
+  String get patrolPointBeaconConfigurePickerConnect;
+
+  /// No description provided for @patrolPointBeaconSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Beacon settings'**
+  String get patrolPointBeaconSettingsTitle;
+
+  /// No description provided for @patrolPointBeaconSettingsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit the values to write to the beacon, then tap Update to program the device and save this checkpoint.'**
+  String get patrolPointBeaconSettingsHint;
+
+  /// No description provided for @patrolPointBeaconSettingsDeviceSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected device'**
+  String get patrolPointBeaconSettingsDeviceSection;
+
+  /// No description provided for @patrolPointBeaconSettingsDeviceName.
+  ///
+  /// In en, this message translates to:
+  /// **'Checkpoint name'**
+  String get patrolPointBeaconSettingsDeviceName;
+
+  /// No description provided for @patrolPointBeaconSettingsNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'BLE broadcast name (defaults to this checkpoint)'**
+  String get patrolPointBeaconSettingsNameHint;
+
+  /// No description provided for @patrolPointBeaconSettingsNameHintJoyway.
+  ///
+  /// In en, this message translates to:
+  /// **'Max 12 bytes UTF-8 (Vietnamese OK, e.g. \"Điểm 1\")'**
+  String get patrolPointBeaconSettingsNameHintJoyway;
+
+  /// No description provided for @patrolPointBeaconSettingsNameTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Name is too long for the beacon (max 12 UTF-8 bytes).'**
+  String get patrolPointBeaconSettingsNameTooLong;
+
+  /// No description provided for @patrolPointBeaconSettingsNewPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'New beacon password'**
+  String get patrolPointBeaconSettingsNewPasswordLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsNewPasswordHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty to keep current password'**
+  String get patrolPointBeaconSettingsNewPasswordHint;
+
+  /// No description provided for @patrolPointBeaconSettingsNewPasswordJoywayHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Joyway: written to the beacon when you tap Update (max 12 characters). Leave empty to keep the existing password on the device.'**
+  String get patrolPointBeaconSettingsNewPasswordJoywayHint;
+
+  /// No description provided for @patrolPointBeaconSettingsShowPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Show password'**
+  String get patrolPointBeaconSettingsShowPassword;
+
+  /// No description provided for @patrolPointBeaconSettingsRssiAt1mLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'RSSI at 1 m (dBm)'**
+  String get patrolPointBeaconSettingsRssiAt1mLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsRssiAt1mHint.
+  ///
+  /// In en, this message translates to:
+  /// **'-100 to 0'**
+  String get patrolPointBeaconSettingsRssiAt1mHint;
+
+  /// No description provided for @patrolPointBeaconSettingsTxPowerDbmLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'TX power (dBm)'**
+  String get patrolPointBeaconSettingsTxPowerDbmLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsAdv1Section.
+  ///
+  /// In en, this message translates to:
+  /// **'Advertising 1'**
+  String get patrolPointBeaconSettingsAdv1Section;
+
+  /// No description provided for @patrolPointBeaconSettingsAdv1IntervalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Adv 1 interval (ms)'**
+  String get patrolPointBeaconSettingsAdv1IntervalLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsAdv1TimeLenLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Adv 1 time length (ms)'**
+  String get patrolPointBeaconSettingsAdv1TimeLenLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsAdv1NeverStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Adv 1 never stop'**
+  String get patrolPointBeaconSettingsAdv1NeverStop;
+
+  /// No description provided for @patrolPointBeaconSettingsAdv2Section.
+  ///
+  /// In en, this message translates to:
+  /// **'Advertising 2'**
+  String get patrolPointBeaconSettingsAdv2Section;
+
+  /// No description provided for @patrolPointBeaconSettingsAdv2IntervalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Adv 2 interval (ms)'**
+  String get patrolPointBeaconSettingsAdv2IntervalLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsAdv2TimeLenLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Adv 2 time length (ms)'**
+  String get patrolPointBeaconSettingsAdv2TimeLenLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsAdv2NeverStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Adv 2 never stop'**
+  String get patrolPointBeaconSettingsAdv2NeverStop;
+
+  /// No description provided for @patrolPointBeaconSettingsButtonSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Button'**
+  String get patrolPointBeaconSettingsButtonSection;
+
+  /// No description provided for @patrolPointBeaconSettingsButtonDelayLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Button delay for turning on (ms)'**
+  String get patrolPointBeaconSettingsButtonDelayLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsAdvertiseButtonEvent.
+  ///
+  /// In en, this message translates to:
+  /// **'Advertise button event'**
+  String get patrolPointBeaconSettingsAdvertiseButtonEvent;
+
+  /// No description provided for @patrolPointBeaconSettingsInvalidRssiAt1m.
+  ///
+  /// In en, this message translates to:
+  /// **'RSSI at 1 m must be −100 to 0 dBm.'**
+  String get patrolPointBeaconSettingsInvalidRssiAt1m;
+
+  /// No description provided for @patrolPointBeaconSettingsInvalidAdvInterval.
+  ///
+  /// In en, this message translates to:
+  /// **'Interval must be 100–10000 ms.'**
+  String get patrolPointBeaconSettingsInvalidAdvInterval;
+
+  /// No description provided for @patrolPointBeaconSettingsInvalidAdvTimeLen.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid time length in ms.'**
+  String get patrolPointBeaconSettingsInvalidAdvTimeLen;
+
+  /// No description provided for @patrolPointBeaconSettingsInvalidButtonDelay.
+  ///
+  /// In en, this message translates to:
+  /// **'Button delay must be 0–25500 ms.'**
+  String get patrolPointBeaconSettingsInvalidButtonDelay;
+
+  /// No description provided for @patrolPointBeaconSettingsCurrentSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Currently advertising'**
+  String get patrolPointBeaconSettingsCurrentSection;
+
+  /// No description provided for @patrolPointBeaconSettingsTargetSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Values to write'**
+  String get patrolPointBeaconSettingsTargetSection;
+
+  /// No description provided for @patrolPointBeaconSettingsMajorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Major'**
+  String get patrolPointBeaconSettingsMajorLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsMinorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Minor'**
+  String get patrolPointBeaconSettingsMinorLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsTxPowerLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Tx power at 1 m'**
+  String get patrolPointBeaconSettingsTxPowerLabel;
+
+  /// No description provided for @patrolPointBeaconSettingsTxPowerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'-59 (Apple default)'**
+  String get patrolPointBeaconSettingsTxPowerHint;
+
+  /// No description provided for @patrolPointBeaconSettingsInvalidTxPower.
+  ///
+  /// In en, this message translates to:
+  /// **'Tx power must be −128 to 127 dBm.'**
+  String get patrolPointBeaconSettingsInvalidTxPower;
+
+  /// No description provided for @patrolPointBeaconSettingsInvalidUuid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid beacon UUID.'**
+  String get patrolPointBeaconSettingsInvalidUuid;
+
+  /// No description provided for @patrolPointBeaconSettingsInvalidMajor.
+  ///
+  /// In en, this message translates to:
+  /// **'Major must be 0–65535.'**
+  String get patrolPointBeaconSettingsInvalidMajor;
+
+  /// No description provided for @patrolPointBeaconSettingsInvalidMinor.
+  ///
+  /// In en, this message translates to:
+  /// **'Minor must be 0–65535.'**
+  String get patrolPointBeaconSettingsInvalidMinor;
+
+  /// No description provided for @patrolPointBeaconSettingsUpdate.
+  ///
+  /// In en, this message translates to:
+  /// **'Update'**
+  String get patrolPointBeaconSettingsUpdate;
+
+  /// No description provided for @patrolPointCopyUuidTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy UUID'**
+  String get patrolPointCopyUuidTooltip;
+
+  /// No description provided for @patrolPointUpdateNfcTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Assign NFC tag ID to this point'**
+  String get patrolPointUpdateNfcTooltip;
+
+  /// No description provided for @patrolPointUpdateBluetoothTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Assign Bluetooth ID to this point'**
+  String get patrolPointUpdateBluetoothTooltip;
+
+  /// No description provided for @patrolPointChangeBluetoothTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconfigure Bluetooth beacon for this point'**
+  String get patrolPointChangeBluetoothTooltip;
+
+  /// No description provided for @patrolPointDialogSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get patrolPointDialogSave;
+
+  /// No description provided for @patrolPointNfcDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'NFC tag ID'**
+  String get patrolPointNfcDialogTitle;
+
+  /// No description provided for @patrolPointNfcDialogHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan a tag or enter the NFC ID'**
+  String get patrolPointNfcDialogHint;
+
+  /// No description provided for @patrolPointNfcScanButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan NFC tag'**
+  String get patrolPointNfcScanButton;
+
+  /// No description provided for @patrolPointNfcScanning.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold the tag near your device…'**
+  String get patrolPointNfcScanning;
+
+  /// No description provided for @patrolPointNfcUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'NFC is not available on this device.'**
+  String get patrolPointNfcUnavailable;
+
+  /// No description provided for @patrolPointNfcDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on NFC in your device settings.'**
+  String get patrolPointNfcDisabled;
+
+  /// No description provided for @patrolPointNfcScanFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read the NFC tag.'**
+  String get patrolPointNfcScanFailed;
+
+  /// No description provided for @patrolPointNfcScanTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'No tag detected. Try again.'**
+  String get patrolPointNfcScanTimeout;
+
+  /// No description provided for @patrolPointBluetoothDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth ID'**
+  String get patrolPointBluetoothDialogTitle;
+
+  /// No description provided for @patrolPointBluetoothDialogHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan a beacon or enter MAC / UUID'**
+  String get patrolPointBluetoothDialogHint;
+
+  /// No description provided for @patrolPointBluetoothScanButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan nearby beacon'**
+  String get patrolPointBluetoothScanButton;
+
+  /// No description provided for @patrolPointBluetoothScanning.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching for Bluetooth beacons…'**
+  String get patrolPointBluetoothScanning;
+
+  /// No description provided for @patrolPointBluetoothUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth is not available on this device.'**
+  String get patrolPointBluetoothUnavailable;
+
+  /// No description provided for @patrolPointBluetoothDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on Bluetooth in your device settings.'**
+  String get patrolPointBluetoothDisabled;
+
+  /// No description provided for @patrolPointBluetoothPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth permission was not granted.'**
+  String get patrolPointBluetoothPermissionDenied;
+
+  /// No description provided for @patrolPointBluetoothScanFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not scan for beacons.'**
+  String get patrolPointBluetoothScanFailed;
+
+  /// No description provided for @patrolPointBluetoothScanTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'No beacon detected. Try again.'**
+  String get patrolPointBluetoothScanTimeout;
+
+  /// No description provided for @patrolPointBluetoothScanSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Signal: {rssi} dBm · Distance: ~{distance} m'**
+  String patrolPointBluetoothScanSummary(int rssi, String distance);
+
+  /// No description provided for @patrolPointBluetoothScanMeta.
+  ///
+  /// In en, this message translates to:
+  /// **'MAC: {address} · Major: {major} · Minor: {minor}'**
+  String patrolPointBluetoothScanMeta(
+    String address,
+    String major,
+    String minor,
+  );
+
+  /// No description provided for @patrolPointBluetoothScanName.
+  ///
+  /// In en, this message translates to:
+  /// **'Name: {name}'**
+  String patrolPointBluetoothScanName(String name);
+
+  /// No description provided for @patrolPointIdentifierEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'ID cannot be empty.'**
+  String get patrolPointIdentifierEmpty;
+
+  /// No description provided for @patrolPointNfcValue.
+  ///
+  /// In en, this message translates to:
+  /// **'NFC: {value}'**
+  String patrolPointNfcValue(String value);
+
+  /// No description provided for @patrolPointBluetoothValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth: {value}'**
+  String patrolPointBluetoothValue(String value);
+
+  /// No description provided for @patrolPointFieldUpdateSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated.'**
+  String get patrolPointFieldUpdateSuccess;
+
+  /// No description provided for @patrolPointFieldUpdateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not update.'**
+  String get patrolPointFieldUpdateFailed;
+
+  /// No description provided for @patrolPointCheckpointMetaChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change'**
+  String get patrolPointCheckpointMetaChange;
+
   /// No description provided for @featureComingSoon.
   ///
   /// In en, this message translates to:
@@ -1145,6 +2358,342 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Request sent. Check your email.'**
   String get forgotRequestSent;
+
+  /// No description provided for @patrolTrackMockGpsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'FAKE GPS ALERT'**
+  String get patrolTrackMockGpsTitle;
+
+  /// No description provided for @patrolTrackMockGpsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Mock location detected. Disable fake GPS apps and continue a valid patrol.'**
+  String get patrolTrackMockGpsBody;
+
+  /// No description provided for @patrolBackgroundNotificationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SPS Notification'**
+  String get patrolBackgroundNotificationTitle;
+
+  /// No description provided for @patrolBackgroundNotificationInitialContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Patrol in progress — realtime location'**
+  String get patrolBackgroundNotificationInitialContent;
+
+  /// No description provided for @patrolBackgroundNotificationContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending realtime patrol location'**
+  String get patrolBackgroundNotificationContent;
+
+  /// No description provided for @patrolBackgroundCheckpointScanned.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanned: {name}'**
+  String patrolBackgroundCheckpointScanned(String name);
+
+  /// No description provided for @patrolBackgroundLocationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Background location required'**
+  String get patrolBackgroundLocationTitle;
+
+  /// No description provided for @patrolBackgroundLocationBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow \"Always\" location so patrol tracking and checkpoint auto-scan continue when the screen is off or the app is in the background.'**
+  String get patrolBackgroundLocationBody;
+
+  /// No description provided for @patrolBackgroundLocationGrantAlways.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow always'**
+  String get patrolBackgroundLocationGrantAlways;
+
+  /// No description provided for @patrolBackgroundNextRoundTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Next patrol round'**
+  String get patrolBackgroundNextRoundTitle;
+
+  /// No description provided for @patrolBackgroundNextRoundBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The next patrol round is ready. Tap Confirm to auto-scan, or Cancel.'**
+  String get patrolBackgroundNextRoundBody;
+
+  /// No description provided for @patrolBackgroundNextRoundActionOk.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get patrolBackgroundNextRoundActionOk;
+
+  /// No description provided for @patrolBackgroundNextRoundActionCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get patrolBackgroundNextRoundActionCancel;
+
+  /// No description provided for @patrolBackgroundNextRoundConfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirmed — background auto-scan started.'**
+  String get patrolBackgroundNextRoundConfirmed;
+
+  /// No description provided for @patrolBackgroundRoundCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Your patrol round has ended.'**
+  String get patrolBackgroundRoundCompleted;
+
+  /// No description provided for @issuesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Issues'**
+  String get issuesTitle;
+
+  /// No description provided for @issuesListTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Issues I reported'**
+  String get issuesListTitle;
+
+  /// No description provided for @issuesListSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'List of issues created by your account'**
+  String get issuesListSubtitle;
+
+  /// No description provided for @issuesEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No issues reported yet.'**
+  String get issuesEmpty;
+
+  /// No description provided for @issuesReportAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Report issue'**
+  String get issuesReportAction;
+
+  /// No description provided for @issuesReportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Report issue'**
+  String get issuesReportTitle;
+
+  /// No description provided for @issuesDetailAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get issuesDetailAction;
+
+  /// No description provided for @issuesEditAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Update'**
+  String get issuesEditAction;
+
+  /// No description provided for @issuesEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update issue'**
+  String get issuesEditTitle;
+
+  /// No description provided for @issuesCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get issuesCancel;
+
+  /// No description provided for @issuesSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Send report'**
+  String get issuesSubmit;
+
+  /// No description provided for @issuesUpdateSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Save changes'**
+  String get issuesUpdateSubmit;
+
+  /// No description provided for @issuesFieldTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Issue title'**
+  String get issuesFieldTitle;
+
+  /// No description provided for @issuesFieldTitleHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Short description of the issue'**
+  String get issuesFieldTitleHint;
+
+  /// No description provided for @issuesFieldDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Detailed description'**
+  String get issuesFieldDescription;
+
+  /// No description provided for @issuesFieldDescriptionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Full description of what happened'**
+  String get issuesFieldDescriptionHint;
+
+  /// No description provided for @issuesFieldAssignee.
+  ///
+  /// In en, this message translates to:
+  /// **'Assignee'**
+  String get issuesFieldAssignee;
+
+  /// No description provided for @issuesFieldAssigneeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Assignee name'**
+  String get issuesFieldAssigneeHint;
+
+  /// No description provided for @issuesFieldNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Initial note'**
+  String get issuesFieldNote;
+
+  /// No description provided for @issuesFieldNoteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason or instructions for the recipient'**
+  String get issuesFieldNoteHint;
+
+  /// No description provided for @issuesFieldSite.
+  ///
+  /// In en, this message translates to:
+  /// **'Area (optional)'**
+  String get issuesFieldSite;
+
+  /// No description provided for @issuesFieldSiteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'— Select area —'**
+  String get issuesFieldSiteHint;
+
+  /// No description provided for @issuesFieldPhotos.
+  ///
+  /// In en, this message translates to:
+  /// **'Attached images'**
+  String get issuesFieldPhotos;
+
+  /// No description provided for @issuesFieldPhotosHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Select images (max 5 files)'**
+  String get issuesFieldPhotosHint;
+
+  /// No description provided for @issuesColAssignee.
+  ///
+  /// In en, this message translates to:
+  /// **'Assignee'**
+  String get issuesColAssignee;
+
+  /// No description provided for @issuesColSite.
+  ///
+  /// In en, this message translates to:
+  /// **'Area'**
+  String get issuesColSite;
+
+  /// No description provided for @issuesColReportedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Reported at'**
+  String get issuesColReportedAt;
+
+  /// No description provided for @issuesStatusOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'New'**
+  String get issuesStatusOpen;
+
+  /// No description provided for @issuesStatusResolved.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolved'**
+  String get issuesStatusResolved;
+
+  /// No description provided for @issuesTitleRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter an issue title.'**
+  String get issuesTitleRequired;
+
+  /// No description provided for @issuesAssigneeRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter an assignee account.'**
+  String get issuesAssigneeRequired;
+
+  /// No description provided for @issuesShowingRange.
+  ///
+  /// In en, this message translates to:
+  /// **'SHOWING {from}-{to} / {total} RECORDS'**
+  String issuesShowingRange(int from, int to, int total);
+
+  /// No description provided for @issuesColReporter.
+  ///
+  /// In en, this message translates to:
+  /// **'Reporter'**
+  String get issuesColReporter;
+
+  /// No description provided for @issuesAssignmentHistoryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Assignment history'**
+  String get issuesAssignmentHistoryTitle;
+
+  /// No description provided for @issuesAssignmentFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'From'**
+  String get issuesAssignmentFrom;
+
+  /// No description provided for @issuesAssignmentTo.
+  ///
+  /// In en, this message translates to:
+  /// **'To'**
+  String get issuesAssignmentTo;
+
+  /// No description provided for @issuesAssignmentReceivedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Received at'**
+  String get issuesAssignmentReceivedAt;
+
+  /// No description provided for @issuesAssignmentStatusPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get issuesAssignmentStatusPending;
+
+  /// No description provided for @issuesAssignmentStatusAccepted.
+  ///
+  /// In en, this message translates to:
+  /// **'Accepted'**
+  String get issuesAssignmentStatusAccepted;
+
+  /// No description provided for @issuesAssignmentStatusRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'Rejected'**
+  String get issuesAssignmentStatusRejected;
+
+  /// No description provided for @issuesAssignmentStatusCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get issuesAssignmentStatusCompleted;
 }
 
 class _AppLocalizationsDelegate

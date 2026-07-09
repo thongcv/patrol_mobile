@@ -38,14 +38,32 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   geolocator: ^14.0.2
+  sensors_plus: ^6.1.1
+  flutter_background_service: ^5.1.0
+  flutter_local_notifications: ^19.4.0
+  web_socket_channel: ^3.0.3
+  connectivity_plus: ^6.1.4
   google_fonts: ^8.1.0
   dio: ^5.9.0
   url_launcher: ^6.3.1
   shared_preferences: ^2.3.3
   firebase_core: ^4.8.0
   firebase_messaging: ^16.2.1
-  sensors_plus: ^7.0.0
   image_picker: ^1.1.2
+  mobile_scanner: ^7.0.0
+  nfc_manager: ^4.2.1
+  flutter_blue_plus: ^2.3.2
+  # Chỉ để `flutter pub get` trên máy dev Windows; APK/IPA không dùng.
+  flutter_blue_plus_winrt: ^0.0.20
+  permission_handler: ^12.0.1
+  vibration: ^3.1.8
+  flutter_tts: ^4.2.5
+  stomp_dart_client: ^3.0.1
+  dio_cookie_manager: ^3.4.0
+  cookie_jar: ^4.0.9
+  path_provider: ^2.1.5
+  flutter_map: ^8.3.0
+  latlong2: ^0.9.1
 
 dev_dependencies:
   flutter_test:
@@ -73,6 +91,8 @@ flutter:
   assets:
     - assets/images/bg-login.png
     - assets/images/logo-transparent.png
+    - assets/images/ic_notification_logo.png
+    - google_fonts/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

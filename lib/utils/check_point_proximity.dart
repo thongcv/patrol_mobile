@@ -3,14 +3,21 @@ import 'dart:math' as math;
 import 'package:geolocator/geolocator.dart';
 
 import '../models/check_point.dart';
+import 'device_location.dart';
 
-/// Bán kính mặc định (m) khi checkpoint chưa cấu hình `radius`.
+/// Default radius (m) when checkpoint has no configured `radius`.
 const double kDefaultCheckPointRadiusM = 3;
 
-/// Biên sai số “phần dư”: [deviceM] trừ sai số đã lưu tại mốc [checkpointM].
+/// Effective GPS proximity radius (m) from tracking config ([defaultRadiusM]).
+double effectiveCheckPointRadiusM({
+  double defaultRadiusM = kDefaultCheckPointRadiusM,
+}) =>
+    defaultRadiusM;
+
+/// Incremental accuracy margin: [deviceM] minus accuracy saved at checkpoint [checkpointM].
 ///
-/// Chỉ nới khi GPS hiện tại kém hơn lúc lưu mốc (`device > checkpoint`).
-/// Hiệu ≤ 0 → `null` (so khoảng cách chặt với [allowedRadiusM], không cộng ε).
+/// Widens only when current GPS is worse than at save (`device > checkpoint`).
+/// Delta ≤ 0 → `null` (strict distance vs [allowedRadiusM], no ε added).
 double? netIncrementalAccuracyM(double? deviceM, double? checkpointM) {
   if (deviceM == null || !deviceM.isFinite || deviceM <= 0) return null;
   final cp = checkpointM;
@@ -21,7 +28,7 @@ double? netIncrementalAccuracyM(double? deviceM, double? checkpointM) {
   return deviceM;
 }
 
-/// Độ lệch bắc–nam (m) dọc kinh tuyến; dương = mốc nằm phía bắc `from`.
+/// North–south offset (m) along meridian; positive = checkpoint north of `from`.
 double _signedGeodesicNorthM(
   double fromLat,
   double fromLng,
@@ -32,7 +39,7 @@ double _signedGeodesicNorthM(
   return toLat >= fromLat ? d : -d;
 }
 
-/// Độ lệch đông–tây (m) dọc vĩ tuyến; dương = mốc nằm phía đông `from`.
+/// East–west offset (m) along parallel; positive = checkpoint east of `from`.
 double _signedGeodesicEastM(
   double fromLat,
   double fromLng,
@@ -43,7 +50,7 @@ double _signedGeodesicEastM(
   return toLng >= fromLng ? d : -d;
 }
 
-/// Khoảng cách ngang (m) tới checkpoint; `null` nếu checkpoint chưa có tọa độ.
+/// Horizontal distance (m) to checkpoint; `null` if checkpoint has no coordinates.
 double? horizontalDistanceToCheckPoint(
   CheckPoint checkpoint,
   double latitude,
@@ -85,7 +92,7 @@ class CheckPointProximityResult {
   final double? allowedRadiusM;
 }
 
-/// Chi tiết so sánh vị trí thiết bị với checkpoint (popup điều hướng).
+/// Device vs checkpoint comparison details (navigation popup).
 class CheckPointProximitySnapshot {
   const CheckPointProximitySnapshot({
     required this.checkpointLat,
@@ -112,26 +119,167 @@ class CheckPointProximitySnapshot {
   final double deviceLng;
   final double? deviceAltitude;
 
-  /// Dương = cần đi về phía bắc (m) để tới mốc.
+  /// Positive = need to move north (m) to reach checkpoint.
   final double signedNorthToCheckpointM;
 
-  /// Dương = cần đi về phía đông (m) để tới mốc.
+  /// Positive = need to move east (m) to reach checkpoint.
   final double signedEastToCheckpointM;
 
-  /// Khoảng cách geodesic ngang (m) — đường thẳng trên mặt đất.
+  /// Geodesic horizontal distance (m) — ground line.
   final double horizontalM;
 
-  /// Khoảng cách không gian √(ngang² + độ cao²) khi có đủ độ cao.
+  /// Slant range √(horizontal² + altitude²) when altitude is available.
   final double? slantRangeM;
 
-  /// Sai số ngang từ GPS (`Position.accuracy`), nếu có.
+  /// Horizontal error from GPS (`Position.accuracy`), if any.
   final double? horizontalAccuracyM;
 
-  /// Sai số độ cao GPS (`Position.altitudeAccuracy`), nếu có.
+  /// GPS altitude error (`Position.altitudeAccuracy`), if any.
   final double? gpsAltitudeAccuracyM;
   final double? signedAltitudeDeltaM;
   final double allowedRadiusM;
   final bool usesBaroAltitude;
+}
+
+/// Within this distance (m), north/east/altitude hints read as on-target.
+const double kCheckPointOnTargetThresholdM = 0.05;
+
+/// Formats distance (m) for UI and TTS — one decimal, no rounding to integer.
+String formatPatrolDistanceM(double absM) {
+  if (absM < kCheckPointOnTargetThresholdM) return '0';
+  return absM.toStringAsFixed(1);
+}
+
+/// Move direction toward checkpoint (UI maps to localized labels).
+enum CheckPointMoveDirection {
+  onTarget,
+  north,
+  south,
+  east,
+  west,
+  up,
+  down,
+}
+
+CheckPointMoveDirection checkPointNorthSouthMove(double signedNorthM) {
+  if (signedNorthM.abs() < kCheckPointOnTargetThresholdM) {
+    return CheckPointMoveDirection.onTarget;
+  }
+  return signedNorthM > 0
+      ? CheckPointMoveDirection.north
+      : CheckPointMoveDirection.south;
+}
+
+CheckPointMoveDirection checkPointEastWestMove(double signedEastM) {
+  if (signedEastM.abs() < kCheckPointOnTargetThresholdM) {
+    return CheckPointMoveDirection.onTarget;
+  }
+  return signedEastM > 0
+      ? CheckPointMoveDirection.east
+      : CheckPointMoveDirection.west;
+}
+
+CheckPointMoveDirection checkPointAltitudeMove(double signedAltDeltaM) {
+  if (signedAltDeltaM.abs() < kCheckPointOnTargetThresholdM) {
+    return CheckPointMoveDirection.onTarget;
+  }
+  return signedAltDeltaM > 0
+      ? CheckPointMoveDirection.down
+      : CheckPointMoveDirection.up;
+}
+
+/// Slant range when available, otherwise geodesic horizontal distance.
+double checkPointDisplayDistanceM(CheckPointProximitySnapshot snapshot) {
+  final slant = snapshot.slantRangeM;
+  if (slant != null && slant.isFinite) return slant;
+  return snapshot.horizontalM;
+}
+
+/// Remaining distance (m) after subtracting [allowedRadiusM] from a scalar delta.
+double navigationRemainingM(double absDeltaM, double allowedRadiusM) {
+  final remaining = absDeltaM - allowedRadiusM;
+  return remaining > 0 ? remaining : 0;
+}
+
+CheckPointMoveDirection _navigationAxisMove(
+  double signedDeltaM,
+  double allowedRadiusM,
+  CheckPointMoveDirection Function(double) axisMove,
+) {
+  final remaining = navigationRemainingM(signedDeltaM.abs(), allowedRadiusM);
+  if (remaining < kCheckPointOnTargetThresholdM) {
+    return CheckPointMoveDirection.onTarget;
+  }
+  return axisMove(signedDeltaM);
+}
+
+/// Axis deltas and move directions derived from [CheckPointProximitySnapshot].
+///
+/// Distances are measured to the edge of [CheckPointProximitySnapshot.allowedRadiusM],
+/// not the checkpoint center.
+class CheckPointProximityNavigationHints {
+  const CheckPointProximityNavigationHints({
+    required this.northAbsDeltaM,
+    required this.northMove,
+    required this.eastAbsDeltaM,
+    required this.eastMove,
+    required this.horizontalDistanceM,
+    this.altitudeAbsDeltaM,
+    this.altitudeMove,
+  });
+
+  final double northAbsDeltaM;
+  final CheckPointMoveDirection northMove;
+  final double eastAbsDeltaM;
+  final CheckPointMoveDirection eastMove;
+  final double horizontalDistanceM;
+  final double? altitudeAbsDeltaM;
+  final CheckPointMoveDirection? altitudeMove;
+
+  factory CheckPointProximityNavigationHints.fromSnapshot(
+    CheckPointProximitySnapshot snapshot,
+  ) {
+    final radius = snapshot.allowedRadiusM;
+    final horizontalM = snapshot.horizontalM;
+
+    var signedNorthM = snapshot.signedNorthToCheckpointM;
+    var signedEastM = snapshot.signedEastToCheckpointM;
+    if (horizontalM > radius && horizontalM.isFinite) {
+      final factor = (horizontalM - radius) / horizontalM;
+      signedNorthM *= factor;
+      signedEastM *= factor;
+    } else {
+      signedNorthM = 0;
+      signedEastM = 0;
+    }
+
+    final altDelta = snapshot.signedAltitudeDeltaM;
+    CheckPointMoveDirection? altitudeMove;
+    double? altitudeAbsDeltaM;
+    if (snapshot.checkpointAltitude != null &&
+        altDelta != null &&
+        altDelta.isFinite) {
+      altitudeAbsDeltaM = navigationRemainingM(altDelta.abs(), radius);
+      altitudeMove = _navigationAxisMove(
+        altDelta,
+        radius,
+        checkPointAltitudeMove,
+      );
+    }
+
+    return CheckPointProximityNavigationHints(
+      northAbsDeltaM: signedNorthM.abs(),
+      northMove: checkPointNorthSouthMove(signedNorthM),
+      eastAbsDeltaM: signedEastM.abs(),
+      eastMove: checkPointEastWestMove(signedEastM),
+      horizontalDistanceM: navigationRemainingM(
+        checkPointDisplayDistanceM(snapshot),
+        radius,
+      ),
+      altitudeAbsDeltaM: altitudeAbsDeltaM,
+      altitudeMove: altitudeMove,
+    );
+  }
 }
 
 class CheckPointProximityEvaluation {
@@ -141,20 +289,20 @@ class CheckPointProximityEvaluation {
   final CheckPointProximitySnapshot? snapshot;
 }
 
-/// Kiểm tra vị trí thiết bị so với checkpoint và trả về snapshot điều hướng.
+/// Checks device position against checkpoint and returns navigation snapshot.
 ///
-/// Khoảng cách ngang dùng geodesic ([Geolocator.distanceBetween]).
-/// Hướng bắc/đông: geodesic dọc kinh/vĩ tuyến (khớp [horizontalM] ở cự ly ngắn).
-/// Khi có độ cao mốc, kiểm tra theo khoảng cách 3D.
+/// Horizontal distance uses geodesic ([Geolocator.distanceBetween]).
+/// North/east: geodesic along meridian/parallel (matches [horizontalM] at short range).
+/// When checkpoint altitude exists, checks 3D distance.
 ///
-/// [horizontalAccuracyM]: biên sai số ngang ε (m), thường từ
-/// [netIncrementalAccuracyM] — chỉ cho khoảng cách ngang.
-/// [gpsAltitudeAccuracyM]: biên sai số độ cao GPS ε, cùng cách tính.
+/// [horizontalAccuracyM]: horizontal ε margin (m), usually from
+/// [netIncrementalAccuracyM] — horizontal distance only.
+/// [gpsAltitudeAccuracyM]: GPS altitude ε margin, same rules.
 ///
-/// Ngang (và độ cao GPS): so sánh có biên sai số ε —
-/// đo rõ trong vùng (`d < R`) → pass (tránh kẹt popup khi GPS đã báo đủ gần);
-/// đo ngoài vùng (`d > R`) nhưng `d − ε ≤ R` → pass (tránh fail khi GPS đẩy xa mốc).
-/// Độ cao barometer: so sánh chặt `≤ radius` (không dùng ε).
+/// Horizontal (and GPS altitude): compare with ε margin —
+/// clearly inside (`d < R`) → pass (avoid stuck popup when GPS already reports near);
+/// outside (`d > R`) but `d − ε ≤ R` → pass (avoid fail when GPS drifts away).
+/// Barometer altitude: strict `≤ radius` (no ε).
 CheckPointProximityEvaluation evaluateCheckPointProximity({
   required CheckPoint checkpoint,
   required double latitude,
@@ -164,6 +312,7 @@ CheckPointProximityEvaluation evaluateCheckPointProximity({
   bool validateBaroAltitude = false,
   double? horizontalAccuracyM,
   double? gpsAltitudeAccuracyM,
+  double defaultRadiusM = kDefaultCheckPointRadiusM,
 }) {
   if (!checkpoint.hasCoordinates) {
     return const CheckPointProximityEvaluation(
@@ -182,6 +331,7 @@ CheckPointProximityEvaluation evaluateCheckPointProximity({
     usesBaroAltitude: validateBaroAltitude,
     horizontalAccuracyM: horizontalAccuracyM,
     gpsAltitudeAccuracyM: gpsAltitudeAccuracyM,
+    defaultRadiusM: defaultRadiusM,
   );
 
   final horizontalMargin = _accuracyMargin(horizontalAccuracyM);
@@ -266,7 +416,7 @@ double? _positiveAccuracy(double? accuracyM) {
   return accuracyM;
 }
 
-/// `null` nếu trong phạm vi; ngược lại kết quả lỗi với khoảng cách hiển thị.
+/// `null` if in range; otherwise failure with display distance.
 CheckPointProximityResult? _proximityFailure({
   required CheckPointProximitySnapshot snapshot,
   required double horizontalAccuracyMargin,
@@ -311,11 +461,11 @@ CheckPointProximityResult? _proximityFailure({
   return null;
 }
 
-/// Có nên coi là **ngoài** phạm vi khi biết sai số đo ε (m).
+/// Whether to treat as **out of** range when measurement error ε (m) is known.
 ///
-/// - Đo `d < R`: GPS đã báo trong vùng → pass.
-/// - Đo `d > R` nhưng `d − ε ≤ R`: có thể đứng đủ gần → pass.
-/// - Không có ε: fail khi `d > R`.
+/// - Measured `d < R`: GPS reports inside → pass.
+/// - Measured `d > R` but `d − ε ≤ R`: may be close enough → pass.
+/// - No ε: fail when `d > R`.
 bool _distanceFailsWithAccuracyMargin({
   required double distanceM,
   required double allowedRadiusM,
@@ -339,10 +489,13 @@ CheckPointProximitySnapshot _buildSnapshot({
   bool usesBaroAltitude = false,
   double? horizontalAccuracyM,
   double? gpsAltitudeAccuracyM,
+  double defaultRadiusM = kDefaultCheckPointRadiusM,
 }) {
   final cpLat = checkpoint.latitude!;
   final cpLng = checkpoint.longitude!;
-  final allowedRadiusM = checkpoint.radius ?? kDefaultCheckPointRadiusM;
+  final allowedRadiusM = effectiveCheckPointRadiusM(
+    defaultRadiusM: defaultRadiusM,
+  );
 
   final horizontalM = Geolocator.distanceBetween(
     cpLat,
@@ -353,7 +506,7 @@ CheckPointProximitySnapshot _buildSnapshot({
 
   double signedNorthToCheckpointM;
   double signedEastToCheckpointM;
-  if (horizontalM < 0.05) {
+  if (horizontalM < kCheckPointOnTargetThresholdM) {
     signedNorthToCheckpointM = 0;
     signedEastToCheckpointM = 0;
   } else {
@@ -416,4 +569,117 @@ CheckPointProximitySnapshot _buildSnapshot({
     allowedRadiusM: allowedRadiusM,
     usesBaroAltitude: usesBaroAltitude,
   );
+}
+
+/// How auto-scan picks among eligible checkpoints (sorted by `sequenceOrder`).
+enum CheckPointMatchOrder {
+  /// Only [points.first]; returns on match.
+  sequenceOrder,
+
+  /// Among matches, pick smallest horizontal distance.
+  nearest,
+}
+
+/// Proximity scan result: matched checkpoint for log and/or UI feedback.
+class CheckPointProximityScan {
+  const CheckPointProximityScan({this.matched, this.feedback});
+
+  final CheckPoint? matched;
+  final CheckPointProximityEvaluation? feedback;
+}
+
+CheckPointMatchOrder checkPointMatchOrderFromConfig(String rawOrder) {
+  return switch (rawOrder.trim().toLowerCase()) {
+    'nearest' => CheckPointMatchOrder.nearest,
+    _ => CheckPointMatchOrder.sequenceOrder,
+  };
+}
+
+CheckPointProximityEvaluation evaluateCheckPointProximityForSample({
+  required CheckPoint checkpoint,
+  required DeviceLocationSample sample,
+  required bool baroListening,
+  double defaultRadiusM = kDefaultCheckPointRadiusM,
+}) {
+  final pos = sample.position;
+  final validateBaro = checkpoint.baroAltitude != null && baroListening;
+  return evaluateCheckPointProximity(
+    checkpoint: checkpoint,
+    latitude: sample.latitude,
+    longitude: sample.longitude,
+    gpsAltitude: sample.gpsAltitude,
+    baroAltitude: sample.baroAltitude,
+    validateBaroAltitude: validateBaro,
+    horizontalAccuracyM: netIncrementalAccuracyM(
+      pos.accuracy,
+      checkpoint.accuracy,
+    ),
+    gpsAltitudeAccuracyM: netIncrementalAccuracyM(
+      pos.altitudeAccuracy,
+      checkpoint.altitudeAccuracy,
+    ),
+    defaultRadiusM: defaultRadiusM,
+  );
+}
+
+/// Scans [points] (expected sorted by `sequenceOrder`) for a proximity match.
+CheckPointProximityScan scanCheckPointsProximity(
+  List<CheckPoint> points,
+  DeviceLocationSample sample,
+  bool baroListening, {
+  CheckPointMatchOrder matchOrder = CheckPointMatchOrder.sequenceOrder,
+  double defaultRadiusM = kDefaultCheckPointRadiusM,
+}) {
+  if (points.isEmpty) return const CheckPointProximityScan();
+
+  if (matchOrder == CheckPointMatchOrder.sequenceOrder) {
+    final evaluation = evaluateCheckPointProximityForSample(
+      checkpoint: points.first,
+      sample: sample,
+      baroListening: baroListening,
+      defaultRadiusM: defaultRadiusM,
+    );
+    if (evaluation.result.ok) {
+      return CheckPointProximityScan(matched: points.first);
+    }
+    return CheckPointProximityScan(feedback: evaluation);
+  }
+
+  CheckPoint? bestMatch;
+  double? bestMatchDistanceM;
+  CheckPointProximityEvaluation? nearestFeedback;
+  double? nearestFeedbackDistanceM;
+
+  for (final point in points) {
+    final evaluation = evaluateCheckPointProximityForSample(
+      checkpoint: point,
+      sample: sample,
+      baroListening: baroListening,
+      defaultRadiusM: defaultRadiusM,
+    );
+    if (evaluation.result.ok) {
+      final distanceM = evaluation.snapshot?.horizontalM;
+      if (distanceM == null) {
+        bestMatch ??= point;
+        continue;
+      }
+      if (bestMatchDistanceM == null || distanceM < bestMatchDistanceM) {
+        bestMatchDistanceM = distanceM;
+        bestMatch = point;
+      }
+    } else {
+      final distanceM = evaluation.result.distanceM;
+      if (distanceM == null) continue;
+      if (nearestFeedbackDistanceM == null ||
+          distanceM < nearestFeedbackDistanceM) {
+        nearestFeedbackDistanceM = distanceM;
+        nearestFeedback = evaluation;
+      }
+    }
+  }
+
+  if (bestMatch != null) {
+    return CheckPointProximityScan(matched: bestMatch);
+  }
+  return CheckPointProximityScan(feedback: nearestFeedback);
 }

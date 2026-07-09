@@ -1,34 +1,395 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/storage_keys.dart';
+import '../models/patrol_tracking_config.dart';
+import '../services/patrol_tracking_config_store.dart';
 import 'barometric_altitude.dart';
+import 'super_gps_service.dart';
 
-/// Đọc GPS một lần (quyền + dịch vụ vị trí).
+Stream<SuperGpsEvent> _deviceLocationEventStream({
+  SuperGpsStreamOptions? streamOptions,
+}) {
+  if (!SuperGpsService.isSupported) {
+    return const Stream<SuperGpsEvent>.empty();
+  }
+  if (streamOptions != null &&
+      streamOptions != SuperGpsService.streamOptions) {
+    SuperGpsService.configureStream(streamOptions);
+  }
+  return SuperGpsService.instance.locationEventStream;
+}
 
-Future<({Position? position, String? messageKey})> readDeviceGpsOnce() async {
-  final denied = await _ensureLocationReady();
+double? _usableHorizontalAccuracyM(Position position) {
+  final accuracy = position.accuracy;
+  if (!accuracy.isFinite || accuracy <= 0) return null;
+  return accuracy;
+}
 
-  if (denied != null) {
-    return (position: null, messageKey: denied);
+bool _isBetterGpsEvent(SuperGpsEvent? current, SuperGpsEvent candidate) {
+  final candidateAccuracy = _usableHorizontalAccuracyM(candidate.position);
+  if (candidateAccuracy == null) return current == null;
+  if (current == null) return true;
+  final currentAccuracy = _usableHorizontalAccuracyM(current.position);
+  if (currentAccuracy == null) return true;
+  return candidateAccuracy < currentAccuracy;
+}
+
+/// One-shot fix; refines via stream if accuracy below [targetAccuracyM].
+Future<SuperGpsEvent?> _resolveSuperGpsEvent({
+  required Duration timeout,
+  required double targetAccuracyM,
+  bool enableBarometer = false,
+}) async {
+  if (!SuperGpsService.isSupported) return null;
+
+  final oneShot = await SuperGpsService.getCurrentLocation(
+    enableBarometer: enableBarometer,
+  );
+
+  final oneShotAccuracy = oneShot != null
+      ? _usableHorizontalAccuracyM(oneShot.position)
+      : null;
+  if (oneShotAccuracy != null && oneShotAccuracy <= targetAccuracyM) {
+    return oneShot;
   }
 
-  try {
-    final pos = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.best),
-    );
+  return _readDeviceGpsEventFromStream(
+    timeout: timeout,
+    targetAccuracyM: targetAccuracyM,
+    enableBarometer: enableBarometer,
+    seed: oneShot,
+  );
+}
 
-    return (position: pos, messageKey: null);
+/// One-shot GPS read (permission + location service).
+///
+/// [enableBarometer] enables barometer when the device supports it.
+/// If one-shot misses [targetAccuracyM], listens on stream for [timeout] and returns
+/// the best `accuracy` sample.
+Future<({Position? position, double? barometricAltitude, String? messageKey})>
+readDeviceGpsOnce({
+  Duration? timeout,
+  double? targetAccuracyM,
+  bool enableBarometer = false,
+}) async {
+  final denied = await _ensureLocationReady();
+  if (denied != null) {
+    return (position: null, barometricAltitude: null, messageKey: denied);
+  }
+
+  final config = await PatrolTrackingConfigStore.load();
+  final effectiveTimeout = timeout ?? Duration(seconds: config.gpsFixSec);
+  final effectiveAccuracy = targetAccuracyM ?? config.gpsAccM;
+
+  try {
+    final resolved = await _resolveSuperGpsEvent(
+      timeout: effectiveTimeout,
+      targetAccuracyM: effectiveAccuracy,
+      enableBarometer: enableBarometer,
+    );
+    if (resolved == null) {
+      return (
+        position: null,
+        barometricAltitude: null,
+        messageKey: 'unavailable',
+      );
+    }
+    return (
+      position: resolved.position,
+      barometricAltitude: resolved.barometricAltitude,
+      messageKey: null,
+    );
   } catch (_) {
-    return (position: null, messageKey: 'error');
+    return (position: null, barometricAltitude: null, messageKey: 'error');
   }
 }
 
-/// `null` nếu sẵn sàng; ngược lại mã lỗi `service` | `denied` | `error`.
+/// Super GPS stream for map marker.
+///
+/// Returns `null` on unsupported platforms (web/desktop). Caller [cancel] on dispose.
+StreamSubscription<SuperGpsEvent>? listenDeviceGpsForMap({
+  required void Function(Position position) onPosition,
+  double minMoveM = 1.0,
+  SuperGpsStreamOptions streamOptions = const SuperGpsStreamOptions(
+    updateIntervalMs: 1000,
+    minUpdateIntervalMs: 800,
+    minUpdateDistanceMeters: 2,
+    enableBarometer: false,
+  ),
+}) {
+  if (!SuperGpsService.isSupported) return null;
 
-Future<String?> _ensureLocationReady() async {
+  Position? anchor;
+  return _deviceLocationEventStream(streamOptions: streamOptions).listen(
+    (event) {
+      final pos = event.position;
+      if (anchor != null) {
+        final moved = Geolocator.distanceBetween(
+          anchor!.latitude,
+          anchor!.longitude,
+          pos.latitude,
+          pos.longitude,
+        );
+        if (moved < minMoveM) return;
+      }
+      anchor = pos;
+      onPosition(pos);
+    },
+  );
+}
+
+/// Waits for fix via stream; keeps best horizontal accuracy sample.
+Future<SuperGpsEvent?> _readDeviceGpsEventFromStream({
+  required Duration timeout,
+  required double targetAccuracyM,
+  bool enableBarometer = false,
+  SuperGpsEvent? seed,
+}) async {
+  SuperGpsEvent? bestEvent = seed;
+  final completer = Completer<SuperGpsEvent?>();
+  StreamSubscription<SuperGpsEvent>? streamSubscription;
+
+  SuperGpsService.configureStream(
+    SuperGpsStreamOptions(enableBarometer: enableBarometer),
+  );
+
+  void onEvent(SuperGpsEvent event) {
+    if (_isBetterGpsEvent(bestEvent, event)) {
+      bestEvent = event;
+    }
+    final accuracy = _usableHorizontalAccuracyM(event.position);
+    if (accuracy != null && accuracy <= targetAccuracyM) {
+      streamSubscription?.cancel();
+      if (!completer.isCompleted) completer.complete(bestEvent);
+    }
+  }
+
+  streamSubscription = SuperGpsService.instance.locationEventStream.listen(
+    onEvent,
+  );
+
+  unawaited(
+    Future.delayed(timeout, () {
+      streamSubscription?.cancel();
+      if (!completer.isCompleted) completer.complete(bestEvent);
+    }),
+  );
+
+  return completer.future;
+}
+
+/// Native location-settings query with timeout + permission fallback.
+Future<bool> probeLocationServiceEnabled() async {
+  final probeSec = (await PatrolTrackingConfigStore.load()).gpsProbeSec;
+  try {
+    return await Geolocator.isLocationServiceEnabled().timeout(
+      Duration(seconds: probeSec),
+    );
+  } on TimeoutException {
+    return inferLocationServiceFromPermission();
+  } catch (_) {
+    return false;
+  }
+}
+
+/// When [isLocationServiceEnabled] times out, granted permission usually means GPS is usable.
+Future<bool> inferLocationServiceFromPermission() async {
+  try {
+    final permission = await _patrolLocationPermissionQuick();
+    return permission == LocationPermission.whileInUse ||
+        permission == LocationPermission.always;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Set after [LocationGateScreen] or successful [ensurePatrolBackgroundLocationReady].
+///
+/// Lets tracking / background GPS skip the 4s OEM [probeLocationServiceEnabled] stall.
+abstract final class PatrolBackgroundLocationReadiness {
+  PatrolBackgroundLocationReadiness._();
+
+  static Duration _cacheTtl = Duration(
+    minutes: PatrolTrackingConfig.defaultLocReadyCacheMin,
+  );
+
+  static DateTime? _verifiedAt;
+
+  static Future<Duration> _refreshCacheTtl() async {
+    final min = (await PatrolTrackingConfigStore.load()).locReadyCacheMin;
+    _cacheTtl = Duration(minutes: min);
+    return _cacheTtl;
+  }
+
+  static void markReady() {
+    final at = DateTime.now();
+    _verifiedAt = at;
+    unawaited(_refreshCacheTtl());
+    unawaited(_persistReadyAt(at));
+  }
+
+  static void invalidate() {
+    _verifiedAt = null;
+    unawaited(_clearPersistedReadyAt());
+  }
+
+  static bool get isRecentlyVerified {
+    final at = _verifiedAt;
+    if (at == null) return false;
+    return DateTime.now().difference(at) < _cacheTtl;
+  }
+
+  /// Gate passed on UI isolate — readable from [FlutterBackgroundService] isolate.
+  static Future<bool> isRecentlyVerifiedAcrossIsolates() async {
+    await _refreshCacheTtl();
+    if (isRecentlyVerified) return true;
+    final p = await SharedPreferences.getInstance();
+    final ms = p.getInt(StorageKeys.patrolBackgroundLocationReadyAt);
+    if (ms == null) return false;
+    final at = DateTime.fromMillisecondsSinceEpoch(ms);
+    return DateTime.now().difference(at) < _cacheTtl;
+  }
+
+  static Future<void> _persistReadyAt(DateTime at) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt(
+      StorageKeys.patrolBackgroundLocationReadyAt,
+      at.millisecondsSinceEpoch,
+    );
+  }
+
+  static Future<void> _clearPersistedReadyAt() async {
+    final p = await SharedPreferences.getInstance();
+    await p.remove(StorageKeys.patrolBackgroundLocationReadyAt);
+  }
+}
+
+Future<LocationPermission> _patrolLocationPermissionQuick() async {
+  final permSec = (await PatrolTrackingConfigStore.load()).gpsPermSec;
+  try {
+    return await Geolocator.checkPermission().timeout(
+      Duration(seconds: permSec),
+      onTimeout: () => LocationPermission.denied,
+    );
+  } catch (_) {
+    return LocationPermission.denied;
+  }
+}
+
+/// Fast check for patrol tracking — no dialogs, no 4s service probe when gate recently passed.
+///
+/// `null` if ready; otherwise `service` | `denied` | `background`.
+Future<String?> checkPatrolBackgroundLocationForTracking() async {
+  // Background isolate: Geolocator.checkPermission() often times out → false "denied".
+  // Trust prefs when the user already passed [LocationGateScreen] on the UI isolate.
+  if (await PatrolBackgroundLocationReadiness.isRecentlyVerifiedAcrossIsolates()) {
+    return null;
+  }
+
+  final permission = await _patrolLocationPermissionQuick();
+  if (permission == LocationPermission.denied ||
+      permission == LocationPermission.deniedForever) {
+    return 'denied';
+  }
+  if (permission == LocationPermission.whileInUse) {
+    return 'background';
+  }
+
+  final serviceOk = await inferLocationServiceFromPermission();
+  return serviceOk ? null : 'service';
+}
+
+/// Check-only for [LocationGateScreen] on cold start — no permission dialogs.
+///
+/// `null` if ready; otherwise `service` | `denied` | `background`.
+Future<String?> checkPatrolBackgroundLocationForGate() async {
+  final serviceEnabled = await probeLocationServiceEnabled();
+  if (!serviceEnabled) return 'service';
+
+  final permission = await _patrolLocationPermissionQuick();
+  if (permission == LocationPermission.denied ||
+      permission == LocationPermission.deniedForever) {
+    return 'denied';
+  }
+  if (permission == LocationPermission.whileInUse) {
+    return 'background';
+  }
+  return null;
+}
+
+/// `null` if ready; otherwise `service` | `denied` | `background`.
+///
+/// Upgrades [LocationPermission.whileInUse] to always/background when possible
+/// (iOS second prompt; Android [Permission.locationAlways] on API 29+).
+Future<String?> ensurePatrolBackgroundLocationReady() async {
+  final serviceEnabled = await probeLocationServiceEnabled();
+  if (!serviceEnabled) return 'service';
+
+  var permission = await _patrolLocationPermissionQuick();
+  if (permission == LocationPermission.denied) {
+    permission = await Geolocator.requestPermission();
+  }
+  if (permission == LocationPermission.denied ||
+      permission == LocationPermission.deniedForever) {
+    return 'denied';
+  }
+
+  if (permission == LocationPermission.whileInUse) {
+    permission = await _upgradePatrolLocationToAlways(permission);
+  }
+
+  if (permission == LocationPermission.denied ||
+      permission == LocationPermission.deniedForever) {
+    return 'denied';
+  }
+
+  if (permission == LocationPermission.whileInUse) {
+    return 'background';
+  }
+
+  PatrolBackgroundLocationReadiness.markReady();
+  return null;
+}
+
+/// iOS: second [Geolocator.requestPermission] may show "Always".
+/// Android: foreground dialog never offers "Always" — open app settings instead.
+Future<LocationPermission> _upgradePatrolLocationToAlways(
+  LocationPermission permission,
+) async {
+  if (permission != LocationPermission.whileInUse) return permission;
+
+  final isIos = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+  if (isIos) {
+    final upgraded = await Geolocator.requestPermission();
+    if (upgraded != LocationPermission.denied &&
+        upgraded != LocationPermission.deniedForever) {
+      return upgraded;
+    }
+    return permission;
+  }
+
+  final bg = await Permission.locationAlways.request();
+  if (bg.isGranted) {
+    return _patrolLocationPermissionQuick();
+  }
+  await Geolocator.openAppSettings();
+  return _patrolLocationPermissionQuick();
+}
+
+/// `true` when patrol needs "Always" / background location but only has while-in-use.
+Future<bool> patrolNeedsBackgroundLocationUpgrade() async {
+  final permission = await _patrolLocationPermissionQuick();
+  return permission == LocationPermission.whileInUse;
+}
+
+/// `null` if ready; otherwise error code `service` | `denied` | `error`.
+
+Future<String?> _ensureLocationReady({bool requestIfDenied = true}) async {
   final serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
   if (!serviceEnabled) return 'service';
@@ -36,6 +397,7 @@ Future<String?> _ensureLocationReady() async {
   var permission = await Geolocator.checkPermission();
 
   if (permission == LocationPermission.denied) {
+    if (!requestIfDenied) return 'denied';
     permission = await Geolocator.requestPermission();
   }
 
@@ -47,50 +409,16 @@ Future<String?> _ensureLocationReady() async {
   return null;
 }
 
-LocationSettings devicePositionStreamSettings() {
-  if (kIsWeb) {
-    return const LocationSettings(
-      accuracy: LocationAccuracy.best,
-
-      distanceFilter: 0,
-    );
-  }
-
-  switch (defaultTargetPlatform) {
-    case TargetPlatform.android:
-      return AndroidSettings(
-        accuracy: LocationAccuracy.best,
-
-        distanceFilter: 0,
-
-        intervalDuration: const Duration(milliseconds: 500),
-      );
-
-    case TargetPlatform.iOS:
-    case TargetPlatform.macOS:
-      return AppleSettings(
-        accuracy: LocationAccuracy.bestForNavigation,
-
-        distanceFilter: 0,
-
-        activityType: ActivityType.fitness,
-
-        pauseLocationUpdatesAutomatically: false,
-      );
-
-    default:
-      return const LocationSettings(
-        accuracy: LocationAccuracy.high,
-
-        distanceFilter: 0,
-      );
-  }
-}
+/// Public wrapper for GPS permission / location service checks.
+Future<String?> ensurePatrolDeviceLocationReady({
+  bool requestIfDenied = true,
+}) =>
+    _ensureLocationReady(requestIfDenied: requestIfDenied);
 
 typedef DeviceLocationSample = ({
   Position position,
 
-  /// Lat/lng trung bình theo trọng số 1/accuracy² (ổn định hơn fix GPS đơn lẻ).
+  /// Lat/lng weighted mean 1/accuracy² (more stable than single GPS fix).
   double latitude,
 
   double longitude,
@@ -100,41 +428,54 @@ typedef DeviceLocationSample = ({
   double? baroAltitude,
 });
 
-/// `true` = đủ dữ liệu, dừng watch (không mở / hủy GPS stream).
+/// `true` = enough data, stop watch (do not open / cancel GPS stream).
 
 typedef DeviceLocationOnSample = bool Function(DeviceLocationSample sample);
 
-const int _kGpsSmoothSampleCap = 6;
 
-/// GPS stream riêng; barometer stream riêng (chỉ khi [enableBarometer] và thiết bị hỗ trợ).
+/// GPS stream; barometer included in Super GPS payload when enabled.
 
 class DeviceLocationWatch {
-  StreamSubscription<Position>? _positionSub;
+  DeviceLocationWatch._(this._barometerSupported);
 
-  StreamSubscription<double>? _baroSub;
+  static Future<DeviceLocationWatch> create() async {
+    var supported = false;
+    try {
+      supported = await isBarometerSupported();
+    } on Object {
+      supported = false;
+    }
+    return DeviceLocationWatch._(supported);
+  }
+
+  StreamSubscription<SuperGpsEvent>? _positionSub;
+
+  bool _trackBarometer = false;
 
   Position? _lastPosition;
 
-  final List<Position> _smoothBuffer = [];
+  //final List<Position> _smoothBuffer = [];
 
   double? _barometricAltitude;
 
-  bool _barometerSupported = false;
+  final bool _barometerSupported;
 
   bool _stopped = false;
 
-  /// `true` khi đã bật listener barometer (checkpoint cần baro + thiết bị hỗ trợ).
+  /// `true` when barometer listener is on (checkpoint needs baro + device support).
 
-  bool get barometerListening => _baroSub != null;
+  bool get barometerListening => _trackBarometer;
 
   bool get barometerSupported => _barometerSupported;
 
   Future<String?> start({
     bool enableBarometer = false,
-
+    bool requestLocationPermission = true,
     required DeviceLocationOnSample onSample,
   }) async {
-    final denied = await _ensureLocationReady();
+    final denied = await _ensureLocationReady(
+      requestIfDenied: requestLocationPermission,
+    );
 
     if (denied != null) return denied;
 
@@ -142,133 +483,64 @@ class DeviceLocationWatch {
 
     _lastPosition = null;
 
-    _smoothBuffer.clear();
+   // _smoothBuffer.clear();
 
-    _barometricAltitude = null;
+    await _positionSub?.cancel();
+    _positionSub = null;
 
-    _barometerSupported = false;
+    _trackBarometer = enableBarometer && _barometerSupported;
+    final streamOpts = await PatrolTrackingConfigStore.superGpsStreamOptions(
+      enableBarometer: _trackBarometer,
+    );
 
-    if (enableBarometer) {
-      _barometricAltitude = await readBarometricAltitudeOnce();
+    //if (!await _initCurrentPosition(enableBarometer: enableNativeBaro)) {
+    //  await stop();
+    //   return 'error';
+    // }
 
-      _barometerSupported = _barometricAltitude != null;
-
-      if (_barometerSupported) {
-        if (!await _initCurrentPosition()) {
-          await stop();
-
-          return 'error';
-        }
-
-        if (_emitFromBarometer(onSample) || _stopped) {
-          if (!_stopped) await stop();
-
-          return null;
-        }
-
-        _baroSub = barometricAltitudeStream().listen(
-          (alt) {
-            if (_stopped) return;
-
-            _barometricAltitude = alt.isFinite ? alt : null;
-
-            if (_emitFromBarometer(onSample)) {
-              unawaited(stop());
-            }
-          },
-
-          onError: (_) {},
-
-          cancelOnError: false,
-        );
-      } else {
-        if (!await _initCurrentPosition()) {
-          await stop();
-
-          return 'error';
-        }
-
-        if (_emitFromGps(onSample) || _stopped) {
-          if (!_stopped) await stop();
-
-          return null;
-        }
-      }
-    } else {
-      if (!await _initCurrentPosition()) {
-        await stop();
-
-        return 'error';
-      }
-
-      if (_emitFromGps(onSample) || _stopped) {
-        if (!_stopped) await stop();
-
-        return null;
-      }
-    }
-
-    if (_stopped) return null;
-
-    _startPositionStream(onSample);
+    // if (_emitSample(onSample) || _stopped) {
+    //   if (!_stopped) await stop();
+    // }
+    _startPositionStream(onSample, streamOpts);
 
     return null;
   }
 
-  void _startPositionStream(DeviceLocationOnSample onSample) {
+  void _startPositionStream(
+    DeviceLocationOnSample onSample,
+    SuperGpsStreamOptions streamOpts,
+  ) {
     if (_stopped || _positionSub != null) return;
 
-    _positionSub =
-        Geolocator.getPositionStream(
-          locationSettings: devicePositionStreamSettings(),
-        ).listen(
-          (pos) {
+    _positionSub = _deviceLocationEventStream(streamOptions: streamOpts)
+        .listen(
+          (event) {
             if (_stopped) return;
+            _ingestPosition(event.position);
+            if (_trackBarometer) {
+              _applyBarometricAltitude(event.barometricAltitude);
+            }
 
-            _ingestPosition(pos);
-
-            if (_emitFromGps(onSample)) {
+            if (_emitSample(onSample)) {
               unawaited(stop());
             }
           },
-
-          onError: (_) {},
-
+          onError: (Object error, StackTrace stack) {
+          
+          },
           cancelOnError: false,
         );
   }
 
-  /// `false` nếu không lấy được vị trí ban đầu.
-
-  Future<bool> _initCurrentPosition() async {
-    try {
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.best,
-        ),
-      );
-
-      _ingestPosition(pos);
-
-      return true;
-    } catch (_) {
-      return false;
+  void _applyBarometricAltitude(double? altitude) {
+    if (altitude != null && altitude.isFinite) {
+      _barometricAltitude = altitude;
     }
   }
 
-  /// `true` khi [onSample] yêu cầu dừng watch.
+  /// `true` when [onSample] requests stopping the watch.
 
-  bool _emitFromGps(DeviceLocationOnSample onSample) {
-    final pos = _lastPosition;
-
-    if (_stopped || pos == null) return false;
-
-    return onSample(_buildSample(pos));
-  }
-
-  /// `true` khi [onSample] yêu cầu dừng watch.
-
-  bool _emitFromBarometer(DeviceLocationOnSample onSample) {
+  bool _emitSample(DeviceLocationOnSample onSample) {
     final pos = _lastPosition;
 
     if (_stopped || pos == null) return false;
@@ -279,13 +551,13 @@ class DeviceLocationWatch {
   void _ingestPosition(Position pos) {
     _lastPosition = pos;
 
-    _smoothBuffer.add(pos);
+   // _smoothBuffer.add(pos);
 
-    if (_smoothBuffer.length > _kGpsSmoothSampleCap) {
-      _smoothBuffer.removeAt(0);
-    }
+   // if (_smoothBuffer.length > _kGpsSmoothSampleCap) {
+   //   _smoothBuffer.removeAt(0);
+   // }
   }
-
+  /*
   ({double lat, double lng}) _smoothedCoordinates(Position latest) {
     var weightSum = 0.0;
 
@@ -316,19 +588,19 @@ class DeviceLocationWatch {
     }
 
     return (lat: lat / weightSum, lng: lng / weightSum);
-  }
+  }*/
 
   DeviceLocationSample _buildSample(Position pos) {
-    final coords = _smoothedCoordinates(pos);
+    //final coords = _smoothedCoordinates(pos);
 
     final gpsAlt = pos.altitude.isFinite ? pos.altitude : null;
 
     return (
       position: pos,
 
-      latitude: coords.lat,
+      latitude: pos.latitude,
 
-      longitude: coords.lng,
+      longitude: pos.longitude,
 
       gpsAltitude: gpsAlt,
 
@@ -341,18 +613,200 @@ class DeviceLocationWatch {
 
     await _positionSub?.cancel();
 
-    await _baroSub?.cancel();
-
     _positionSub = null;
-
-    _baroSub = null;
 
     _lastPosition = null;
 
-    _smoothBuffer.clear();
+   // _smoothBuffer.clear();
 
     _barometricAltitude = null;
+    _trackBarometer = false;
+  }
+}
 
-    _barometerSupported = false;
+/// Real-time GPS + barometer for UI (one-shot read then stream).
+///
+/// Calls [notifyListeners] when position/altitude/busy/message changed enough to repaint.
+///
+/// Wire UI with [ListenableBuilder] / [AnimatedBuilder] instead of whole-page `setState`.
+class LiveDeviceLocationTracker extends ChangeNotifier {
+  LiveDeviceLocationTracker._(
+    this._barometerSupported, {
+    bool Function()? isActive,
+    this.gpsUiMoveThresholdM = 1.0,
+    this.altitudeUiChangeThresholdM = 0.5,
+  }) : _isActive = isActive ?? (() => true);
+
+  static Future<LiveDeviceLocationTracker> create({
+    bool Function()? isActive,
+    double gpsUiMoveThresholdM = 0,
+    double altitudeUiChangeThresholdM = 0,
+  }) async {
+    final supported = await isBarometerSupported();
+    return LiveDeviceLocationTracker._(
+      supported,
+      isActive: isActive,
+      gpsUiMoveThresholdM: gpsUiMoveThresholdM,
+      altitudeUiChangeThresholdM: altitudeUiChangeThresholdM,
+    );
+  }
+
+  final bool _barometerSupported;
+  final bool Function() _isActive;
+  final double gpsUiMoveThresholdM;
+  final double altitudeUiChangeThresholdM;
+
+  bool get barometerSupported => _barometerSupported;
+
+  bool busy = false;
+  Position? position;
+  String? messageKey;
+  double? barometricAltitude;
+
+  int _generation = 0;
+  StreamSubscription<SuperGpsEvent>? _positionStreamSub;
+  Position? _streamAnchor;
+  bool _baroEnabled = false;
+
+  double? altitudeForDisplay(Position pos) {
+    return resolveAltitudeMeters(
+      barometricMeters: barometerSupported ? barometricAltitude : null,
+      gpsMeters: pos.altitude,
+    );
+  }
+
+  /// Updates after assigning point coordinates (one-shot GPS from outside).
+  void applyGpsReading({
+    required Position position,
+    double? freshBarometricAltitude,
+  }) {
+    this.position = position;
+    messageKey = null;
+    _streamAnchor = position;
+    if (freshBarometricAltitude != null) {
+      barometricAltitude = freshBarometricAltitude;
+    }
+    _notify();
+  }
+
+  /// Gets position immediately, then streams lat/lng; altitude: barometer if available, else GPS.
+  Future<void> start({bool userInitiated = false}) async {
+    final generation = ++_generation;
+
+    await _positionStreamSub?.cancel();
+    _positionStreamSub = null;
+    _streamAnchor = null;
+    barometricAltitude = null;
+
+    if (!_isActive() || generation != _generation) return;
+    busy = true;
+    if (userInitiated) messageKey = null;
+    _notify();
+    _baroEnabled = barometerSupported;
+    final streamOpts = await PatrolTrackingConfigStore.superGpsStreamOptions(
+      enableBarometer: _baroEnabled,
+    );
+
+    final event = await SuperGpsService.getCurrentLocation(
+      enableBarometer: _baroEnabled,
+    );
+    if (!_isActive() || generation != _generation) return;
+    if (event == null) {
+      busy = false;
+      messageKey = null;
+      _notify();
+      _startPositionStream(generation, streamOpts);
+      return;
+    }
+
+    position = event.position;
+    if (event.barometricAltitude != null) {
+      barometricAltitude = event.barometricAltitude;
+    }
+    _streamAnchor = event.position;
+    messageKey = null;
+    busy = false;
+    _notify();
+    _startPositionStream(generation, streamOpts);
+  }
+
+  void _startPositionStream(int generation, SuperGpsStreamOptions streamOpts) {
+    if (_positionStreamSub != null) return;
+
+    _positionStreamSub =
+        _deviceLocationEventStream(streamOptions: streamOpts).listen(
+          (event) => _onLocationEventUpdate(event, generation),
+          onError: (Object error, StackTrace stack) {
+            if (!_isActive() || generation != _generation) return;
+            messageKey = 'error';
+            _notify();
+          },
+          cancelOnError: false,
+        );
+  }
+
+  @override
+  void dispose() {
+    ++_generation;
+    final sub = _positionStreamSub;
+    _positionStreamSub = null;
+    _streamAnchor = null;
+    _baroEnabled = false;
+    if (sub != null) unawaited(sub.cancel());
+    super.dispose();
+  }
+
+  void _onLocationEventUpdate(SuperGpsEvent event, int generation) {
+    if (!_isActive() || generation != _generation) return;
+    final anchorBefore = _streamAnchor;
+    final baroBefore = barometricAltitude;
+    final baro = event.barometricAltitude;
+    if (baro != null && baro.isFinite) {
+      final prev = barometricAltitude;
+      if (prev == null || (baro - prev).abs() >= altitudeUiChangeThresholdM) {
+        barometricAltitude = baro;
+      }
+    }
+    _onPositionStreamUpdate(event.position, generation);
+    if (_baroEnabled &&
+        barometricAltitude != baroBefore &&
+        _streamAnchor == anchorBefore) {
+      _notify();
+    }
+  }
+
+  void _onPositionStreamUpdate(Position pos, int generation) {
+    if (!_isActive() || generation != _generation) return;
+    final anchor = _streamAnchor ?? position;
+    if (anchor != null) {
+      final moved = Geolocator.distanceBetween(
+        anchor.latitude,
+        anchor.longitude,
+        pos.latitude,
+        pos.longitude,
+      );
+      final acc = pos.accuracy;
+      final anchorAcc = anchor.accuracy;
+      final betterFix =
+          acc.isFinite &&
+          anchorAcc.isFinite &&
+          acc > 0 &&
+          anchorAcc > 0 &&
+          acc < anchorAcc - 2;
+      final altDelta = pos.altitude.isFinite && anchor.altitude.isFinite
+          ? (pos.altitude - anchor.altitude).abs()
+          : 0.0;
+      final altChanged =
+          !barometerSupported && altDelta >= altitudeUiChangeThresholdM;
+      if (moved < gpsUiMoveThresholdM && !betterFix && !altChanged) return;
+    }
+    _streamAnchor = pos;
+    position = pos;
+    messageKey = null;
+    _notify();
+  }
+
+  void _notify() {
+    if (_isActive()) notifyListeners();
   }
 }

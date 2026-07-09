@@ -1,24 +1,60 @@
-import 'dart:async';
-import 'dart:convert';
+﻿import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../http/api_failure.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/active_patrol_round.dart';
 import '../../models/check_point.dart';
 import '../../models/patrol_round.dart';
+import '../../models/patrol_tracking_config.dart';
+import '../../services/account_session_store.dart';
+import '../../services/patrol_foreground_gps_scan_session.dart';
 import '../../services/patrol_log_service.dart';
 import '../../services/patrol_round_service.dart';
-import '../../utils/api_media_url.dart';
+import '../../services/patrol_tracking_config_store.dart';
+import '../../background/patrol_background_service.dart';
+import '../../services/patrol_background_auto_scan_ui_state.dart';
+import '../../services/patrol_active_round_cache.dart';
+import '../../services/patrol_active_round_coordinator.dart';
+import '../../services/patrol_active_round_sync.dart';
+import '../../services/patrol_realtime_track_coordinator.dart';
+import '../../services/patrol_realtime_track_service.dart';
+import '../../utils/beacon/bluetooth_beacon_reader.dart';
 import '../../utils/check_point_proximity.dart';
 import '../../utils/device_location.dart';
+import '../../utils/map_pin_widget.dart';
+import '../../utils/patrol_map_overlays.dart';
+import '../../utils/patrol_proximity_navigation_speech.dart';
+import '../../utils/nfc/nfc_tag_reader.dart';
+import '../../widgets/patrol_osm_map.dart';
+import '../../utils/patrol_datetime_format.dart';
+import '../../utils/patrol_round_status.dart';
+import '../../utils/top_toast.dart';
+import '../../widgets/qr_code_scanner_page.dart';
 import 'patrol_shell.dart';
+part 'round/patrol_round_types.dart';
+part 'round/patrol_round_sheet_handle.dart';
+part 'round/patrol_round_schedule_card.dart';
+part 'round/patrol_round_round_card.dart';
+part 'round/patrol_round_qr_photo_dialog.dart';
+part 'round/patrol_round_qr_proximity.dart';
+part 'round/patrol_round_overdue_note_dialog.dart';
+part 'round/patrol_round_route_point_card.dart';
+part 'round/patrol_round_route_map_overlay.dart';
+part 'round/patrol_round_common_widgets.dart';
+part 'round/patrol_round_auto_scan_sheet.dart';
+part 'round/patrol_round_schedule_overlay.dart';
 
-/// Tuần tra — `link`: `patrol-round`.
-/// GET `/api/patrol-rounds/me/active`.
+/// QR preview / button size on checkpoint and round cards.
+const double kPatrolQrPreviewSize = 64;
+
 class PatrolRoundScreen extends StatefulWidget {
   const PatrolRoundScreen({
     super.key,
@@ -30,7 +66,7 @@ class PatrolRoundScreen extends StatefulWidget {
   final Locale locale;
   final ValueChanged<Locale> onLocaleChanged;
 
-  /// `true` khi hiển thị trong tab Trang chủ (không push route mới).
+  /// `true` when shown in Home tab (no new route push).
   final bool embedded;
 
   @override
@@ -38,68 +74,200 @@ class PatrolRoundScreen extends StatefulWidget {
 }
 
 class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
+  // --- Active round ---
   ActivePatrolRound? _active;
   bool _loading = true;
+  bool _refreshing = false;
   ApiFailure? _failure;
   final Set<int> _scannedCheckpointIds = {};
+  /// Incremented after each successful GET active — forces list / QR preview rebuild.
+  int _reloadToken = 0;
+  /// Notifies route map overlay to refresh checkpoint state (scan / reload active).
+  final ValueNotifier<_RouteMapUpdate> _routeMapRevision =
+      ValueNotifier(const _RouteMapUpdate(seq: 0));
+  StreamSubscription<ActivePatrolRound?>? _activeRoundSocketSub;
+  StreamSubscription<CheckPoint>? _checkpointVerifiedSub;
+  Timer? _overdueUiRefreshTimer;
+  /// One-shot at [PatrolRound.expectedEndTime] to reload when overdue chip appears.
+  Timer? _overdueChipReloadTimer;
+  /// Avoid duplicate silent reload after overdue chip is shown.
+  bool _overdueChipReloadDone = false;
+  late final VoidCallback _fgsAutoScanUiListener;
+  /// Guards socket-driven policy while [_load] owns the round bootstrap sequence.
+  var _localRoundLoadSeq = 0;
+  /// STOMP round received while [_load] runs — applied after GET completes.
+  ActivePatrolRound? _pendingExternalRound;
+
+  // --- Scan flows (QR → NFC → auto GPS → auto Bluetooth) ---
   int? _scanningCheckpointId;
-  DeviceLocationWatch? _qrLocationWatch;
+  _RoundManualScanKind? _manualScanKind;
   bool _qrScanSubmitting = false;
+  int? _overdueNoteSubmittingId;
+  bool _autoScanActive = false;
+  _RoundAutoScanKind? _autoScanKind;
+  PatrolForegroundGpsScanSession? _qrLocationWatch;
+  BluetoothBeaconScanSession? _bluetoothScanWatch;
+  ValueNotifier<_QrScanProximityStatus>? _autoScanStatusNotifier;
+  /// `true` when user paused FGS scan (header radar or any of the four scan buttons).
+  bool _preferManualScan = false;
+  /// Login / STOMP tracking config — header radar hidden when false.
+  bool _backgroundAutoScanConfigured = false;
+  int _overdueGraceMinutes = PatrolTrackingConfig.defaultOverdueGraceMinutes;
+  /// Clears in-memory scan UI — embedded / re-open must not reuse a prior session.
+  void _resetStaleForegroundScanUiState() {
+    _preferManualScan = false;
+    _scanningCheckpointId = null;
+    _manualScanKind = null;
+    _qrScanSubmitting = false;
+    _overdueNoteSubmittingId = null;
+    _autoScanActive = false;
+    _autoScanKind = null;
+    _autoScanStatusNotifier?.dispose();
+    _autoScanStatusNotifier = null;
+    unawaited(_stopQrLocationWatch());
+  }
+
+  Future<void> _initRoundScreenTracking() async {
+    // Release stale manual-scan suppression before bootstrap touches FGS prefs.
+    await PatrolRealtimeTrackCoordinator.setRoundScanBusy(false);
+    await _syncFgsAutoScanRunningFromPrefs();
+    await _bootstrapRoundScreen();
+  }
+
+  Future<void> _bootstrapRoundScreen() async {
+    _resetStaleForegroundScanUiState();
+    await _load();
+    if (!mounted) return;
+    PatrolActiveRoundCoordinator.noteActiveRoundFromUiLoad(_active);
+  }
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _fgsAutoScanUiListener = () {
+      if (!mounted) return;
+      setState(() {});
+    };
+    PatrolBackgroundAutoScanUiState.running
+        .addListener(_fgsAutoScanUiListener);
+    PatrolBackgroundAutoScanUiState.awaitingNextRoundConfirm
+        .addListener(_fgsAutoScanUiListener);
+    unawaited(_initRoundScreenTracking());
+    _checkpointVerifiedSub =
+        PatrolActiveRoundCoordinator.checkpointVerifiedChanges.listen(
+      (point) {
+        if (!mounted) return;
+        setState(() {
+          _applyFgsCheckpointVerified(point);
+          _loading = false;
+          _refreshing = false;
+          _failure = null;
+        });
+        final active = _active;
+        if (active != null && !_hasUnscannedCheckPoints(active)) {
+          unawaited(_load(silent: true));
+        }
+        unawaited(_syncAwaitingNextRoundConfirmFromPrefs());
+      },
+    );
+    _activeRoundSocketSub =
+        PatrolActiveRoundCoordinator.activeRoundChanges.listen((round) {
+      if (!mounted) return;
+      if (round != null) {
+        unawaited(_onExternalActiveRoundFromCoordinator(round));
+        return;
+      }
+      _pendingExternalRound = null;
+      unawaited(_load(silent: true));
+    });
   }
 
   @override
   void dispose() {
+    _overdueUiRefreshTimer?.cancel();
+    _overdueChipReloadTimer?.cancel();
+    PatrolBackgroundAutoScanUiState.running
+        .removeListener(_fgsAutoScanUiListener);
+    PatrolBackgroundAutoScanUiState.awaitingNextRoundConfirm
+        .removeListener(_fgsAutoScanUiListener);
+    TopToast.hide();
+    _activeRoundSocketSub?.cancel();
+    _checkpointVerifiedSub?.cancel();
+    _routeMapRevision.dispose();
     unawaited(_stopQrLocationWatch());
+    // Always release — busy only applies while this screen suppresses FGS.
+    unawaited(PatrolRealtimeTrackCoordinator.setRoundScanBusy(false));
     super.dispose();
   }
 
-  Future<void> _stopQrLocationWatch() async {
-    await _qrLocationWatch?.stop();
-    _qrLocationWatch = null;
-  }
+  // --- Active round: load & checkpoint state ---
 
-  Future<void> _cancelQrScanWait() async {
-    await _stopQrLocationWatch();
-    if (!mounted) return;
+  void _notifyRouteMapRevision({Iterable<int>? checkpointIds}) {
+    final prev = _routeMapRevision.value;
+    _routeMapRevision.value = _RouteMapUpdate(
+      seq: prev.seq + 1,
+      checkpointIds: checkpointIds == null
+          ? const {}
+          : checkpointIds.map((id) => id).toSet(),
+    );
+  }
+  Future<void> _load({bool silent = false}) async {
+    final loadSeq = ++_localRoundLoadSeq;
+    final showRefreshUi = silent && _active != null;
     setState(() {
-      _scanningCheckpointId = null;
-      _qrScanSubmitting = false;
-    });
-  }
-
-  String _gpsMessageFromKey(String? key, AppLocalizations l10n) {
-    return switch (key) {
-      'service' => l10n.patrolPointGpsServiceOff,
-      'denied' => l10n.patrolPointGpsDenied,
-      'error' => l10n.patrolPointGpsError,
-      _ => l10n.patrolRoundQrGpsUnavailable,
-    };
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
+      if (showRefreshUi) {
+        _refreshing = true;
+      } else if (!silent) {
+        _loading = true;
+      }
       _failure = null;
     });
 
     final r = await PatrolRoundService.instance.fetchMyActivePatrolRound();
+    ActivePatrolRound? active = r.ok ? r.data : null;
+    final bgAutoScanRunning =
+        await PatrolActiveRoundCache.isBackgroundAutoScanRunning();
+    if (active != null && bgAutoScanRunning) {
+      active = await PatrolActiveRoundCache.mergeBackgroundVerified(active);
+    }
 
     if (!mounted) return;
     if (r.ok) {
+      await PatrolActiveRoundCache.save(
+        active,
+        preserveLocalVerified: bgAutoScanRunning,
+      );
+      if (await PatrolActiveRoundCache.ensureAwaitingNextRoundIfRoundChanged(
+        active?.round.id,
+        roundStatus: active?.round.status,
+      )) {
+        unawaited(PatrolBackgroundService.offerNextRoundAutoScanIfAwaiting());
+      }
+      final awaiting =
+          await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm();
+      if (!mounted) return;
+      PatrolBackgroundAutoScanUiState.setAwaitingNextRoundConfirm(awaiting);
+      var activeToShow = active;
+      var externalRefresh = silent;
+      if (loadSeq == _localRoundLoadSeq && _pendingExternalRound != null) {
+        activeToShow = _pendingExternalRound;
+        _pendingExternalRound = null;
+        externalRefresh = true;
+      }
       setState(() {
-        _active = r.data;
+        _applyLoadedActiveRound(activeToShow, fromRefresh: externalRefresh);
         _loading = false;
+        _refreshing = false;
         _failure = null;
       });
+      if (loadSeq == _localRoundLoadSeq) {
+        await _applyFgsScanPolicyAfterRoundDataLoaded();
+      }
     } else {
       setState(() {
-        _active = null;
+        _applyLoadedActiveRound(null, fromRefresh: false);
         _loading = false;
+        _refreshing = false;
         _failure = r.failure;
       });
       final l10n = AppLocalizations.of(context)!;
@@ -108,159 +276,941 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       );
     }
   }
-
-  String _messageForFailure(ApiFailure f, AppLocalizations l10n) {
-    return f.userMessage(
-      configMissing: l10n.toastApiNotConfigured,
-      network: l10n.toastNetworkErrorShort,
-      unauthorized: l10n.patrolRoundUnauthorized,
-      badResponse: l10n.patrolRoundLoadFailed,
-      server: l10n.patrolRoundLoadFailed,
+  /// STOMP / coordinator push — trust server snapshot; defer if [_load] in flight.
+  Future<void> _onExternalActiveRoundFromCoordinator(
+    ActivePatrolRound round,
+  ) async {
+    final merged =
+        await PatrolActiveRoundCache.mergeBackgroundVerifiedIfRunning(round);
+    final bgAutoScanRunning =
+        await PatrolActiveRoundCache.isBackgroundAutoScanRunning();
+    await PatrolActiveRoundCache.save(
+      merged,
+      preserveLocalVerified: bgAutoScanRunning,
     );
+    if (await PatrolActiveRoundCache.ensureAwaitingNextRoundIfRoundChanged(
+      merged.round.id,
+      roundStatus: merged.round.status,
+    )) {
+      unawaited(PatrolBackgroundService.offerNextRoundAutoScanIfAwaiting());
+    }
+    if (_localRoundLoadSeq > 0 && (_loading || _refreshing)) {
+      _pendingExternalRound = merged;
+      return;
+    }
+    await _applyExternalActiveRoundToUi(merged);
   }
 
-  String _messageForScanFailure(ApiFailure f, AppLocalizations l10n) {
-    return f.userMessage(
-      configMissing: l10n.toastApiNotConfigured,
-      network: l10n.toastNetworkErrorShort,
-      unauthorized: l10n.patrolRoundUnauthorized,
-      badResponse: l10n.patrolRoundQrScanFailed,
-      server: l10n.patrolRoundQrScanFailed,
-    );
+  Future<void> _applyExternalActiveRoundToUi(ActivePatrolRound merged) async {
+    final awaiting =
+        await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm();
+    if (!mounted) return;
+    PatrolBackgroundAutoScanUiState.setAwaitingNextRoundConfirm(awaiting);
+    setState(() {
+      _applyLoadedActiveRound(merged, fromRefresh: true);
+      _loading = false;
+      _refreshing = false;
+      _failure = null;
+    });
+    await _syncRadarHeaderMirrorFromPrefs();
+    if (!mounted) return;
+    if (_localRoundLoadSeq == 0) {
+      await _syncFgsScanPolicyFromExternalRoundUpdate();
+    }
   }
 
-  Future<_QrPhotoChoice?> _confirmPhotoDialog(AppLocalizations l10n) {
-    return showDialog<_QrPhotoChoice>(
+  bool _isCheckpointScanned(CheckPoint p) =>
+      p.verified == true || _scannedCheckpointIds.contains(p.id);
+
+  bool _hasUnscannedCheckPoints(ActivePatrolRound data) {
+    for (final p in data.checkPoints) {
+      if (!_isCheckpointScanned(p)) return true;
+    }
+    return false;
+  }
+
+  bool _showHeaderRadar(ActivePatrolRound data) =>
+      PatrolRoundStatus.isPendingOrInProgress(data.round.status) &&
+      _hasUnscannedCheckPoints(data);
+
+  /// FGS auto-scan — [point] đã verify; cache đã ghi trên FGS isolate.
+  void _applyFgsCheckpointVerified(CheckPoint point) {
+    _applyCheckpointVerified(point, persistCache: false);
+  }
+  void _applyCheckpointVerified(CheckPoint point, {required bool persistCache}) {
+    final active = _active;
+    if (active == null) return;
+    
+    _scannedCheckpointIds.add(point.id);
+    _active = ActivePatrolRound(
+      schedule: active.schedule,
+      round: active.round,
+      checkPoints: [
+        for (final p in active.checkPoints)
+          p.id == point.id ? p.copyWith(verified: true) : p,
+      ],
+    );
+    _notifyRouteMapRevision(checkpointIds: {point.id});
+    if (persistCache) {
+      unawaited(PatrolActiveRoundCache.markCheckpointVerified(point.id));
+    }
+  }
+
+  /// Sets [_active], syncs server `verified` into model + [_scannedCheckpointIds].
+  void _applyLoadedActiveRound(
+    ActivePatrolRound? active, {
+    required bool fromRefresh,
+  }) {
+    final previousRoundId = _active?.round.id;
+    _reloadToken++;
+    if (active == null) {
+      _resetStaleForegroundScanUiState();
+      _active = null;
+      _scannedCheckpointIds.clear();
+      _overdueChipReloadDone = false;
+      _notifyRouteMapRevision();
+      _syncOverdueUiRefreshTimer();
+      return;
+    }
+
+    if (previousRoundId != null && previousRoundId != active.round.id) {
+      _resetStaleForegroundScanUiState();
+      _overdueChipReloadDone = false;
+    }
+
+    // On user refresh: trust only GET active `verified`, drop local scan overrides.
+    final pendingLocal = fromRefresh
+        ? <int>{}
+        : _scannedCheckpointIds
+            .where((id) => active.checkPoints.any((p) => p.id == id))
+            .toSet();
+
+    final scannedIds = <int>{};
+    for (final p in active.checkPoints) {
+      if (p.verified == true) scannedIds.add(p.id);
+    }
+    if (!fromRefresh) {
+      for (final id in pendingLocal) {
+        if (scannedIds.contains(id)) continue;
+        final point = active.checkPoints.firstWhere((p) => p.id == id);
+        if (point.verified != true) scannedIds.add(id);
+      }
+    }
+
+    _scannedCheckpointIds
+      ..clear()
+      ..addAll(scannedIds);
+
+    _active = ActivePatrolRound(
+      schedule: active.schedule,
+      round: active.round,
+      checkPoints: [
+        for (final p in active.checkPoints)
+          scannedIds.contains(p.id)
+              ? p.copyWith(verified: true)
+              : fromRefresh
+                  ? p.copyWith(verified: false)
+                  : p,
+      ],
+    );
+    _notifyRouteMapRevision();
+    if (_active != null && _isWithinOverdueGracePeriod(_active!)) {
+      _overdueChipReloadDone = true;
+    }
+    _syncOverdueUiRefreshTimer();
+  }
+
+  /// Silent GET active as soon as overdue chip would appear — server status may
+  /// already hide scan buttons while local round snapshot is stale.
+  void _maybeReloadForOverdueChipShown() {
+    final active = _active;
+    if (active == null) {
+      _overdueChipReloadDone = false;
+      return;
+    }
+    if (!_isWithinOverdueGracePeriod(active)) return;
+    if (_overdueChipReloadDone) return;
+    if (_loading || _refreshing || _overdueNoteSubmittingId != null) return;
+
+    _overdueChipReloadDone = true;
+    unawaited(_load(silent: true));
+  }
+
+  void _onOverdueChipDeadlineReached() {
+    if (!mounted) return;
+    _maybeReloadForOverdueChipShown();
+    setState(() {});
+  }
+
+  void _scheduleOverdueChipReloadAtDeadline(ActivePatrolRound data) {
+    _overdueChipReloadTimer?.cancel();
+    _overdueChipReloadTimer = null;
+
+    if (!_isRoundNotCompleted(data.round)) return;
+    final end = _roundExpectedEndDeadline(data);
+    if (end == null) return;
+
+    final delay = end.difference(DateTime.now());
+    if (delay.isNegative) {
+      _maybeReloadForOverdueChipShown();
+      return;
+    }
+    _overdueChipReloadTimer = Timer(delay, _onOverdueChipDeadlineReached);
+  }
+
+  void _markCheckpointVerified(int checkpointId) {
+    final active = _active;
+    if (active == null) return;
+    CheckPoint? point;
+    for (final p in active.checkPoints) {
+      if (p.id == checkpointId) {
+        point = p;
+        break;
+      }
+    }
+    if (point == null) return;
+    final verifiedPoint = point;
+    setState(() {
+      _applyCheckpointVerified(verifiedPoint, persistCache: true);
+    });
+  }
+  // --- Scan flows: shared ---
+
+  bool get _roundActionBusy =>
+      _refreshing ||
+      _scanningCheckpointId != null ||
+      _overdueNoteSubmittingId != null ||
+      _autoScanActive ||
+      _manualScanKind != null;
+
+  DateTime? _roundOverdueGraceDeadline(ActivePatrolRound data) {
+    final end = _roundExpectedEndDeadline(data);
+    if (end == null) return null;
+    return end.add(Duration(minutes: _overdueGraceMinutes));
+  }
+
+  bool _isWithinOverdueGracePeriod(ActivePatrolRound data) {
+    if (!_isRoundNotCompleted(data.round) || !_isRoundOverdue(data)) {
+      return false;
+    }
+    final graceDeadline = _roundOverdueGraceDeadline(data);
+    if (graceDeadline == null) return false;
+    return DateTime.now().isBefore(graceDeadline);
+  }
+
+  void _syncOverdueUiRefreshTimer() {
+    _overdueUiRefreshTimer?.cancel();
+    _overdueUiRefreshTimer = null;
+    _overdueChipReloadTimer?.cancel();
+    _overdueChipReloadTimer = null;
+
+    final active = _active;
+    if (active == null || !_isRoundNotCompleted(active.round)) return;
+    if (_roundExpectedEndDeadline(active) == null) return;
+
+    _scheduleOverdueChipReloadAtDeadline(active);
+
+    _overdueUiRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
+      _maybeReloadForOverdueChipShown();
+      setState(() {});
+    });
+  }
+
+  Future<String?> _promptOverdueNoteDialog({
+    required AppLocalizations l10n,
+    required CheckPoint point,
+  }) {
+    return showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: PatrolShellColors.surface,
-        title: Text(
-          l10n.patrolRoundQrPhotoTitle,
-          style: const TextStyle(color: Colors.white),
-        ),
-        content: Text(
-          l10n.patrolRoundQrPhotoMessage,
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.75)),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(_QrPhotoChoice.cancel),
-            child: Text(l10n.patrolRoundCancel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(_QrPhotoChoice.skip),
-            child: Text(l10n.patrolRoundQrPhotoSkip),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(_QrPhotoChoice.takePhoto),
-            child: Text(l10n.patrolRoundQrPhotoTake),
-          ),
-        ],
-      ),
+      barrierDismissible: false,
+      builder: (ctx) => _OverdueNoteDialog(l10n: l10n, point: point),
     );
   }
 
-  Future<void> _submitPatrolLogAfterProximity({
+  Future<DeviceLocationSample?> _locationSampleForOverdueNote(
+    CheckPoint point,
+    AppLocalizations l10n,
+  ) async {
+    final needsBaro = point.baroAltitude != null;
+    final cfg = await PatrolTrackingConfigStore.load();
+    final gps = await readDeviceGpsOnce(
+      timeout: Duration(seconds: cfg.scanGpsFastSec),
+      enableBarometer: needsBaro,
+      targetAccuracyM: cfg.gpsAccM,
+    );
+    if (!mounted) return null;
+
+    final pos = gps.position;
+    if (pos != null) {
+      final gpsAlt = pos.altitude.isFinite ? pos.altitude : null;
+      return (
+        position: pos,
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+        gpsAltitude: gpsAlt,
+        baroAltitude: gps.barometricAltitude,
+      );
+    }
+
+    if (point.hasCoordinates) {
+      if (gps.position == null) {
+        context.showTopToast(
+          _gpsMessageFromKey(gps.messageKey, l10n),
+          backgroundColor: const Color(0xFFF59E0B),
+          duration: const Duration(milliseconds: 800),
+        );
+      }
+      return _fallbackLocationSampleForCheckpoint(point);
+    }
+
+    context.showTopToast(
+      l10n.patrolRoundOverdueNoteNoGps,
+      backgroundColor: const Color(0xFFF59E0B),
+      duration: const Duration(milliseconds: 1200),
+    );
+    return null;
+  }
+
+  Future<void> _onOverduePointNote(
+    ActivePatrolRound data,
+    CheckPoint point,
+  ) async {
+    if (_roundActionBusy) return;
+    if (!_isWithinOverdueGracePeriod(data)) return;
+    if (_isCheckpointScanned(point)) return;
+
+    final l10n = AppLocalizations.of(context)!;
+    final reason = await _promptOverdueNoteDialog(l10n: l10n, point: point);
+    if (!mounted || reason == null) return;
+
+    setState(() => _overdueNoteSubmittingId = point.id);
+    try {
+      final sample = await _locationSampleForOverdueNote(point, l10n);
+      if (!mounted || sample == null) return;
+
+      final note = '${l10n.patrolRoundOverdueNotePrefix}$reason';
+      final ok = await _submitPatrolLogAfterProximity(
+        point: point,
+        roundId: data.round.id,
+        sample: sample,
+        note: note,
+        successMessage: l10n.patrolRoundOverdueNoteSuccess,
+        failureMessage: l10n.patrolRoundOverdueNoteFailed,
+      );
+      if (mounted && ok) {
+        unawaited(_load(silent: true));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _overdueNoteSubmittingId = null);
+      }
+    }
+  }
+
+  /// Radar header — mirrors FGS listener attached and not soft-paused.
+  bool get _backgroundFgsScanEnabled =>
+      PatrolBackgroundAutoScanUiState.running.value &&
+      !PatrolBackgroundAutoScanUiState.awaitingNextRoundConfirm.value;
+
+  /// FGS auto-scan pause — only [_preferManualScan]; scan UI flags do not resume FGS.
+  bool get _backgroundFgsScanPaused => _preferManualScan;
+
+  Future<void> _syncFgsAutoScanRunningFromPrefs() async {
+    final running = await PatrolActiveRoundCache.isBackgroundAutoScanRunning();
+    PatrolBackgroundAutoScanUiState.setRunning(running);
+  }
+
+  /// Radar header only — prefs/config mirror; never pauses or recovers FGS.
+  Future<void> _syncRadarHeaderMirrorFromPrefs() async {
+    await _syncBackgroundAutoScanConfiguredFromPrefs();
+    if (!mounted) return;
+    await _syncOverdueGraceFromConfig();
+    if (!mounted) return;
+    await _syncFgsAutoScanRunningFromPrefs();
+  }
+
+  Future<void> _syncBackgroundAutoScanConfiguredFromPrefs() async {
+    final enabled = await PatrolTrackingConfigStore.backgroundAutoScanEnabled();
+    if (!mounted) return;
+    if (_backgroundAutoScanConfigured == enabled) return;
+    setState(() => _backgroundAutoScanConfigured = enabled);
+  }
+
+  Future<void> _syncOverdueGraceFromConfig() async {
+    final minutes = (await PatrolTrackingConfigStore.load()).overdueGraceMinutes;
+    if (!mounted) return;
+    if (_overdueGraceMinutes == minutes) return;
+    setState(() => _overdueGraceMinutes = minutes);
+  }
+
+  Future<void> _syncAwaitingNextRoundConfirmFromPrefs() async {
+    final awaiting =
+        await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm();
+    if (!mounted) return;
+    if (awaiting) {
+      PatrolBackgroundAutoScanUiState.setRunning(false);
+    } else {
+      await _syncFgsAutoScanRunningFromPrefs();
+    }
+    PatrolBackgroundAutoScanUiState.setAwaitingNextRoundConfirm(awaiting);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// Pauses FGS background auto-scan ([_preferManualScan]); emit vị trí không đổi.
+  void _syncBackgroundAutoScanSuppression() {
+    unawaited(_syncBackgroundAutoScanSuppressionAsync());
+  }
+
+  Future<void> _syncBackgroundAutoScanSuppressionAsync() async {
+    await PatrolRealtimeTrackCoordinator.setRoundScanBusy(
+      _backgroundFgsScanPaused,
+    );
+  }
+
+  /// After local [_load] — hold next-round prompt or sync manual-scan busy.
+  /// May recover FGS auto-scan when armed but not running; never reload a live scan.
+  Future<void> _applyFgsScanPolicyAfterRoundDataLoaded() async {
+    await _syncBackgroundAutoScanConfiguredFromPrefs();
+    if (!mounted) return;
+    await _syncOverdueGraceFromConfig();
+    if (!mounted) return;
+    await _syncAwaitingNextRoundConfirmFromPrefs();
+    if (!mounted) return;
+    if (PatrolBackgroundAutoScanUiState.awaitingNextRoundConfirm.value) {
+      unawaited(PatrolBackgroundService.syncNextRoundAutoScanHoldIfAwaiting());
+      return;
+    }
+    await _releaseForegroundScanBusyUnlessManual();
+    await _recoverBackgroundAutoScanIfNeeded();
+    await _syncFgsAutoScanRunningFromPrefs();
+  }
+
+  /// FGS/STOMP pushed round — sync UI only; FGS owns hold/reload while scan runs.
+  Future<void> _syncFgsScanPolicyFromExternalRoundUpdate() async {
+    await _syncAwaitingNextRoundConfirmFromPrefs();
+    if (!mounted) return;
+    if (PatrolBackgroundAutoScanUiState.awaitingNextRoundConfirm.value) {
+      return;
+    }
+    await _releaseForegroundScanBusyUnlessManual();
+    await _recoverBackgroundAutoScanIfNeeded();
+    await _syncFgsAutoScanRunningFromPrefs();
+  }
+
+  Future<void> _releaseForegroundScanBusyUnlessManual() async {
+    if (_preferManualScan) {
+      await PatrolRealtimeTrackCoordinator.setRoundScanBusy(true);
+    } else {
+      await PatrolRealtimeTrackCoordinator.setRoundScanBusy(false);
+    }
+  }
+
+  /// Starts FGS auto-scan only when user already armed it but listener is off.
+  Future<void> _recoverBackgroundAutoScanIfNeeded() async {
+    if (_preferManualScan) return;
+    if (await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+      return;
+    }
+    final active = _active;
+    if (active != null &&
+        !PatrolRoundStatus.isPendingOrInProgress(active.round.status)) {
+      return;
+    }
+    final armed = await PatrolActiveRoundCache.isBackgroundAutoScanArmed();
+    if (!armed) return;
+    if (await PatrolActiveRoundCache.isBackgroundAutoScanRunning()) return;
+    await PatrolRealtimeTrackCoordinator.triggerBackgroundAutoScan();
+  }
+
+  /// Header radar or four scan buttons — pause FGS until [_resumeBackgroundFgsScan].
+  void _pauseBackgroundFgsScan() {
+    unawaited(PatrolActiveRoundSync.clearBackgroundAutoScanArmed());
+    if (!_preferManualScan) {
+      setState(() => _preferManualScan = true);
+    }
+    _syncBackgroundAutoScanSuppression();
+  }
+
+  void _resumeBackgroundFgsScan() {
+    if (!_preferManualScan) return;
+    setState(() => _preferManualScan = false);
+    _syncBackgroundAutoScanSuppression();
+  }
+
+  Future<void> _onToggleBackgroundFgsScan() async {
+    final l10n = AppLocalizations.of(context)!;
+    await _syncAwaitingNextRoundConfirmFromPrefs();
+    if (!mounted) return;
+    if (PatrolBackgroundAutoScanUiState.awaitingNextRoundConfirm.value) {
+      _resumeBackgroundFgsScan();
+      await PatrolRealtimeTrackCoordinator.setRoundScanBusy(false);
+      await PatrolActiveRoundSync.confirmNextRoundAutoScanFromUser();
+      if (!mounted) return;
+      await _syncAwaitingNextRoundConfirmFromPrefs();
+      if (!mounted) return;
+      await _syncFgsAutoScanRunningFromPrefs();
+      if (!mounted) return;
+      setState(() {});
+      context.showTopToast(
+        l10n.patrolBackgroundNextRoundConfirmed,
+        duration: const Duration(milliseconds: 800),
+      );
+      return;
+    }
+    if (!_backgroundFgsScanEnabled) {
+      _resumeBackgroundFgsScan();
+      if (!await PatrolActiveRoundSync.armBackgroundAutoScanByUser()) {
+        if (await PatrolActiveRoundCache.isAwaitingNextRoundAutoScanConfirm()) {
+          await PatrolRealtimeTrackCoordinator.setRoundScanBusy(false);
+          await PatrolActiveRoundSync.confirmNextRoundAutoScanFromUser();
+          if (!mounted) return;
+          await _syncAwaitingNextRoundConfirmFromPrefs();
+          if (!mounted) return;
+          await _syncFgsAutoScanRunningFromPrefs();
+          if (!mounted) return;
+          setState(() {});
+          context.showTopToast(
+            l10n.patrolBackgroundNextRoundConfirmed,
+            duration: const Duration(milliseconds: 800),
+          );
+        }
+        return;
+      }
+      await PatrolRealtimeTrackCoordinator.triggerBackgroundAutoScan();
+      if (!mounted) return;
+      await _syncFgsAutoScanRunningFromPrefs();
+      if (!mounted) return;
+      setState(() {});
+      context.showTopToast(
+        l10n.patrolRoundBackgroundScanResumed,
+        duration: const Duration(milliseconds: 800),
+      );
+      return;
+    }
+
+    _pauseBackgroundFgsScan();
+    if (!mounted) return;
+    context.showTopToast(
+      l10n.patrolRoundBackgroundScanPaused,
+      duration: const Duration(milliseconds: 800),
+    );
+  }
+  Future<void> _stopQrLocationWatch() async {
+    await _qrLocationWatch?.stop();
+    _qrLocationWatch = null;
+  }
+  Future<void> _stopBluetoothScanWatch() async {
+    await _bluetoothScanWatch?.stop();
+    _bluetoothScanWatch = null;
+  }
+  Future<void> _cancelQrScanWait() async {
+    PatrolProximityNavigationTts.reset();
+    await _stopQrLocationWatch();
+    await _stopBluetoothScanWatch();
+    _autoScanStatusNotifier?.dispose();
+    _autoScanStatusNotifier = null;
+    if (!mounted) return;
+    if (_autoScanActive && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+    setState(() {
+      _scanningCheckpointId = null;
+      _manualScanKind = null;
+      _qrScanSubmitting = false;
+      _autoScanActive = false;
+      _autoScanKind = null;
+    });
+  }
+  Future<void> _finishAutoScanSession({String? message}) async {
+    PatrolProximityNavigationTts.reset();
+    await _stopQrLocationWatch();
+    await _stopBluetoothScanWatch();
+    _autoScanStatusNotifier?.dispose();
+    _autoScanStatusNotifier = null;
+    if (!mounted) return;
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+    setState(() {
+      _scanningCheckpointId = null;
+      _manualScanKind = null;
+      _qrScanSubmitting = false;
+      _autoScanActive = false;
+      _autoScanKind = null;
+    });
+    if (message != null && mounted) {
+      context.showTopToast(message);
+    }
+  }
+  void _resumeAutoScanAfterCheckpoint() {
+    if (!mounted || !_autoScanActive) return;
+    setState(() {
+      _scanningCheckpointId = null;
+      _qrScanSubmitting = false;
+    });
+    final l10n = AppLocalizations.of(context)!;
+    final headline = _autoScanKind == _RoundAutoScanKind.bluetooth
+        ? l10n.patrolRoundBluetoothWaiting
+        : l10n.patrolRoundQrWaitingPosition;
+    _autoScanStatusNotifier?.value = _QrScanProximityStatus(headline: headline);
+  }
+  List<CheckPoint> _eligibleCheckPoints(ActivePatrolRound data) {
+    final out = <CheckPoint>[];
+    for (final p in data.checkPoints) {
+      if (_isCheckpointScanned(p)) {
+        continue;
+      }
+      if (!p.hasCoordinates) continue;
+      out.add(p);
+    }
+    out.sort((a, b) => a.sequenceOrder.compareTo(b.sequenceOrder));
+    return out;
+  }
+
+  /// `null` = cancel; `[]` = skip photos; non-empty = image path list.
+  Future<List<String>?> _confirmPhotoDialog({
+    required AppLocalizations l10n,
+    required CheckPoint point,
+  }) {
+    return showDialog<List<String>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _QrPhotoConfirmDialog(l10n: l10n, point: point),
+    );
+  }
+
+  Future<bool> _submitPatrolLogAfterProximity({
     required CheckPoint point,
     required int roundId,
     required DeviceLocationSample sample,
-    String? photoPath,
+    List<String> photoPaths = const [],
+    String? note,
+    String? successMessage,
+    String? failureMessage,
+    bool resumeAutoScan = false,
   }) async {
-    if (!mounted) return;
+    if (!mounted) return false;
 
     final l10n = AppLocalizations.of(context)!;
+
+    if (await PatrolActiveRoundCache.isCheckpointVerified(point.id)) {
+      _markCheckpointVerified(point.id);
+      if (!mounted) return false;
+      context.showTopToast(
+        l10n.patrolRoundQrScanSuccess,
+        duration: const Duration(milliseconds: 400),
+      );
+      if (resumeAutoScan) {
+        _resumeAutoScanAfterCheckpoint();
+      } else {
+        setState(() {
+          _scanningCheckpointId = null;
+          _manualScanKind = null;
+          _qrScanSubmitting = false;
+          _autoScanActive = false;
+          _autoScanKind = null;
+        });
+        await _stopQrLocationWatch();
+      }
+      return true;
+    }
 
     final submit = PatrolLogSubmit(
       roundId: roundId,
       checkpointId: point.id,
+      siteId: point.siteId,
       scanTime: DateTime.now(),
       latitude: sample.latitude,
       longitude: sample.longitude,
       gpsAltitude: sample.gpsAltitude,
       baroAltitude: sample.baroAltitude,
       verified: true,
-      photoPaths: photoPath != null ? [photoPath] : const [],
+      note: note,
+      photoPaths: photoPaths,
     );
 
+    var ok = false;
     try {
       final logResult = await PatrolLogService.instance.createPatrolLog(submit);
 
-      if (!mounted) return;
-
-      setState(() {
-        _scanningCheckpointId = null;
-        _qrScanSubmitting = false;
-      });
-
-      if (!mounted) return;
+      if (!mounted) return false;
 
       if (logResult.ok) {
-        setState(() => _scannedCheckpointIds.add(point.id));
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(l10n.patrolRoundQrScanSuccess),
-            duration: const Duration(milliseconds: 400),
-          ),
-        );
+        ok = true;
+        _markCheckpointVerified(point.id);
+        if (!mounted) return false;
+        context.showTopToast(
+          successMessage ?? l10n.patrolRoundQrScanSuccess,
+         duration: const Duration(milliseconds: 400));
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_messageForScanFailure(logResult.failure!, l10n)),
-          ),
-        );
+        context.showTopToast(
+          failureMessage ??
+              _messageForScanFailure(logResult.failure!, l10n),
+         duration: const Duration(milliseconds: 400));
       }
     } catch (_) {
-      await _cancelQrScanWait();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.patrolRoundQrScanFailed)),
-      );
+      if (!resumeAutoScan) {
+        await _cancelQrScanWait();
+      }
+      if (!mounted) return false;
+      context.showTopToast(
+        failureMessage ?? l10n.patrolRoundQrScanFailed,
+       duration: const Duration(milliseconds: 400));
     } finally {
-      await _stopQrLocationWatch();
+      if (mounted) {
+        if (resumeAutoScan) {
+          final remaining = _active != null
+              ? switch (_autoScanKind) {
+                  _RoundAutoScanKind.bluetooth =>
+                    _eligibleBluetoothCheckPoints(_active!),
+                  _RoundAutoScanKind.gps || null =>
+                    _eligibleCheckPoints(_active!),
+                }
+              : <CheckPoint>[];
+          if (ok && remaining.isEmpty) {
+            unawaited(_load(silent: true));
+            await _finishAutoScanSession(
+              message: l10n.patrolRoundAutoScanComplete,
+            );
+          } else {
+            _resumeAutoScanAfterCheckpoint();
+          }
+        } else {
+          setState(() {
+            _scanningCheckpointId = null;
+            _manualScanKind = null;
+            _qrScanSubmitting = false;
+            _autoScanActive = false;
+            _autoScanKind = null;
+          });
+          await _stopQrLocationWatch();
+        }
+      }
+    }
+    return ok;
+  }
+  // --- Scan flow: QR (onQrScan) ---
+
+  Future<void> _onRoundQrScan(ActivePatrolRound data) async {
+    if (_roundActionBusy) return;
+
+    final l10n = AppLocalizations.of(context)!;
+    _pauseBackgroundFgsScan();
+    setState(() => _manualScanKind = _RoundManualScanKind.qr);
+    try {
+      final payload = await Navigator.of(context).push<String>(
+        MaterialPageRoute(
+          builder: (_) => QrCodeScannerPage(l10n: l10n),
+        ),
+      );
+      if (!mounted || payload == null || payload.trim().isEmpty) return;
+
+      final point = _findCheckPointByQrCode(data.checkPoints, payload);
+      if (point == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.patrolRoundQrNotFound)),
+        );
+        return;
+      }
+      if (_isCheckpointScanned(point)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.patrolRoundQrAlreadyScanned)),
+        );
+        return;
+      }
+
+      await _onQrScanCheckpoint(point, data.round.id);
+    } finally {
+      if (mounted && _scanningCheckpointId == null) {
+        setState(() => _manualScanKind = null);
+      }
     }
   }
 
-  Future<void> _onQrScan(CheckPoint point, int roundId) async {
-    if (_scanningCheckpointId != null) return;
-
+  /// After QR/NFC match: photo popup, one-shot GPS read, submit patrol log.
+  Future<void> _onQrScanCheckpoint(CheckPoint point, int roundId) async {
+    if (_scanningCheckpointId != null || _autoScanActive) return;
     final l10n = AppLocalizations.of(context)!;
 
-    if (!point.hasCoordinates) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.patrolRoundQrNoCheckpointGps)),
-      );
+    final photoPaths = await _confirmPhotoDialog(l10n: l10n, point: point);
+    if (!mounted || photoPaths == null) {
+      setState(() => _manualScanKind = null);
       return;
-    }
-
-    final photoChoice = await _confirmPhotoDialog(l10n);
-    if (!mounted || photoChoice == null) return;
-    if (photoChoice == _QrPhotoChoice.cancel) return;
-
-    String? photoPath;
-    if (photoChoice == _QrPhotoChoice.takePhoto) {
-      final picker = ImagePicker();
-      final file = await picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 85,
-      );
-      if (!mounted) return;
-      photoPath = file?.path;
     }
 
     setState(() {
       _scanningCheckpointId = point.id;
+      _qrScanSubmitting = true;
+    });
+    
+    final needsBaro = point.baroAltitude != null;
+    final cfg = await PatrolTrackingConfigStore.load();
+    final gps = await readDeviceGpsOnce(
+      timeout: Duration(seconds: cfg.scanGpsFastSec),
+      enableBarometer: needsBaro,
+      targetAccuracyM: cfg.gpsAccM,
+    );
+
+    if (!mounted) return;
+
+    if (gps.position == null) {
+      context.showTopToast(
+        _gpsMessageFromKey(gps.messageKey, l10n),
+        backgroundColor: const Color(0xFFF59E0B),
+        duration: const Duration(milliseconds: 800),
+      );
+    }
+
+    final pos = gps.position;
+    final DeviceLocationSample sample;
+    if (pos != null) {
+      final gpsAlt = pos.altitude.isFinite ? pos.altitude : null;
+      sample = (
+        position: pos,
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+        gpsAltitude: gpsAlt,
+        baroAltitude: gps.barometricAltitude,
+      );
+    } else {
+      sample = _fallbackLocationSampleForCheckpoint(point);
+    }
+    await _submitPatrolLogAfterProximity(
+      point: point,
+      roundId: roundId,
+      sample: sample,
+      photoPaths: photoPaths,
+    );
+  }
+
+  // --- Scan flow: NFC (onNfcScan) ---
+
+  Future<void> _onRoundNfcScan(ActivePatrolRound data) async {
+    if (_roundActionBusy) return;
+
+    final l10n = AppLocalizations.of(context)!;
+    if (!isNfcScanSupported) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolPointNfcUnavailable)),
+      );
+      return;
+    }
+
+    _pauseBackgroundFgsScan();
+    setState(() => _manualScanKind = _RoundManualScanKind.nfc);
+    try {
+      final result = await readNfcTagIdentifier(
+        iosAlertMessage: l10n.patrolPointNfcScanning,
+      );
+      if (!mounted || !result.ok || result.identifier == null) {
+        if (mounted && result.failure != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(_nfcScanFailureMessage(l10n, result.failure!)),
+            ),
+          );
+        }
+        return;
+      }
+
+      final point = _findCheckPointByNfc(data.checkPoints, result.identifier!);
+      if (point == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.patrolRoundNfcNotFound)),
+        );
+        return;
+      }
+      if (_isCheckpointScanned(point)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.patrolRoundNfcAlreadyScanned)),
+        );
+        return;
+      }
+
+      await _onQrScanCheckpoint(point, data.round.id);
+    } finally {
+      if (mounted && _scanningCheckpointId == null) {
+        setState(() => _manualScanKind = null);
+      }
+    }
+  }
+
+  // --- Scan flow: auto GPS (onAutoScan) ---
+
+  Future<void> _completeAutoScanAfterMatch({
+    required CheckPoint point,
+    required int roundId,
+    required DeviceLocationSample sample,
+  }) async {
+    if (!mounted) {
+      await _cancelQrScanWait();
+      return;
+    }
+
+    final l10n = AppLocalizations.of(context)!;
+    final photoPaths = await _confirmPhotoDialog(l10n: l10n, point: point);
+    if (!mounted) {
+      await _cancelQrScanWait();
+      return;
+    }
+    if (photoPaths == null) {
+      await _cancelQrScanWait();
+      return;
+    }
+
+    if (!mounted) {
+      _resumeAutoScanAfterCheckpoint();
+      return;
+    }
+    setState(() => _scanningCheckpointId = point.id);
+
+    await _submitPatrolLogAfterProximity(
+      point: point,
+      roundId: roundId,
+      sample: sample,
+      photoPaths: photoPaths,
+      resumeAutoScan: true,
+    );
+  }
+
+  /// Normalizes QR payload and matches `CheckPoint.qrCode` on the current route.
+  Future<void> _onAutoScanGps(ActivePatrolRound data) async {
+    if (_roundActionBusy) return;
+
+    final l10n = AppLocalizations.of(context)!;
+    final eligible = _eligibleCheckPoints(data);
+    if (eligible.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolRoundAutoScanNone)),
+      );
+      return;
+    }
+
+    final roundId = data.round.id;
+
+    _pauseBackgroundFgsScan();
+    setState(() {
+      _autoScanActive = true;
+      _autoScanKind = _RoundAutoScanKind.gps;
       _qrScanSubmitting = false;
     });
 
     final statusNotifier = ValueNotifier<_QrScanProximityStatus>(
       _QrScanProximityStatus(headline: l10n.patrolRoundQrWaitingPosition),
     );
+    _autoScanStatusNotifier = statusNotifier;
 
     if (!mounted) return;
 
-    final needsBaroValidation = point.baroAltitude != null;
-    final watch = DeviceLocationWatch();
+    final needsBaroValidation = eligible.any((p) => p.baroAltitude != null);
+    final trackingConfig = await PatrolTrackingConfigStore.load();
+    final matchOrder = trackingConfig.checkPointMatchOrder;
+    final defaultRadiusM = trackingConfig.radius;
+    final watch = await PatrolForegroundGpsScanSession.create();
+    if (!mounted) return;
     _qrLocationWatch = watch;
 
     unawaited(
@@ -271,81 +1221,21 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (sheetContext) {
-          return Padding(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              4,
-              16,
-              16 + MediaQuery.paddingOf(sheetContext).bottom,
-            ),
-            child: Material(
-              color: PatrolShellColors.surface,
-              borderRadius: BorderRadius.circular(20),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    ValueListenableBuilder<_QrScanProximityStatus>(
-                      valueListenable: statusNotifier,
-                      builder: (_, status, _) {
-                        final bodyStyle = Theme.of(sheetContext)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.88),
-                              height: 1.45,
-                            );
-                        final detail = status.snapshot;
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text(
-                              status.headline,
-                              textAlign: TextAlign.center,
-                              style: bodyStyle,
-                            ),
-                            if (detail != null) ...[
-                              const SizedBox(height: 14),
-                              _QrProximityDetailPanel(
-                                l10n: l10n,
-                                snapshot: detail,
-                                baroPending: status.baroPending,
-                              ),
-                            ],
-                          ],
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    const Center(
-                      child: SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: Color(0xFF34D399),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(sheetContext).pop();
-                        unawaited(_cancelQrScanWait());
-                      },
-                      child: Text(l10n.patrolRoundCancel),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          return _AutoScanWaitingSheet(
+            l10n: l10n,
+            statusNotifier: statusNotifier,
+            onCancel: () {
+              Navigator.of(sheetContext).pop();
+              unawaited(_cancelQrScanWait());
+            },
           );
         },
       ).whenComplete(() {
-        statusNotifier.dispose();
-        if (_scanningCheckpointId == point.id && !_qrScanSubmitting) {
+        if (_autoScanStatusNotifier == statusNotifier) {
+          _autoScanStatusNotifier = null;
+          statusNotifier.dispose();
+        }
+        if (_autoScanActive && !_qrScanSubmitting) {
           unawaited(_cancelQrScanWait());
         }
       }),
@@ -354,52 +1244,65 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     final gpsError = await watch.start(
       enableBarometer: needsBaroValidation,
       onSample: (sample) {
-        if (!mounted || _qrScanSubmitting) return false;
+        if (!mounted || !_autoScanActive || _qrScanSubmitting) {
+          return false;
+        }
 
-        final pos = sample.position;
-        final validateBaro = needsBaroValidation && watch.barometerListening;
+        final active = _active;
+        if (active == null) return false;
 
-        final horizontalAccuracy = pos.accuracy;
-        final gpsAltitudeAccuracy = pos.altitudeAccuracy;
-        final evaluation = evaluateCheckPointProximity(
-          checkpoint: point,
-          latitude: sample.latitude,
-          longitude: sample.longitude,
-          gpsAltitude: sample.gpsAltitude,
-          baroAltitude: sample.baroAltitude,
-          validateBaroAltitude: validateBaro,
-          horizontalAccuracyM: netIncrementalAccuracyM(
-            horizontalAccuracy,
-            point.accuracy,
-          ),
-          gpsAltitudeAccuracyM: netIncrementalAccuracyM(
-            gpsAltitudeAccuracy,
-            point.altitudeAccuracy,
-          ),
-        );
-
-        if (!evaluation.result.ok) {
-          statusNotifier.value = _qrScanProximityStatus(
-            l10n: l10n,
-            proximity: evaluation.result,
-            snapshot: evaluation.snapshot,
+        final pending = _eligibleCheckPoints(active);
+        if (pending.isEmpty) {
+          unawaited(
+            _finishAutoScanSession(
+              message: l10n.patrolRoundAutoScanComplete,
+            ),
           );
           return false;
         }
 
-        _qrScanSubmitting = true;
-        if (mounted && Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
+        final validateBaro = needsBaroValidation && watch.barometerListening;
+        final scan = scanCheckPointsProximity(
+          pending,
+          sample,
+          validateBaro,
+          matchOrder: matchOrder,
+          defaultRadiusM: defaultRadiusM,
+        );
+
+        if (scan.matched == null) {
+          final feedback = scan.feedback;
+          if (feedback != null) {
+            statusNotifier.value = _qrScanProximityStatus(
+              l10n: l10n,
+              proximity: feedback.result,
+              snapshot: feedback.snapshot,
+            );
+            final snapshot = feedback.snapshot;
+            if (snapshot != null) {
+              unawaited(
+                PatrolProximityNavigationTts.maybeSpeak(
+                  snapshot: snapshot,
+                  speedMps: sample.position.speed,
+                ),
+              );
+            }
+          }
+          return false;
         }
+
+        _qrScanSubmitting = true;
+        statusNotifier.value = _QrScanProximityStatus(
+          headline: l10n.patrolRoundQrPositionOkSaving,
+        );
         unawaited(
-          _submitPatrolLogAfterProximity(
-            point: point,
+          _completeAutoScanAfterMatch(
+            point: scan.matched!,
             roundId: roundId,
             sample: sample,
-            photoPath: photoPath,
           ),
         );
-        return true;
+        return false;
       },
     );
 
@@ -418,6 +1321,287 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     }
   }
 
+  // --- Scan flow: auto Bluetooth (onAutoScanBluetooth) ---
+
+  List<CheckPoint> _eligibleBluetoothCheckPoints(ActivePatrolRound data) {
+    final out = <CheckPoint>[];
+    for (final p in data.checkPoints) {
+      if (_isCheckpointScanned(p)) continue;
+      final uuid = p.uuid?.trim();
+      final remoteId = p.remoteId?.trim();
+      if ((uuid == null || uuid.isEmpty) &&
+          (remoteId == null || remoteId.isEmpty)) {
+        continue;
+      }
+      out.add(p);
+    }
+    out.sort((a, b) => a.sequenceOrder.compareTo(b.sequenceOrder));
+    return out;
+  }
+  Future<void> _completeBluetoothAutoScanAfterMatch({
+    required CheckPoint point,
+    required int roundId,
+  }) async {
+    if (!mounted) {
+      await _cancelQrScanWait();
+      return;
+    }
+
+    final l10n = AppLocalizations.of(context)!;
+    final photoPaths = await _confirmPhotoDialog(l10n: l10n, point: point);
+    if (!mounted) {
+      await _cancelQrScanWait();
+      return;
+    }
+    if (photoPaths == null) {
+      await _cancelQrScanWait();
+      return;
+    }
+
+    if (!mounted) {
+      _resumeAutoScanAfterCheckpoint();
+      return;
+    }
+    setState(() => _scanningCheckpointId = point.id);
+
+    final needsBaro = point.baroAltitude != null;
+    final cfg = await PatrolTrackingConfigStore.load();
+    final gps = await readDeviceGpsOnce(
+      timeout: Duration(seconds: cfg.scanGpsSec),
+      enableBarometer: needsBaro,
+      targetAccuracyM: cfg.gpsAccM,
+    );
+
+    if (!mounted) return;
+
+    if (gps.position == null) {
+      context.showTopToast(
+        _gpsMessageFromKey(gps.messageKey, l10n),
+        backgroundColor: const Color(0xFFF59E0B),
+        duration: const Duration(milliseconds: 800),
+      );
+    }
+
+    final pos = gps.position;
+    final DeviceLocationSample sample;
+    if (pos != null) {
+      final gpsAlt = pos.altitude.isFinite ? pos.altitude : null;
+      sample = (
+        position: pos,
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+        gpsAltitude: gpsAlt,
+        baroAltitude: gps.barometricAltitude,
+      );
+    } else {
+      sample = _fallbackLocationSampleForCheckpoint(point);
+    }
+
+    await _submitPatrolLogAfterProximity(
+      point: point,
+      roundId: roundId,
+      sample: sample,
+      photoPaths: photoPaths,
+      resumeAutoScan: true,
+    );
+  }
+  Future<void> _onAutoScanBluetooth(ActivePatrolRound data) async {
+    if (_roundActionBusy) return;
+
+    final l10n = AppLocalizations.of(context)!;
+    final eligible = _eligibleBluetoothCheckPoints(data);
+    if (eligible.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolRoundAutoScanBluetoothNone)),
+      );
+      return;
+    }
+
+    final roundId = data.round.id;
+
+    _pauseBackgroundFgsScan();
+    setState(() {
+      _autoScanActive = true;
+      _autoScanKind = _RoundAutoScanKind.bluetooth;
+      _qrScanSubmitting = false;
+    });
+
+    final statusNotifier = ValueNotifier<_QrScanProximityStatus>(
+      _QrScanProximityStatus(headline: l10n.patrolRoundBluetoothWaiting),
+    );
+    _autoScanStatusNotifier = statusNotifier;
+
+    if (!mounted) return;
+
+    unawaited(
+      showModalBottomSheet<void>(
+        context: context,
+        isDismissible: false,
+        enableDrag: false,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (sheetContext) {
+          return _AutoScanWaitingSheet(
+            l10n: l10n,
+            statusNotifier: statusNotifier,
+            onCancel: () {
+              Navigator.of(sheetContext).pop();
+              unawaited(_cancelQrScanWait());
+            },
+          );
+        },
+      ).whenComplete(() {
+        if (_autoScanStatusNotifier == statusNotifier) {
+          _autoScanStatusNotifier = null;
+          statusNotifier.dispose();
+        }
+        if (_autoScanActive &&
+            _autoScanKind == _RoundAutoScanKind.bluetooth &&
+            !_qrScanSubmitting) {
+          unawaited(_cancelQrScanWait());
+        }
+      }),
+    );
+
+    if (!isBluetoothScanSupported) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.patrolPointBluetoothUnavailable)),
+      );
+      await _cancelQrScanWait();
+      return;
+    }
+
+    final scanUuids = eligible
+        .map((p) => p.uuid?.trim())
+        .whereType<String>()
+        .where((id) => id.isNotEmpty)
+        .toList();
+
+    final watch = BluetoothBeaconScanSession();
+    _bluetoothScanWatch = watch;
+
+    final bluetoothRssiTolerance =
+        (await PatrolTrackingConfigStore.load()).bluetoothRssiTolerance;
+    if (!mounted) return;
+
+    final btError = await watch.start(
+      uuids: scanUuids.isEmpty ? null : scanUuids,
+      stableHits: 1,
+      successRssi: -85,
+      onHit: (result) {
+        if (!mounted ||
+            !_autoScanActive ||
+            _autoScanKind != _RoundAutoScanKind.bluetooth ||
+            _qrScanSubmitting) {
+          return false;
+        }
+
+        final active = _active;
+        if (active == null) return true;
+
+        final pending = _eligibleBluetoothCheckPoints(active);
+        if (pending.isEmpty) {
+          unawaited(
+            _finishAutoScanSession(message: l10n.patrolRoundAutoScanComplete),
+          );
+          return true;
+        }
+
+        statusNotifier.value = _QrScanProximityStatus(
+          headline: l10n.patrolRoundBluetoothWaiting,
+        );
+
+        if (!result.ok) {
+          if (result.failure != null) {
+            statusNotifier.value = _QrScanProximityStatus(
+              headline: _bluetoothScanFailureMessage(l10n, result.failure!),
+            );
+          }
+          return false;
+        }
+
+        final matched = _matchBluetoothCheckPoint(
+          pending,
+          uuid: result.uuid,
+          major: result.beacon?.major,
+          minor: result.beacon?.minor,
+          rssi: result.beacon?.rssi,
+          rssiTolerance: bluetoothRssiTolerance,
+        );
+        if (matched == null) return false;
+
+        setState(() => _qrScanSubmitting = true);
+        statusNotifier.value = _QrScanProximityStatus(
+          headline: l10n.patrolRoundQrPositionOkSaving,
+        );
+        unawaited(
+          _completeBluetoothAutoScanAfterMatch(
+            point: matched,
+            roundId: roundId,
+          ),
+        );
+        return false;
+      },
+    );
+
+    if (!mounted) return;
+
+    if (btError != null) {
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      await _cancelQrScanWait();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_bluetoothScanFailureMessage(l10n, btError))),
+      );
+    }
+  }
+
+  // --- Overlays ---
+
+  Future<void> _openRouteMapOverlay() async {
+    final data = _active;
+    if (data == null || !mounted) return;
+
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: AppLocalizations.of(context)!.patrolRoundMap,
+      barrierColor: Colors.black.withValues(alpha: 0.55),
+      transitionDuration: const Duration(milliseconds: 220),
+      // Avoid FadeTransition: opacity < 1 leaves OSM tiles unloaded (dark map)
+      // until the user touches and forces a camera event.
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.04),
+            end: Offset.zero,
+          ).animate(
+            CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+          ),
+          child: child,
+        );
+      },
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        void close() {
+          if (dialogContext.mounted) {
+            Navigator.of(dialogContext).pop();
+          }
+        }
+
+        return _RouteMapOverlay(
+          routeRevision: _routeMapRevision,
+          checkPointsProvider: () => _active?.checkPoints ?? const [],
+          isScanned: _isCheckpointScanned,
+          onDismiss: close,
+        );
+      },
+    );
+  }
+
   Future<void> _openScheduleOverlay() async {
     final theme = GoogleFonts.interTextTheme(Theme.of(context).textTheme);
 
@@ -429,133 +1613,15 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.55),
       builder: (sheetContext) {
-        final pad = MediaQuery.paddingOf(sheetContext);
-        final h = MediaQuery.sizeOf(sheetContext).height;
-
-        void closeSheet() {
-          if (sheetContext.mounted) {
-            Navigator.of(sheetContext).pop();
-          }
-        }
-
-        return Padding(
-          padding: EdgeInsets.fromLTRB(16, 12, 16, 16 + pad.bottom),
-          child: Align(
-            alignment: Alignment.bottomCenter,
-            child: StatefulBuilder(
-              builder: (modalContext, setSheetState) {
-                const handleReserve = 40.0;
-                final maxBodyHeight =
-                    (h * 0.88 - handleReserve).clamp(120.0, h);
-                final scrollPhysics = AlwaysScrollableScrollPhysics(
-                  parent: Theme.of(sheetContext).platform ==
-                          TargetPlatform.iOS
-                      ? const BouncingScrollPhysics()
-                      : const ClampingScrollPhysics(),
-                );
-
-                return ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: h * 0.88),
-                  child: Material(
-                    color: PatrolShellColors.surface,
-                    elevation: 12,
-                    shadowColor: Colors.black.withValues(alpha: 0.45),
-                    borderRadius: BorderRadius.circular(20),
-                    clipBehavior: Clip.antiAlias,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _SheetVerticalDismissHandle(onDismiss: closeSheet),
-                        ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxHeight: maxBodyHeight,
-                          ),
-                          child: NotificationListener<ScrollNotification>(
-                            onNotification: (ScrollNotification n) {
-                              if (n is! OverscrollNotification) {
-                                return false;
-                              }
-                              if (n.overscroll.abs() >= 20) {
-                                closeSheet();
-                                return true;
-                              }
-                              return false;
-                            },
-                            child: ListView(
-                              shrinkWrap: true,
-                              physics: scrollPhysics,
-                              padding: const EdgeInsets.all(4),
-                              children: [
-                                _ScheduleCard(
-                                  theme: theme,
-                                  l10n: AppLocalizations.of(modalContext)!,
-                                  loading: _loading,
-                                  failure: _failure,
-                                  data: _active,
-                                  onReload: () async {
-                                    await _load();
-                                    if (modalContext.mounted) {
-                                      setSheetState(() {});
-                                    }
-                                  },
-                                  failureMessage: _failure != null
-                                      ? _messageForFailure(
-                                          _failure!,
-                                          AppLocalizations.of(modalContext)!,
-                                        )
-                                      : null,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
+        return _ScheduleSheet(
+          theme: theme,
+          loading: _loading,
+          failure: _failure,
+          data: _active,
+          messageForFailure: _messageForFailure,
         );
       },
     );
-  }
-
-  String _statusLabel(String status, AppLocalizations l10n) {
-    switch (status.toUpperCase()) {
-      case 'PENDING':
-        return l10n.patrolRoundStatusPending;
-      case 'IN_PROGRESS':
-      case 'INPROGRESS':
-        return l10n.patrolRoundStatusInProgress;
-      case 'COMPLETED':
-      case 'DONE':
-        return l10n.patrolRoundStatusCompleted;
-      case 'CANCELLED':
-      case 'CANCELED':
-        return l10n.patrolRoundStatusCancelled;
-      default:
-        return status.isEmpty ? l10n.patrolRoundStatusOther : status;
-    }
-  }
-
-  Color _statusColor(String status) {
-    switch (status.toUpperCase()) {
-      case 'PENDING':
-        return const Color(0xFFFBBF24);
-      case 'IN_PROGRESS':
-      case 'INPROGRESS':
-        return const Color(0xFF34D399);
-      case 'COMPLETED':
-      case 'DONE':
-        return PatrolShellColors.accent;
-      case 'CANCELLED':
-      case 'CANCELED':
-        return Colors.white54;
-      default:
-        return Colors.white70;
-    }
   }
 
   @override
@@ -592,11 +1658,52 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
               ),
             )
           : null,
-      heroRowTrailing: IconButton(
-        icon: const Icon(Icons.calendar_month_rounded),
-        color: Colors.white.withValues(alpha: 0.92),
-        tooltip: l10n.patrolRoundScheduleHeading,
-        onPressed: _openScheduleOverlay,
+      heroRowTrailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (data != null &&
+              _failure == null &&
+              _backgroundAutoScanConfigured &&
+              _showHeaderRadar(data))
+            IconButton.filledTonal(
+              key: ValueKey(
+                'bg-fgs-${_backgroundFgsScanEnabled ? 'on' : 'off'}-'
+                '${PatrolBackgroundAutoScanUiState.running.value}',
+              ),
+              visualDensity: VisualDensity.compact,
+              style: IconButton.styleFrom(
+                backgroundColor: _backgroundFgsScanEnabled
+                    ? const Color(0xFF34D399).withValues(alpha: 0.22)
+                    : Colors.white.withValues(alpha: 0.1),
+                foregroundColor: _backgroundFgsScanEnabled
+                    ? const Color(0xFF34D399)
+                    : Colors.white.withValues(alpha: 0.92),
+              ),
+              icon: Icon(
+                _backgroundFgsScanEnabled
+                    ? Icons.radar
+                    : Icons.radar_rounded,
+              ),
+              tooltip: _backgroundFgsScanEnabled
+                  ? l10n.patrolRoundPauseBackgroundScan
+                  : l10n.patrolRoundResumeBackgroundScan,
+              onPressed: () => unawaited(_onToggleBackgroundFgsScan()),
+            ),
+          IconButton(
+            icon: const Icon(Icons.map_rounded),
+            color: Colors.white.withValues(alpha: 0.92),
+            tooltip: l10n.patrolRoundMap,
+            onPressed: data != null && !_loading && _failure == null
+                ? () => unawaited(_openRouteMapOverlay())
+                : null,
+          ),
+          IconButton(
+            icon: const Icon(Icons.calendar_month_rounded),
+            color: Colors.white.withValues(alpha: 0.92),
+            tooltip: l10n.patrolRoundScheduleHeading,
+            onPressed: _openScheduleOverlay,
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -654,23 +1761,81 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
               ),
             ),
           ],
-          if (!_loading && _failure == null && data != null) ...[
+          if (_failure == null && data != null) ...[
             const SizedBox(height: 12),
             _RoundCard(
+              key: ValueKey(
+                'round-${data.round.id}-${data.round.status}-'
+                '${data.round.expectedStartTime}-${data.round.expectedEndTime}-'
+                '${data.round.assignedName}-'
+                '${_isRoundActive(data.round.status)}-'
+                '$_manualScanKind-$_autoScanKind-$_autoScanActive-'
+                '$_refreshing-$_reloadToken-$_preferManualScan',
+              ),
               theme: theme,
               l10n: l10n,
               round: data.round,
               statusLabel: _statusLabel(data.round.status, l10n),
               statusColor: _statusColor(data.round.status),
-              locale: widget.locale,
+              loading: _refreshing,
+              onReload: () => unawaited(_load(silent: true)),
+              qrScanBusy: _manualScanKind == _RoundManualScanKind.qr,
+              onQrScan: _isRoundOngoing(data.round)
+                  ? () {
+                      final current = _active;
+                      if (current == null) return;
+                      unawaited(_onRoundQrScan(current));
+                    }
+                  : null,
+              nfcScanBusy: _manualScanKind == _RoundManualScanKind.nfc,
+              onNfcScan: _isRoundOngoing(data.round) && isNfcScanSupported
+                  ? () {
+                      final current = _active;
+                      if (current == null) return;
+                      unawaited(_onRoundNfcScan(current));
+                    }
+                  : null,
+              autoScanBusy:
+                  _autoScanActive && _autoScanKind == _RoundAutoScanKind.gps,
+              onAutoScan: _isRoundOngoing(data.round)
+                  ? () {
+                      final current = _active;
+                      if (current == null) return;
+                      unawaited(_onAutoScanGps(current));
+                    }
+                  : null,
+              autoScanBluetoothBusy: _autoScanActive &&
+                  _autoScanKind == _RoundAutoScanKind.bluetooth,
+              onAutoScanBluetooth: _isRoundOngoing(data.round) &&
+                      isBluetoothScanSupported
+                  ? () {
+                      final current = _active;
+                      if (current == null) return;
+                      unawaited(_onAutoScanBluetooth(current));
+                    }
+                  : null,
             ),
+          ],
+          if (!_loading && _failure == null && data != null) ...[
             const SizedBox(height: 20),
-            Text(
-              l10n.patrolRoundRouteHeading,
-              style: theme.titleSmall?.copyWith(
-                color: Colors.white.withValues(alpha: 0.9),
-                fontWeight: FontWeight.w600,
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l10n.patrolRoundRouteHeading,
+                    style: theme.titleSmall?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (_isWithinOverdueGracePeriod(data))
+                  _StatusChip(
+                    label: l10n.patrolRoundOverdue,
+                    color: const Color(0xFFFBBF24),
+                    filled: true,
+                  ),
+              ],
             ),
             const SizedBox(height: 12),
             if (data.checkPoints.isEmpty)
@@ -683,1122 +1848,36 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
               )
             else
               ...data.checkPoints.map(
-                (p) => Padding(
+                (p) {
+                  final showOverdueNote =
+                      _isWithinOverdueGracePeriod(data) && !_isCheckpointScanned(p);
+                  return Padding(
+                  key: ValueKey(
+                    'route-${p.id}-${p.verified}-'
+                    '${p.latitude}-${p.longitude}-${p.name}-$_reloadToken',
+                  ),
                   padding: const EdgeInsets.only(bottom: 10),
                   child: _RoutePointCard(
                     theme: theme,
                     l10n: l10n,
                     point: p,
-                    scanned: _scannedCheckpointIds.contains(p.id),
+                    scanned: _isCheckpointScanned(p),
                     qrBusy: _scanningCheckpointId == p.id,
-                    onQrTap: p.qrImage != null && p.qrImage!.trim().isNotEmpty
-                        ? () => unawaited(_onQrScan(p, data.round.id))
+                    overdueNoteBusy: _overdueNoteSubmittingId == p.id,
+                    onOverdueNote: showOverdueNote
+                        ? () {
+                            final current = _active;
+                            if (current == null) return;
+                            unawaited(_onOverduePointNote(current, p));
+                          }
                         : null,
                   ),
-                ),
+                );
+                },
               ),
           ],
         ],
       ),
     );
-  }
-}
-
-/// Thanh kéo: vuốt nhẹ (hoặc flick nhỏ) lên/xuống là đóng sheet.
-class _SheetVerticalDismissHandle extends StatefulWidget {
-  const _SheetVerticalDismissHandle({required this.onDismiss});
-
-  final VoidCallback onDismiss;
-
-  @override
-  State<_SheetVerticalDismissHandle> createState() =>
-      _SheetVerticalDismissHandleState();
-}
-
-class _SheetVerticalDismissHandleState extends State<_SheetVerticalDismissHandle> {
-  double _dragY = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onVerticalDragStart: (_) => _dragY = 0,
-      onVerticalDragUpdate: (d) => _dragY += d.delta.dy,
-      onVerticalDragEnd: (details) {
-        final v = details.primaryVelocity ?? 0;
-        if (v.abs() > 85 || _dragY.abs() > 14) {
-          widget.onDismiss();
-        }
-      },
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 10, 0, 6),
-        child: Center(
-          child: Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.28),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ScheduleCard extends StatelessWidget {
-  const _ScheduleCard({
-    required this.theme,
-    required this.l10n,
-    required this.loading,
-    required this.data,
-    required this.onReload,
-    this.failure,
-    this.failureMessage,
-  });
-
-  final TextTheme theme;
-  final AppLocalizations l10n;
-  final bool loading;
-  final ActivePatrolRound? data;
-  final ApiFailure? failure;
-  final String? failureMessage;
-  final VoidCallback onReload;
-
-  @override
-  Widget build(BuildContext context) {
-    final schedule = data?.schedule;
-    final points = data?.checkPoints;
-    final n = points?.length ?? 0;
-    final withGps = points?.where((p) => p.hasCoordinates).length ?? 0;
-    final withQr = points
-            ?.where(
-              (p) => p.qrImage != null && p.qrImage!.trim().isNotEmpty,
-            )
-            .length ??
-        0;
-
-    final window = schedule != null
-        ? _formatShiftWindow(schedule.startTime, schedule.endTime)
-        : null;
-    final effective = schedule != null
-        ? _formatEffectiveRange(
-            schedule.startEffectiveDate,
-            schedule.endEffectiveDate,
-          )
-        : null;
-    final freq = schedule?.frequencyMinutes;
-    final roundMin = schedule?.roundMinutes;
-    final scheduleShowsName =
-        schedule != null && schedule.name.trim().isNotEmpty;
-
-    return _PatrolPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.calendar_month_rounded,
-                size: 20,
-                color: Color(0xFF6EE7B7),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  scheduleShowsName
-                      ? schedule.name
-                      : l10n.patrolRoundScheduleHeading,
-                  style: scheduleShowsName
-                      ? theme.titleMedium?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        )
-                      : theme.titleSmall?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                ),
-              ),
-              if (schedule != null)
-                _StatusChip(
-                  label: schedule.active
-                      ? l10n.patrolRoundScheduleActive
-                      : l10n.patrolRoundScheduleInactive,
-                  color: schedule.active
-                      ? const Color(0xFF34D399)
-                      : Colors.white54,
-                  filled: schedule.active,
-                ),
-              const SizedBox(width: 4),
-              IconButton.filledTonal(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 40,
-                  minHeight: 40,
-                ),
-                onPressed: loading ? null : onReload,
-                style: IconButton.styleFrom(
-                  backgroundColor:
-                      const Color(0xFF34D399).withValues(alpha: 0.18),
-                  foregroundColor: const Color(0xFF34D399),
-                ),
-                tooltip: l10n.patrolRoundReload,
-                icon: loading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Color(0xFF34D399),
-                        ),
-                      )
-                    : const Icon(Icons.refresh_rounded, size: 22),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (loading)
-            Text(
-              l10n.patrolRoundLoading,
-              style: theme.bodyMedium?.copyWith(
-                color: Colors.white.withValues(alpha: 0.6),
-              ),
-            )
-          else if (failure != null)
-            Text(
-              failureMessage ?? l10n.patrolRoundLoadFailed,
-              style: theme.bodyMedium?.copyWith(
-                color: Colors.orangeAccent.withValues(alpha: 0.9),
-                height: 1.4,
-              ),
-            )
-          else if (data == null)
-            Text(
-              l10n.patrolRoundEmpty,
-              style: theme.bodyMedium?.copyWith(
-                color: Colors.white.withValues(alpha: 0.65),
-                height: 1.5,
-              ),
-            )
-          else ...[
-            _InfoRow(
-              theme: theme,
-              icon: Icons.schedule_rounded,
-              label: l10n.patrolRoundShiftWindow,
-              value: window!,
-            ),
-            if (effective!.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              _InfoRow(
-                theme: theme,
-                icon: Icons.date_range_rounded,
-                label: l10n.patrolRoundEffective,
-                value: effective,
-              ),
-            ],
-            if (freq != null || roundMin != null) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  if (freq != null)
-                    Expanded(
-                      child: _MiniStat(
-                        theme: theme,
-                        icon: Icons.repeat_rounded,
-                        label: l10n.patrolRoundFrequency,
-                        value: l10n.patrolRoundMinutes(freq),
-                      ),
-                    ),
-                  if (freq != null && roundMin != null)
-                    const SizedBox(width: 10),
-                  if (roundMin != null)
-                    Expanded(
-                      child: _MiniStat(
-                        theme: theme,
-                        icon: Icons.timelapse_rounded,
-                        label: l10n.patrolRoundDuration,
-                        value: l10n.patrolRoundMinutes(roundMin),
-                      ),
-                    ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 6),
-            _InfoRow(
-              theme: theme,
-              icon: Icons.place_outlined,
-              label: l10n.patrolRoundSiteId,
-              value: data!.schedule.siteName ?? '',
-            ),
-            if (data!.schedule.siteAddress != null &&
-                data!.schedule.siteAddress!.trim().isNotEmpty) ...[
-              const SizedBox(height: 8),
-              _InfoRow(
-                theme: theme,
-                icon: Icons.location_on_outlined,
-                label: l10n.patrolPointSiteAddressLabel,
-                value: data!.schedule.siteAddress!.trim(),
-              ),
-            ],
-            if (data!.schedule.totalCheckPoints != null) ...[
-              const SizedBox(height: 8),
-              _InfoRow(
-                theme: theme,
-                icon: Icons.flag_outlined,
-                label: l10n.patrolRoundScheduleTotalCheckPoints,
-                value: '${data!.schedule.totalCheckPoints}',
-              ),
-            ],
-            const SizedBox(height: 14),
-            Divider(color: Colors.white.withValues(alpha: 0.08), height: 1),
-            const SizedBox(height: 12),
-            Text(
-              l10n.patrolRoundCountSummary(n),
-              style: theme.labelLarge?.copyWith(
-                color: Colors.white.withValues(alpha: 0.92),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            if (n > 0) ...[
-              const SizedBox(height: 4),
-              Text(
-                '${l10n.patrolRoundWithGpsSummary(withGps)} · '
-                '${l10n.patrolRoundWithQrSummary(withQr)}',
-                style: theme.bodySmall?.copyWith(
-                  color: const Color(0xFF6EE7B7).withValues(alpha: 0.85),
-                ),
-              ),
-            ],
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _RoundCard extends StatelessWidget {
-  const _RoundCard({
-    required this.theme,
-    required this.l10n,
-    required this.round,
-    required this.statusLabel,
-    required this.statusColor,
-    required this.locale,
-  });
-
-  final TextTheme theme;
-  final AppLocalizations l10n;
-  final PatrolRound round;
-  final String statusLabel;
-  final Color statusColor;
-  final Locale locale;
-
-  @override
-  Widget build(BuildContext context) {
-    final assignee = round.assignedName?.trim();
-
-    return _PatrolPanel(
-      accent: statusColor.withValues(alpha: 0.12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.route_rounded,
-                size: 20,
-                color: statusColor,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        l10n.patrolRoundRoundHeading,
-                        style: theme.titleSmall?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '#${round.id}',
-                      style: theme.headlineSmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.visible,
-                      softWrap: false,
-                    ),
-                  ],
-                ),
-              ),
-              _StatusChip(
-                label: statusLabel,
-                color: statusColor,
-                filled: true,
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _InfoRow(
-            theme: theme,
-            icon: Icons.play_circle_outline_rounded,
-            label: l10n.patrolRoundExpectedStart,
-            value: _formatIsoDateTime(round.expectedStartTime, locale),
-          ),
-          const SizedBox(height: 8),
-          _InfoRow(
-            theme: theme,
-            icon: Icons.stop_circle_outlined,
-            label: l10n.patrolRoundExpectedEnd,
-            value: _formatIsoDateTime(round.expectedEndTime, locale),
-          ),
-          if (_isPatrolRoundOverdue(round)) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(
-                  Icons.warning_amber_rounded,
-                  size: 18,
-                  color: Color(0xFFEF4444),
-                ),
-                const SizedBox(width: 8),
-                _StatusChip(
-                  label: l10n.patrolRoundOverdue,
-                  color: const Color(0xFFEF4444),
-                  filled: true,
-                ),
-              ],
-            ),
-          ],
-          if (assignee != null && assignee.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _InfoRow(
-              theme: theme,
-              icon: Icons.person_outline_rounded,
-              label: l10n.patrolRoundAssigned,
-              value: assignee,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-enum _QrPhotoChoice { cancel, skip, takePhoto }
-
-class _QrScanProximityStatus {
-  const _QrScanProximityStatus({
-    required this.headline,
-    this.snapshot,
-    this.baroPending = false,
-  });
-
-  final String headline;
-  final CheckPointProximitySnapshot? snapshot;
-  final bool baroPending;
-}
-
-_QrScanProximityStatus _qrScanProximityStatus({
-  required AppLocalizations l10n,
-  required CheckPointProximityResult proximity,
-  CheckPointProximitySnapshot? snapshot,
-}) {
-  if (snapshot == null) {
-    return _QrScanProximityStatus(
-      headline: l10n.patrolRoundQrWaitingPosition,
-    );
-  }
-
-  final radius = snapshot.allowedRadiusM.toStringAsFixed(0);
-
-  switch (proximity.issue) {
-    case CheckPointProximityIssue.baroAltitudePending:
-      return _QrScanProximityStatus(
-        headline: l10n.patrolRoundQrWaitingBaro,
-        snapshot: snapshot,
-        baroPending: true,
-      );
-    case CheckPointProximityIssue.baroAltitudeOutOfRange:
-    case CheckPointProximityIssue.gpsAltitudeOutOfRange:
-      final dist = proximity.distanceM?.toStringAsFixed(0) ?? '—';
-      return _QrScanProximityStatus(
-        headline: l10n.patrolRoundQrAltitudeOutOfRange(dist, radius),
-        snapshot: snapshot,
-      );
-    case CheckPointProximityIssue.horizontalOutOfRange:
-      final dist = (snapshot.slantRangeM ?? snapshot.horizontalM)
-          .toStringAsFixed(0);
-      return _QrScanProximityStatus(
-        headline: l10n.patrolRoundQrOutOfRange(dist, radius),
-        snapshot: snapshot,
-      );
-    case CheckPointProximityIssue.noCheckpointCoordinates:
-    case null:
-      return _QrScanProximityStatus(
-        headline: l10n.patrolRoundQrWaitingPosition,
-        snapshot: snapshot,
-      );
-  }
-}
-
-String _qrFmtCoord(double value) => value.toStringAsFixed(6);
-
-String _qrFmtDeltaM(double signedM) => signedM.abs().toStringAsFixed(1);
-
-String _qrFmtDistanceToCheckpointM(CheckPointProximitySnapshot s) {
-  final slant = s.slantRangeM;
-  final distanceM = (slant != null && slant.isFinite) ? slant : s.horizontalM;
-  return distanceM.toStringAsFixed(1);
-}
-
-String _qrNorthMoveDirection(AppLocalizations l10n, double signedNorthM) {
-  if (signedNorthM.abs() < 0.05) return l10n.patrolRoundQrMoveOnTarget;
-  return signedNorthM > 0
-      ? l10n.patrolRoundQrMoveNorth
-      : l10n.patrolRoundQrMoveSouth;
-}
-
-String _qrEastMoveDirection(AppLocalizations l10n, double signedEastM) {
-  if (signedEastM.abs() < 0.05) return l10n.patrolRoundQrMoveOnTarget;
-  return signedEastM > 0
-      ? l10n.patrolRoundQrMoveEast
-      : l10n.patrolRoundQrMoveWest;
-}
-
-String _qrAltMoveDirection(AppLocalizations l10n, double signedAltDeltaM) {
-  if (signedAltDeltaM.abs() < 0.05) return l10n.patrolRoundQrMoveOnTarget;
-  return signedAltDeltaM > 0
-      ? l10n.patrolRoundQrMoveDown
-      : l10n.patrolRoundQrMoveUp;
-}
-
-class _QrProximityDetailPanel extends StatelessWidget {
-  const _QrProximityDetailPanel({
-    required this.l10n,
-    required this.snapshot,
-    this.baroPending = false,
-  });
-
-  final AppLocalizations l10n;
-  final CheckPointProximitySnapshot snapshot;
-  final bool baroPending;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = snapshot;
-    final altKind =
-        s.usesBaroAltitude ? l10n.patrolRoundQrAltKindBaro : l10n.patrolRoundQrAltKindGps;
-    final radius = s.allowedRadiusM.toStringAsFixed(0);
-    final muted = Colors.white.withValues(alpha: 0.72);
-    final lineStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: muted,
-          height: 1.45,
-          fontFeatures: const [FontFeature.tabularFigures()],
-        );
-
-    String coordsLine({
-      required bool checkpoint,
-      required double lat,
-      required double lng,
-      required double? altitude,
-    }) {
-      final latStr = _qrFmtCoord(lat);
-      final lngStr = _qrFmtCoord(lng);
-      if (altitude != null && altitude.isFinite) {
-        final altStr = altitude.toStringAsFixed(1);
-        return checkpoint
-            ? l10n.patrolRoundQrCheckpointCoordsWithAlt(
-                latStr,
-                lngStr,
-                altStr,
-                altKind,
-              )
-            : l10n.patrolRoundQrDeviceCoordsWithAlt(
-                latStr,
-                lngStr,
-                altStr,
-                altKind,
-              );
-      }
-      if (!checkpoint && baroPending && s.usesBaroAltitude) {
-        return l10n.patrolRoundQrDeviceCoordsWithAlt(
-          latStr,
-          lngStr,
-          l10n.patrolRoundQrAltPending,
-          altKind,
-        );
-      }
-      return checkpoint
-          ? l10n.patrolRoundQrCheckpointCoords(latStr, lngStr)
-          : l10n.patrolRoundQrDeviceCoords(latStr, lngStr);
-    }
-
-    final lines = <String>[
-      coordsLine(
-        checkpoint: true,
-        lat: s.checkpointLat,
-        lng: s.checkpointLng,
-        altitude: s.checkpointAltitude,
-      ),
-      coordsLine(
-        checkpoint: false,
-        lat: s.deviceLat,
-        lng: s.deviceLng,
-        altitude: s.deviceAltitude,
-      ),
-      l10n.patrolRoundQrDeltaNorth(
-        _qrFmtDeltaM(s.signedNorthToCheckpointM),
-        _qrNorthMoveDirection(l10n, s.signedNorthToCheckpointM),
-      ),
-      l10n.patrolRoundQrDeltaEast(
-        _qrFmtDeltaM(s.signedEastToCheckpointM),
-        _qrEastMoveDirection(l10n, s.signedEastToCheckpointM),
-      ),
-      l10n.patrolRoundQrDeltaHorizontal(
-        _qrFmtDistanceToCheckpointM(s),
-        radius,
-      ),
-    ];
-
-    final horizontalAcc = s.horizontalAccuracyM;
-    if (horizontalAcc != null) {
-      lines.add(
-        l10n.patrolRoundQrGpsAccuracy(horizontalAcc.toStringAsFixed(0)),
-      );
-    }
-
-    final gpsAltAcc = s.gpsAltitudeAccuracyM;
-    if (gpsAltAcc != null && !s.usesBaroAltitude) {
-      lines.add(
-        l10n.patrolRoundQrGpsAltitudeAccuracy(gpsAltAcc.toStringAsFixed(0)),
-      );
-    }
-
-    final altDelta = s.signedAltitudeDeltaM;
-    if (s.checkpointAltitude != null &&
-        altDelta != null &&
-        altDelta.isFinite) {
-      lines.add(
-        '${l10n.patrolRoundQrDeltaAltitude(_qrFmtDeltaM(altDelta), radius)} · ${_qrAltMoveDirection(l10n, altDelta)}',
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (final line in lines)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(line, style: lineStyle),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RoutePointCard extends StatelessWidget {
-  const _RoutePointCard({
-    required this.theme,
-    required this.l10n,
-    required this.point,
-    this.scanned = false,
-    this.qrBusy = false,
-    this.onQrTap,
-  });
-
-  final TextTheme theme;
-  final AppLocalizations l10n;
-  final CheckPoint point;
-  final bool scanned;
-  final bool qrBusy;
-  final VoidCallback? onQrTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final qrUrl = resolveApiMediaUrl(point.qrImage);
-    final qrPreview = _checkPointQrPreview(qrUrl, size: 56);
-    final hasNfc = point.nfc != null && point.nfc!.trim().isNotEmpty;
-    final isScanned = scanned || point.verified == true;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-      decoration: BoxDecoration(
-        color: PatrolShellColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF34D399).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.1),
-                  ),
-                ),
-                child: Text(
-                  '${point.sequenceOrder}',
-                  style: theme.titleSmall?.copyWith(
-                    color: const Color(0xFF6EE7B7),
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      point.name,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.titleSmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        height: 1.25,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (qrPreview != null) ...[
-                const SizedBox(width: 8),
-                qrPreview,
-              ],
-            ],
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              _FeatureChip(
-                theme: theme,
-                label: isScanned
-                    ? l10n.patrolRoundChipScanned
-                    : l10n.patrolRoundChipNotScanned,
-                icon: isScanned
-                    ? Icons.check_circle_rounded
-                    : Icons.radio_button_unchecked_rounded,
-                color: isScanned
-                    ? const Color(0xFF34D399)
-                    : Colors.white54,
-              ),
-              if (qrUrl != null)
-                _FeatureChip(
-                  theme: theme,
-                  label: l10n.patrolRoundChipQr,
-                  icon: qrBusy
-                      ? Icons.hourglass_top_rounded
-                      : Icons.qr_code_2_rounded,
-                  color: const Color(0xFF6EE7B7),
-                  onTap: qrBusy ? null : onQrTap,
-                ),
-              if (hasNfc)
-                _FeatureChip(
-                  theme: theme,
-                  label: l10n.patrolRoundChipNfc,
-                  icon: Icons.nfc_rounded,
-                  color: Colors.white70,
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PatrolPanel extends StatelessWidget {
-  const _PatrolPanel({
-    required this.child,
-    this.accent,
-  });
-
-  final Widget child;
-  final Color? accent;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: accent ?? PatrolShellColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({
-    required this.label,
-    required this.color,
-    this.filled = false,
-  });
-
-  final String label;
-  final Color color;
-  final bool filled;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: filled ? color.withValues(alpha: 0.2) : Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.55)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.2,
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.theme,
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final TextTheme theme;
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 18, color: Colors.white.withValues(alpha: 0.45)),
-        const SizedBox(width: 8),
-        Expanded(
-          child: RichText(
-            text: TextSpan(
-              style: theme.bodySmall?.copyWith(
-                color: Colors.white.withValues(alpha: 0.55),
-                height: 1.35,
-              ),
-              children: [
-                TextSpan(
-                  text: '$label: ',
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
-                TextSpan(
-                  text: value,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.88),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _MiniStat extends StatelessWidget {
-  const _MiniStat({
-    required this.theme,
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final TextTheme theme;
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: const Color(0xFF6EE7B7)),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.labelSmall?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.5),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: theme.labelLarge?.copyWith(
-              color: Colors.white.withValues(alpha: 0.9),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FeatureChip extends StatelessWidget {
-  const _FeatureChip({
-    required this.theme,
-    required this.label,
-    required this.icon,
-    required this.color,
-    this.onTap,
-  });
-
-  final TextTheme theme;
-  final String label;
-  final IconData icon;
-  final Color color;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final child = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: color),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: theme.labelSmall?.copyWith(
-              color: color,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (onTap == null) return child;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: child,
-      ),
-    );
-  }
-}
-
-String _formatShiftWindow(String? start, String? end) {
-  final s = _trimTime(start);
-  final e = _trimTime(end);
-  if (s.isEmpty && e.isEmpty) return '—';
-  if (s.isEmpty) return e;
-  if (e.isEmpty) return s;
-  return '$s – $e';
-}
-
-String _trimTime(String? raw) {
-  final t = raw?.trim();
-  if (t == null || t.isEmpty) return '';
-  final parts = t.split(':');
-  if (parts.length >= 2) {
-    return '${parts[0]}:${parts[1]}';
-  }
-  return t;
-}
-
-String _formatEffectiveRange(String? start, String? end) {
-  final s = _formatDateOnly(start);
-  final e = _formatDateOnly(end);
-  if (s.isEmpty && e.isEmpty) return '';
-  if (s.isEmpty) return e;
-  if (e.isEmpty) return s;
-  return '$s – $e';
-}
-
-String _formatDateOnly(String? raw) {
-  final t = raw?.trim();
-  if (t == null || t.isEmpty) return '';
-  final datePart = t.contains('T') ? t.split('T').first : t;
-  final parts = datePart.split('-');
-  if (parts.length == 3) {
-    return '${parts[2]}/${parts[1]}/${parts[0]}';
-  }
-  return datePart;
-}
-
-bool _isPatrolRoundOverdue(PatrolRound round) {
-  final endIso = round.expectedEndTime?.trim();
-  if (endIso == null || endIso.isEmpty) return false;
-
-  final status = round.status.toUpperCase();
-  if (status == 'COMPLETED' ||
-      status == 'DONE' ||
-      status == 'CANCELED') {
-    return false;
-  }
-
-  try {
-    return DateTime.now().isAfter(DateTime.parse(endIso).toLocal());
-  } catch (_) {
-    return false;
-  }
-}
-
-String _formatIsoDateTime(String? iso, Locale locale) {
-  final t = iso?.trim();
-  if (t == null || t.isEmpty) return '—';
-  try {
-    final dt = DateTime.parse(t).toLocal();
-    final dd = dt.day.toString().padLeft(2, '0');
-    final mm = dt.month.toString().padLeft(2, '0');
-    final yyyy = dt.year.toString();
-    final hh = dt.hour.toString().padLeft(2, '0');
-    final min = dt.minute.toString().padLeft(2, '0');
-    return '$dd/$mm/$yyyy $hh:$min';
-  } catch (_) {
-    return t;
-  }
-}
-
-Widget? _checkPointQrPreview(String? qrImage, {double size = 88}) {
-  final raw = qrImage?.trim();
-  if (raw == null || raw.isEmpty) return null;
-
-  Widget framed(Widget child) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        width: size,
-        height: size,
-        color: Colors.white,
-        alignment: Alignment.center,
-        child: child,
-      ),
-    );
-  }
-
-  if (raw.startsWith('http://') || raw.startsWith('https://')) {
-    return framed(
-      Image.network(
-        raw,
-        width: size,
-        height: size,
-        fit: BoxFit.contain,
-        errorBuilder: (_, _, _) => Icon(
-          Icons.broken_image_outlined,
-          size: size * 0.35,
-          color: Colors.black38,
-        ),
-      ),
-    );
-  }
-
-  String? b64Payload;
-  if (raw.startsWith('data:image')) {
-    final comma = raw.indexOf(',');
-    if (comma != -1) {
-      b64Payload = raw.substring(comma + 1);
-    }
-  } else {
-    b64Payload = raw;
-  }
-
-  if (b64Payload == null || b64Payload.isEmpty) return null;
-
-  try {
-    final bytes = base64Decode(b64Payload.replaceAll(RegExp(r'\s'), ''));
-    return framed(
-      Image.memory(
-        bytes,
-        width: size,
-        height: size,
-        fit: BoxFit.contain,
-      ),
-    );
-  } catch (_) {
-    return null;
   }
 }

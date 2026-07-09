@@ -1,7 +1,15 @@
 abstract final class PatrolApiEndpoints {
   PatrolApiEndpoints._();
 
-  static const String accountsLoginPath = '/api/accounts/login';
-  static const String accountsMePath = '/api/accounts/me';
-  static const String accountsRefreshPath = '/api/accounts/refreshToken';
+  static const String accountsLoginPath = '/accounts/login';
+  static const String accountsRefreshPath = '/accounts/refresh';
+  static const String accountsMePath = '/accounts/me';
+  static const String accountsAvatarPath = '/accounts/avatar';
+  static const String accountsUserInfoPath = '/accounts/user-info';
+  static const String sitesAccessiblePath = '/sites/accessible';
+  static const String issuesPath = '/issues';
+  static const String issuesMyPostedViewPath = '/issues/my-posted-view';
+  static String issuesAssignmentsPath(int issueId) =>
+      '/issues/$issueId/assignments';
+  static const String patrolRoundsSearchViewPath = '/patrol-rounds/search-view';
 }

@@ -22,13 +22,17 @@
   "submit": "SIGN IN",
   "submitLoading": "VERIFYING...",
   "locationChecking": "Checking location...",
-  "locationTitle": "GPS & location required",
-  "locationBody": "Patrol requires location services on and location permission before sign-in.",
+  "locationTitle": "GPS & always-on location",
+  "locationBody": "Turn on location services and choose \"Always allow\" so patrol tracking works when the screen is off.",
   "locationServiceOff": "Location services (GPS) are turned off.",
   "locationPermissionDenied": "Location permission was not granted.",
+  "locationPermissionBackground": "Only \"While using the app\" was granted. Choose \"Always allow\" for background patrol.",
   "locationPermissionForever": "Location permission permanently denied. Open app settings to enable.",
+  "notificationPermissionDenied": "Notifications are disabled. Enable them in app settings to get next-round alerts when the app is closed.",
+  "dndPolicyPermissionDenied": "Do Not Disturb access was not granted. Allow SPS Patrol to modify notification policy so next-round popups can break through silent mode.",
   "openLocationSettings": "Open location settings",
   "openAppSettings": "Open app settings",
+  "openDndPolicySettings": "Open Do Not Disturb settings",
   "retry": "Try again",
   "grantPermission": "Grant permission",
   "toastApiNotConfigured": "API URL not configured.",
@@ -50,17 +54,47 @@
   "homeEmptyMenus": "No operations assigned.",
   "homeEmergencySupport": "EMERGENCY SUPPORT",
   "historyTitle": "Patrol history",
+  "historySubtitle": "List of past patrol rounds",
+  "historyEmpty": "No patrol history yet.",
   "historyInDevelopment": "This feature is under development.",
+  "historyColWindow": "Time window",
+  "historyColAssignee": "Patrol officer",
+  "historyColAssignees": "Assignees",
+  "historyColSite": "Area",
+  "historyColUpdated": "Updated at",
+  "historyStatusCompleted": "Completed",
+  "historyStatusMissed": "Missed",
+  "historyStatusInProgress": "In progress",
+  "historyStatusPending": "Pending",
+  "historyStatusCancelled": "Cancelled",
+  "historyRoundFallback": "Round #{id}",
+  "@historyRoundFallback": {
+    "placeholders": {
+      "id": { "type": "int" }
+    }
+  },
+  "historyShowingRange": "SHOWING {from}-{to} / {total} RECORDS",
+  "@historyShowingRange": {
+    "placeholders": {
+      "from": { "type": "int" },
+      "to": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
   "labelEmail": "Email",
   "profileAccountHeading": "Account",
   "profileFieldAccountId": "Account ID",
   "profileFieldPhone": "Phone",
   "profileFieldAddress": "Address",
+  "profileFieldNote": "Note",
   "profileFieldBranch": "Branch",
   "profileFieldMerchant": "Merchant",
   "profileManagerHeading": "Manager",
   "profileFieldFullName": "Name",
   "profileFieldManagerPhone": "Manager phone",
+  "profileLanguageHeading": "Language",
+  "profileSave": "Save",
+  "profileSaveSuccess": "Profile updated.",
   "signOut": "Sign out",
   "signOutFailed": "Sign out failed.",
   "signOutSessionInvalid": "Session invalid or expired.",
@@ -74,6 +108,11 @@
   "patrolRoundUnauthorized": "Session expired or forbidden.",
   "patrolRoundEmpty": "No active patrol round right now.",
   "patrolRoundScheduleHeading": "Schedule",
+  "patrolRoundMap": "Route map",
+  "patrolRoundMapYou": "You",
+  "patrolRoundMapSwipeDismiss": "Swipe up or down to close",
+  "patrolRoundMapCheckpointScanned": "Scanned checkpoint",
+  "patrolRoundMapCheckpointPending": "Pending checkpoint",
   "patrolRoundRoundHeading": "Patrol round",
   "patrolRoundRouteHeading": "Route",
   "patrolRoundShiftWindow": "Time window",
@@ -91,6 +130,33 @@
   "patrolRoundExpectedStart": "Expected start",
   "patrolRoundExpectedEnd": "Expected end",
   "patrolRoundOverdue": "Overdue",
+  "patrolRoundOverdueNoteTooltip": "Report objective delay",
+  "patrolRoundOverdueNoteTitle": "Objective delay",
+  "patrolRoundOverdueNoteMessage": "Enter why this checkpoint could not be completed on time. The checkpoint will be marked as scanned.",
+  "patrolRoundOverdueNoteHint": "e.g. elevator out of service, area blocked…",
+  "patrolRoundOverdueNoteSubmit": "Submit",
+  "patrolRoundOverdueNotePrefix": "[Objective delay] ",
+  "patrolRoundOverdueNoteEmpty": "Please enter a reason.",
+  "patrolRoundOverdueNoteSuccess": "Checkpoint recorded with delay reason.",
+  "patrolRoundOverdueNoteFailed": "Could not save the patrol log.",
+  "patrolRoundOverdueNoteNoGps": "GPS unavailable and checkpoint has no coordinates.",
+  "patrolRoundScanQr": "Scan checkpoint QR",
+  "patrolRoundQrNotFound": "No checkpoint on this route matches that QR code.",
+  "patrolRoundQrAlreadyScanned": "This checkpoint was already scanned.",
+  "patrolRoundQrCameraDenied": "Camera permission is required to scan QR codes.",
+  "patrolRoundAutoScan": "Auto scan GPS",
+  "patrolRoundAutoScanBluetooth": "Auto scan Bluetooth",
+  "patrolRoundAutoScanBluetoothNone": "No checkpoints with Bluetooth left to scan on this route.",
+  "patrolRoundBluetoothWaiting": "Searching for Bluetooth beacon…",
+  "patrolRoundBluetoothScanFailed": "Could not read a nearby Bluetooth beacon.",
+  "patrolRoundAutoScanNone": "No checkpoints left to scan on this route.",
+  "patrolRoundAutoScanComplete": "All checkpoints on this route have been scanned.",
+  "patrolRoundResumeBackgroundScan": "Background scan",
+  "patrolRoundPauseBackgroundScan": "Pause background scan",
+  "patrolRoundBackgroundScanResumed": "Background scanning resumed.",
+  "patrolRoundBackgroundScanPaused": "Background scanning paused.",
+  "patrolRoundNfcNotFound": "No checkpoint on this route matches that NFC tag.",
+  "patrolRoundNfcAlreadyScanned": "This checkpoint was already scanned.",
   "patrolRoundAssigned": "Assigned to",
   "patrolRoundSiteId": "Site",
   "patrolRoundScheduleTotalCheckPoints": "Checkpoints on schedule",
@@ -129,21 +195,30 @@
   "patrolRoundChipNoGps": "No GPS",
   "patrolRoundChipQr": "QR",
   "patrolRoundChipNfc": "NFC",
+  "patrolRoundChipBluetooth": "BT",
   "patrolRoundChipScanned": "Scanned",
   "patrolRoundChipNotScanned": "Not scanned",
-  "patrolRoundQrPhotoTitle": "Take a photo?",
-  "patrolRoundQrPhotoMessage": "You can attach a photo to this checkpoint scan.",
+  "patrolRoundQrPhotoTitle": "Take photos?",
+  "patrolRoundQrPhotoMessage": "You can attach one or more photos to this checkpoint scan.",
   "patrolRoundQrPhotoTake": "Take photo",
+  "patrolRoundQrPhotoAddMore": "Add another photo",
+  "patrolRoundQrPhotoDone": "Continue ({count})",
+  "@patrolRoundQrPhotoDone": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "patrolRoundQrPhotoRemove": "Remove photo",
   "patrolRoundQrPhotoSkip": "Continue without photo",
   "patrolRoundCancel": "Cancel",
-  "patrolRoundQrOutOfRange": "You are about {distance} m from the checkpoint (allowed {radius} m). Move closer to the saved location.",
+  "patrolRoundQrOutOfRange": "Move about {distance} m closer to enter the allowed zone (radius {radius} m).",
   "@patrolRoundQrOutOfRange": {
     "placeholders": {
       "distance": { "type": "String" },
       "radius": { "type": "String" }
     }
   },
-  "patrolRoundQrAltitudeOutOfRange": "Altitude does not match the saved checkpoint (difference {distance} m, allowed {radius} m).",
+  "patrolRoundQrAltitudeOutOfRange": "Adjust altitude by about {distance} m (radius {radius} m).",
   "@patrolRoundQrAltitudeOutOfRange": {
     "placeholders": {
       "distance": { "type": "String" },
@@ -215,7 +290,7 @@
       "direction": { "type": "String" }
     }
   },
-  "patrolRoundQrDeltaHorizontal": "Distance to checkpoint: {delta} m (max {radius} m)",
+  "patrolRoundQrDeltaHorizontal": "Move closer by: {delta} m (radius {radius} m)",
   "@patrolRoundQrDeltaHorizontal": {
     "placeholders": {
       "delta": { "type": "String" },
@@ -234,7 +309,7 @@
       "accuracy": { "type": "String" }
     }
   },
-  "patrolRoundQrDeltaAltitude": "Δ altitude: {delta} m (max {radius} m)",
+  "patrolRoundQrDeltaAltitude": "Adjust altitude by: {delta} m (radius {radius} m)",
   "@patrolRoundQrDeltaAltitude": {
     "placeholders": {
       "delta": { "type": "String" },
@@ -248,6 +323,34 @@
   "patrolRoundQrMoveUp": "up",
   "patrolRoundQrMoveDown": "down",
   "patrolRoundQrMoveOnTarget": "on target",
+  "patrolProximityTtsHint": "Distance to checkpoint {distance} meters. {moves}",
+  "@patrolProximityTtsHint": {
+    "placeholders": {
+      "distance": { "type": "String" },
+      "moves": { "type": "String" }
+    }
+  },
+  "patrolProximityTtsNearCheckpoint": "You are near the checkpoint, {distance} meters away",
+  "@patrolProximityTtsNearCheckpoint": {
+    "placeholders": {
+      "distance": { "type": "String" }
+    }
+  },
+  "patrolProximityTtsMove": "move {direction} {distance} meters",
+  "@patrolProximityTtsMove": {
+    "placeholders": {
+      "direction": { "type": "String" },
+      "distance": { "type": "String" }
+    }
+  },
+  "patrolProximityTtsMoveVertical": "move {direction} {distance} meters",
+  "@patrolProximityTtsMoveVertical": {
+    "placeholders": {
+      "direction": { "type": "String" },
+      "distance": { "type": "String" }
+    }
+  },
+  "patrolProximityTtsMoveSeparator": ", ",
   "patrolRoundSubtitleActive": "{scheduleName} · {statusLabel}",
   "@patrolRoundSubtitleActive": {
     "placeholders": {
@@ -275,6 +378,7 @@
   "patrolPointGpsServiceOff": "Location services are off.",
   "patrolPointGpsDenied": "Location permission denied.",
   "patrolPointGpsError": "Could not read position.",
+  "patrolPointGpsMocked": "Mock location detected. Disable fake GPS to assign coordinates.",
   "patrolPointCountSummary": "{count} points total",
   "@patrolPointCountSummary": {
     "placeholders": {
@@ -317,15 +421,315 @@
       }
     }
   },
+  "patrolPointCheckpointCoordsLabel": "Coordinates",
   "patrolPointInactive": "Inactive",
   "patrolPointUpdateCoordsTooltip": "Send current GPS to this point",
   "patrolPointUpdateNeedGps": "Could not get a GPS fix — enable location services and grant permission.",
   "patrolPointUpdateSuccess": "Coordinates updated.",
   "patrolPointUpdateFailed": "Could not update coordinates.",
   "patrolPointSiteAddressLabel": "Address",
+  "patrolPointSiteIdLabel": "Site ID",
+  "patrolPointBeaconUuidLabel": "Beacon UUID",
+  "patrolPointBeaconProtocolLabel": "Beacon programming protocol",
+  "patrolPointBeaconProtocolHm10": "HM-10 / FFE0 (AT commands)",
+  "patrolPointBeaconProtocolHm10Hint": "TQ clones, UART service FFE0 · char FFE1",
+  "patrolPointBeaconProtocolNordic": "Nordic nRF52 OEM",
+  "patrolPointBeaconProtocolNordicHint": "21-byte write to advertisement content (7650/7651)",
+  "patrolPointBeaconProtocolJoyway": "Joyway",
+  "patrolPointBeaconProtocolJoywayHint": "Joyway JW1404 — BLE scan, pick beacon, program via UART (hold config button if connect fails)",
+  "patrolPointBeaconProtocolFeasycom": "Feasycom (FeasyBeacon)",
+  "patrolPointBeaconProtocolMinew": "Minew (mBeacon)",
+  "patrolPointBeaconProtocolEddystone": "Eddystone-GATT (FEAA)",
+  "patrolPointBeaconProtocolComingSoon": "Requires vendor SDK — not available in this app yet",
+  "patrolPointBeaconProtocolUnsupported": "This protocol is not supported yet. Choose HM-10, Nordic nRF52, or Joyway.",
+  "patrolPointBeaconProtocolUseCheckpoint": "Continue with checkpoint protocol ({protocol})",
+  "@patrolPointBeaconProtocolUseCheckpoint": {
+    "placeholders": {
+      "protocol": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointCompanyBeaconUuidMissing": "Company beacon UUID is not configured.",
+  "patrolPointIBeaconConfigModeRequired": "No configurable beacon found. Press the beacon button to enter config mode, then try again.",
+  "patrolPointIBeaconConfigureFailed": "Could not program the iBeacon. Try again near the device.",
+  "patrolPointBeaconConfiguring": "Programming beacon…",
+  "patrolPointBeaconConfiguringHint": "Keep the phone close to the device. Do not leave the app.",
+  "patrolPointBeaconLoginVerifying": "Connecting to beacon…",
+  "patrolPointBeaconLoginVerifyingHint": "Checking the password. Stay close to the device.",
+  "patrolPointIBeaconWrongPassword": "Beacon password/PIN was rejected. Check the password and try again.",
+  "patrolPointBeaconLoginDialogTitle": "Log in to beacon",
+  "patrolPointBeaconPasswordDialogTitle": "Beacon password (optional)",
+  "patrolPointBeaconPasswordLabel": "Current password / PIN",
+  "patrolPointBeaconPasswordOptionalHint": "Leave empty if not required",
+  "patrolPointBeaconLoginHm10Hint": "HM-10 / FFE0: enter the current 6-digit PIN to unlock config. Leave empty for factory default (000000) or open config.",
+  "patrolPointBeaconLoginJoywayHint": "Joyway: enter the current password to unlock the beacon (max 12 characters). Leave empty for factory default. Press the config button and stay close.",
+  "patrolPointBeaconPasswordHm10Hint": "HM-10 / FFE0: enter the 6-digit PIN if the module requires it. Leave empty for factory default (000000) or open config.",
+  "patrolPointBeaconPasswordJoywayHint": "Joyway: max 12 characters. This password is saved on the beacon (empty = factory default). If the beacon is new, leave empty once; if it already has a password, enter that password first. Press the config button and stay close.",
+  "patrolPointBeaconPasswordNordicHint": "Nordic nRF52: password is not used for GATT programming in this app — leave empty.",
+  "patrolPointBeaconPasswordRemember": "Remember password on this device",
+  "patrolPointBeaconPasswordContinue": "Continue",
+  "patrolPointBeaconConfigurePickerTitle": "Select beacon to program",
+  "patrolPointBeaconConfigurePickerHint": "Only devices advertising iBeacon (UUID/Major/Minor on air). Select a device and tap Connect — keep the phone close (~1 m).",
+  "patrolPointBeaconConfigurePickerManualMacLabel": "MAC from BLE Scanner",
+  "patrolPointBeaconConfigurePickerManualMacUse": "Use MAC",
+  "patrolPointBeaconConfigurePickerScanning": "Scanning Bluetooth (BLE)…",
+  "patrolPointBeaconConfigurePickerScanningCount": "Scanning… {count} device(s) seen",
+  "@patrolPointBeaconConfigurePickerScanningCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerJoywayFailed": "Could not start Joyway scan. Enable Bluetooth, grant Location and Bluetooth permissions, rebuild the app, then tap Rescan.",
+  "patrolPointBeaconConfigurePickerEmpty": "No iBeacon found. Tap Rescan and keep the phone close to the beacon (~1 m).",
+  "patrolPointBeaconConfigurePickerIBeaconSection": "iBeacon (UUID in advert)",
+  "patrolPointBeaconConfigurePickerLikelyJoywaySection": "Possible Joyway (press beacon button if no iBeacon row)",
+  "patrolPointBeaconConfigurePickerLikelyJoywayBadge": "Joyway?",
+  "patrolPointBeaconConfigurePickerOtherDevicesSection": "Other Bluetooth devices",
+  "patrolPointBeaconConfigurePickerConfigModeSection": "Config mode (no UUID on air — press beacon button; UUID shows after programming or in normal broadcast mode)",
+  "patrolPointBeaconConfigurePickerConfigModeBadge": "Config",
+  "patrolPointBeaconConfigurePickerRescan": "Rescan",
+  "patrolPointBeaconConfigurePickerCompanyUuid": "Company beacon UUID",
+  "patrolPointBeaconConfigurePickerOtherIBeacon": "Other iBeacon (different UUID)",
+  "patrolPointBeaconConfigurePickerRecommended": "Recommended",
+  "patrolPointBeaconConfigurePickerOther": "Other nearby devices",
+  "patrolPointBeaconConfigurePickerRssi": "RSSI: {rssi} dBm",
+  "@patrolPointBeaconConfigurePickerRssi": {
+    "placeholders": {
+      "rssi": { "type": "int" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerMacLabel": "MAC: {mac}",
+  "@patrolPointBeaconConfigurePickerMacLabel": {
+    "placeholders": {
+      "mac": { "type": "String" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerUuidLabel": "UUID: {uuid}",
+  "@patrolPointBeaconConfigurePickerUuidLabel": {
+    "placeholders": {
+      "uuid": { "type": "String" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerMajorMinorLabel": "Major/Minor: {major}/{minor}",
+  "@patrolPointBeaconConfigurePickerMajorMinorLabel": {
+    "placeholders": {
+      "major": { "type": "String" },
+      "minor": { "type": "String" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerMacRssiLabel": "MAC: {mac} · {rssi} dBm",
+  "patrolPointBeaconConfigurePickerBroadcastNameLabel": "Broadcast: {name}",
+  "@patrolPointBeaconConfigurePickerBroadcastNameLabel": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "@patrolPointBeaconConfigurePickerMacRssiLabel": {
+    "placeholders": {
+      "mac": { "type": "String" },
+      "rssi": { "type": "int" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerConnectable": "Connectable",
+  "patrolPointBeaconConfigurePickerProtocolLabel": "Protocol: {protocols}",
+  "@patrolPointBeaconConfigurePickerProtocolLabel": {
+    "placeholders": {
+      "protocols": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointBeaconConfigurePickerProtocolUnknown": "Protocol: not detected from advert (choose after connect)",
+  "patrolPointBeaconConfigurePickerServicesLabel": "BLE services: {services}",
+  "@patrolPointBeaconConfigurePickerServicesLabel": {
+    "placeholders": {
+      "services": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointBeaconConfigurePickerCheckpointProtocol": "Checkpoint protocol: {protocol}",
+  "@patrolPointBeaconConfigurePickerCheckpointProtocol": {
+    "placeholders": {
+      "protocol": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointBeaconConfigurePickerConnect": "Connect",
+  "patrolPointBeaconSettingsTitle": "Beacon settings",
+  "patrolPointBeaconSettingsHint": "Edit the values to write to the beacon, then tap Update to program the device and save this checkpoint.",
+  "patrolPointBeaconSettingsDeviceSection": "Selected device",
+  "patrolPointBeaconSettingsDeviceName": "Checkpoint name",
+  "patrolPointBeaconSettingsNameHint": "BLE broadcast name (defaults to this checkpoint)",
+  "patrolPointBeaconSettingsNameHintJoyway": "Max 12 bytes UTF-8 (Vietnamese OK, e.g. \"Điểm 1\")",
+  "patrolPointBeaconSettingsNameTooLong": "Name is too long for the beacon (max 12 UTF-8 bytes).",
+  "patrolPointBeaconSettingsNewPasswordLabel": "New beacon password",
+  "patrolPointBeaconSettingsNewPasswordHint": "Leave empty to keep current password",
+  "patrolPointBeaconSettingsNewPasswordJoywayHint": "Joyway: written to the beacon when you tap Update (max 12 characters). Leave empty to keep the existing password on the device.",
+  "patrolPointBeaconSettingsShowPassword": "Show password",
+  "patrolPointBeaconSettingsRssiAt1mLabel": "RSSI at 1 m (dBm)",
+  "patrolPointBeaconSettingsRssiAt1mHint": "-100 to 0",
+  "patrolPointBeaconSettingsTxPowerDbmLabel": "TX power (dBm)",
+  "patrolPointBeaconSettingsAdv1Section": "Advertising 1",
+  "patrolPointBeaconSettingsAdv1IntervalLabel": "Adv 1 interval (ms)",
+  "patrolPointBeaconSettingsAdv1TimeLenLabel": "Adv 1 time length (ms)",
+  "patrolPointBeaconSettingsAdv1NeverStop": "Adv 1 never stop",
+  "patrolPointBeaconSettingsAdv2Section": "Advertising 2",
+  "patrolPointBeaconSettingsAdv2IntervalLabel": "Adv 2 interval (ms)",
+  "patrolPointBeaconSettingsAdv2TimeLenLabel": "Adv 2 time length (ms)",
+  "patrolPointBeaconSettingsAdv2NeverStop": "Adv 2 never stop",
+  "patrolPointBeaconSettingsButtonSection": "Button",
+  "patrolPointBeaconSettingsButtonDelayLabel": "Button delay for turning on (ms)",
+  "patrolPointBeaconSettingsAdvertiseButtonEvent": "Advertise button event",
+  "patrolPointBeaconSettingsInvalidRssiAt1m": "RSSI at 1 m must be −100 to 0 dBm.",
+  "patrolPointBeaconSettingsInvalidAdvInterval": "Interval must be 100–10000 ms.",
+  "patrolPointBeaconSettingsInvalidAdvTimeLen": "Enter a valid time length in ms.",
+  "patrolPointBeaconSettingsInvalidButtonDelay": "Button delay must be 0–25500 ms.",
+  "patrolPointBeaconSettingsCurrentSection": "Currently advertising",
+  "patrolPointBeaconSettingsTargetSection": "Values to write",
+  "patrolPointBeaconSettingsMajorLabel": "Major",
+  "patrolPointBeaconSettingsMinorLabel": "Minor",
+  "patrolPointBeaconSettingsTxPowerLabel": "Tx power at 1 m",
+  "patrolPointBeaconSettingsTxPowerHint": "-59 (Apple default)",
+  "patrolPointBeaconSettingsInvalidTxPower": "Tx power must be −128 to 127 dBm.",
+  "patrolPointBeaconSettingsInvalidUuid": "Enter a valid beacon UUID.",
+  "patrolPointBeaconSettingsInvalidMajor": "Major must be 0–65535.",
+  "patrolPointBeaconSettingsInvalidMinor": "Minor must be 0–65535.",
+  "patrolPointBeaconSettingsUpdate": "Update",
+  "patrolPointCopyUuidTooltip": "Copy UUID",
+  "patrolPointUpdateNfcTooltip": "Assign NFC tag ID to this point",
+  "patrolPointUpdateBluetoothTooltip": "Assign Bluetooth ID to this point",
+  "patrolPointChangeBluetoothTooltip": "Reconfigure Bluetooth beacon for this point",
+  "patrolPointDialogSave": "Save",
+  "patrolPointNfcDialogTitle": "NFC tag ID",
+  "patrolPointNfcDialogHint": "Scan a tag or enter the NFC ID",
+  "patrolPointNfcScanButton": "Scan NFC tag",
+  "patrolPointNfcScanning": "Hold the tag near your device…",
+  "patrolPointNfcUnavailable": "NFC is not available on this device.",
+  "patrolPointNfcDisabled": "Turn on NFC in your device settings.",
+  "patrolPointNfcScanFailed": "Could not read the NFC tag.",
+  "patrolPointNfcScanTimeout": "No tag detected. Try again.",
+  "patrolPointBluetoothDialogTitle": "Bluetooth ID",
+  "patrolPointBluetoothDialogHint": "Scan a beacon or enter MAC / UUID",
+  "patrolPointBluetoothScanButton": "Scan nearby beacon",
+  "patrolPointBluetoothScanning": "Searching for Bluetooth beacons…",
+  "patrolPointBluetoothUnavailable": "Bluetooth is not available on this device.",
+  "patrolPointBluetoothDisabled": "Turn on Bluetooth in your device settings.",
+  "patrolPointBluetoothPermissionDenied": "Bluetooth permission was not granted.",
+  "patrolPointBluetoothScanFailed": "Could not scan for beacons.",
+  "patrolPointBluetoothScanTimeout": "No beacon detected. Try again.",
+  "patrolPointBluetoothScanSummary": "Signal: {rssi} dBm · Distance: ~{distance} m",
+  "@patrolPointBluetoothScanSummary": {
+    "placeholders": {
+      "rssi": { "type": "int" },
+      "distance": { "type": "String" }
+    }
+  },
+  "patrolPointBluetoothScanMeta": "MAC: {address} · Major: {major} · Minor: {minor}",
+  "@patrolPointBluetoothScanMeta": {
+    "placeholders": {
+      "address": { "type": "String" },
+      "major": { "type": "String" },
+      "minor": { "type": "String" }
+    }
+  },
+  "patrolPointBluetoothScanName": "Name: {name}",
+  "@patrolPointBluetoothScanName": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "patrolPointIdentifierEmpty": "ID cannot be empty.",
+  "patrolPointNfcValue": "NFC: {value}",
+  "@patrolPointNfcValue": {
+    "placeholders": {
+      "value": { "type": "String" }
+    }
+  },
+  "patrolPointBluetoothValue": "Bluetooth: {value}",
+  "@patrolPointBluetoothValue": {
+    "placeholders": {
+      "value": { "type": "String" }
+    }
+  },
+  "patrolPointFieldUpdateSuccess": "Updated.",
+  "patrolPointFieldUpdateFailed": "Could not update.",
+  "patrolPointCheckpointMetaChange": "Change",
   "featureComingSoon": "Feature coming soon",
   "apiBaseMissing": "API not configured: set API_BASE_URL or AppConfig.devFallbackBaseUrl",
   "loginFailed": "Sign-in failed. Check credentials or server.",
   "networkError": "Network error. Check API URL and connectivity.",
-  "forgotRequestSent": "Request sent. Check your email."
+  "forgotRequestSent": "Request sent. Check your email.",
+  "patrolTrackMockGpsTitle": "FAKE GPS ALERT",
+  "patrolTrackMockGpsBody": "Mock location detected. Disable fake GPS apps and continue a valid patrol.",
+  "patrolBackgroundNotificationTitle": "SPS Notification",
+  "patrolBackgroundNotificationInitialContent": "Patrol in progress — realtime location",
+  "patrolBackgroundNotificationContent": "Sending realtime patrol location",
+  "patrolBackgroundCheckpointScanned": "Scanned: {name}",
+  "@patrolBackgroundCheckpointScanned": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolBackgroundLocationTitle": "Background location required",
+  "patrolBackgroundLocationBody": "Allow \"Always\" location so patrol tracking and checkpoint auto-scan continue when the screen is off or the app is in the background.",
+  "patrolBackgroundLocationGrantAlways": "Allow always",
+  "patrolBackgroundNextRoundTitle": "Next patrol round",
+  "patrolBackgroundNextRoundBody": "The next patrol round is ready. Tap Confirm to auto-scan, or Cancel.",
+  "patrolBackgroundNextRoundActionOk": "Confirm",
+  "patrolBackgroundNextRoundActionCancel": "Cancel",
+  "patrolBackgroundNextRoundConfirmed": "Confirmed — background auto-scan started.",
+  "patrolBackgroundRoundCompleted": "Your patrol round has ended.",
+  "issuesTitle": "Issues",
+  "issuesListTitle": "Issues I reported",
+  "issuesListSubtitle": "List of issues created by your account",
+  "issuesEmpty": "No issues reported yet.",
+  "issuesReportAction": "Report issue",
+  "issuesReportTitle": "Report issue",
+  "issuesDetailAction": "Details",
+  "issuesEditAction": "Update",
+  "issuesEditTitle": "Update issue",
+  "issuesCancel": "Cancel",
+  "issuesSubmit": "Send report",
+  "issuesUpdateSubmit": "Save changes",
+  "issuesFieldTitle": "Issue title",
+  "issuesFieldTitleHint": "Short description of the issue",
+  "issuesFieldDescription": "Detailed description",
+  "issuesFieldDescriptionHint": "Full description of what happened",
+  "issuesFieldAssignee": "Assignee",
+  "issuesFieldAssigneeHint": "Assignee name",
+  "issuesFieldNote": "Initial note",
+  "issuesFieldNoteHint": "Reason or instructions for the recipient",
+  "issuesFieldSite": "Area (optional)",
+  "issuesFieldSiteHint": "— Select area —",
+  "issuesFieldPhotos": "Attached images",
+  "issuesFieldPhotosHint": "Select images (max 5 files)",
+  "issuesColAssignee": "Assignee",
+  "issuesColSite": "Area",
+  "issuesColReportedAt": "Reported at",
+  "issuesStatusOpen": "New",
+  "issuesStatusResolved": "Resolved",
+  "issuesTitleRequired": "Please enter an issue title.",
+  "issuesAssigneeRequired": "Please enter an assignee account.",
+  "issuesShowingRange": "SHOWING {from}-{to} / {total} RECORDS",
+  "@issuesShowingRange": {
+    "placeholders": {
+      "from": { "type": "int" },
+      "to": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "issuesColReporter": "Reporter",
+  "issuesAssignmentHistoryTitle": "Assignment history",
+  "issuesAssignmentFrom": "From",
+  "issuesAssignmentTo": "To",
+  "issuesAssignmentReceivedAt": "Received at",
+  "issuesAssignmentStatusPending": "Pending",
+  "issuesAssignmentStatusAccepted": "Accepted",
+  "issuesAssignmentStatusRejected": "Rejected",
+  "issuesAssignmentStatusCompleted": "Completed"
 }

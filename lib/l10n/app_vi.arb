@@ -22,13 +22,17 @@
   "submit": "ĐĂNG NHẬP",
   "submitLoading": "ĐANG XÁC THỰC...",
   "locationChecking": "Đang kiểm tra vị trí...",
-  "locationTitle": "Cần bật GPS & quyền vị trí",
-  "locationBody": "Ứng dụng tuần tra cần dịch vụ định vị bật và quyền truy cập vị trí trước khi đăng nhập.",
+  "locationTitle": "Cần GPS & quyền Luôn cho phép",
+  "locationBody": "Bật định vị và chọn \"Luôn cho phép\" để tuần tra vẫn chạy khi tắt màn hình hoặc chuyển app khác.",
   "locationServiceOff": "Dịch vụ định vị (GPS) đang tắt.",
   "locationPermissionDenied": "Chưa cấp quyền vị trí cho ứng dụng.",
+  "locationPermissionBackground": "Mới chỉ \"Cho phép khi dùng ứng dụng\". Chọn \"Luôn cho phép\" để tuần tra nền.",
   "locationPermissionForever": "Quyền vị trí bị từ chối vĩnh viễn. Mở Cài đặt ứng dụng để bật lại.",
+  "notificationPermissionDenied": "Chưa bật quyền thông báo. Bật trong Cài đặt ứng dụng để nhận cảnh báo vòng tuần tra khi tắt app.",
+  "dndPolicyPermissionDenied": "Chưa cho phép SPS Patrol trong cài đặt Không làm phiền. Bật \"Cho phép thay đổi chính sách\" để nhận popup vòng tuần tra khi máy im lặng.",
   "openLocationSettings": "Mở cài đặt vị trí",
   "openAppSettings": "Mở cài đặt ứng dụng",
+  "openDndPolicySettings": "Mở cài đặt Không làm phiền",
   "retry": "Thử lại",
   "grantPermission": "Cấp quyền vị trí",
   "toastApiNotConfigured": "Chưa cấu hình API.",
@@ -50,17 +54,47 @@
   "homeEmptyMenus": "Chưa được gán chức năng.",
   "homeEmergencySupport": "HỖ TRỢ KHẨN CẤP",
   "historyTitle": "Lịch sử tuần tra",
+  "historySubtitle": "Danh sách các vòng tuần tra đã diễn ra",
+  "historyEmpty": "Chưa có lịch sử tuần tra.",
   "historyInDevelopment": "Tính năng đang được phát triển.",
+  "historyColWindow": "Khung giờ",
+  "historyColAssignee": "Người tuần tra",
+  "historyColAssignees": "Người được giao",
+  "historyColSite": "Khu vực",
+  "historyColUpdated": "Cập nhật lúc",
+  "historyStatusCompleted": "Hoàn thành",
+  "historyStatusMissed": "Bỏ lỡ",
+  "historyStatusInProgress": "Đang tuần tra",
+  "historyStatusPending": "Chờ bắt đầu",
+  "historyStatusCancelled": "Đã hủy",
+  "historyRoundFallback": "Vòng #{id}",
+  "@historyRoundFallback": {
+    "placeholders": {
+      "id": { "type": "int" }
+    }
+  },
+  "historyShowingRange": "HIỂN THỊ {from}-{to} / {total} BẢN GHI",
+  "@historyShowingRange": {
+    "placeholders": {
+      "from": { "type": "int" },
+      "to": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
   "labelEmail": "Email",
   "profileAccountHeading": "Thông tin tài khoản",
   "profileFieldAccountId": "Tài khoản",
   "profileFieldPhone": "Điện thoại",
   "profileFieldAddress": "Địa chỉ",
+  "profileFieldNote": "Ghi chú",
   "profileFieldBranch": "Chi nhánh",
   "profileFieldMerchant": "Đơn vị",
   "profileManagerHeading": "Quản lý",
   "profileFieldFullName": "Họ tên",
   "profileFieldManagerPhone": "Liên hệ quản lý",
+  "profileLanguageHeading": "Ngôn ngữ",
+  "profileSave": "Lưu",
+  "profileSaveSuccess": "Đã cập nhật hồ sơ.",
   "signOut": "Đăng xuất",
   "signOutFailed": "Đăng xuất thất bại.",
   "signOutSessionInvalid": "Phiên không hợp lệ hoặc đã hết hạn.",
@@ -74,6 +108,11 @@
   "patrolRoundUnauthorized": "Phiên hết hạn hoặc không có quyền.",
   "patrolRoundEmpty": "Hiện không có ca tuần tra đang hoạt động.",
   "patrolRoundScheduleHeading": "Lịch ca",
+  "patrolRoundMap": "Bản đồ tuyến",
+  "patrolRoundMapYou": "Bạn",
+  "patrolRoundMapSwipeDismiss": "Vuốt lên hoặc xuống để đóng",
+  "patrolRoundMapCheckpointScanned": "Điểm đã quét",
+  "patrolRoundMapCheckpointPending": "Điểm chưa quét",
   "patrolRoundRoundHeading": "Vòng tuần tra",
   "patrolRoundRouteHeading": "Tuyến điểm",
   "patrolRoundShiftWindow": "Khung giờ",
@@ -84,6 +123,33 @@
   "patrolRoundExpectedStart": "Bắt đầu dự kiến",
   "patrolRoundExpectedEnd": "Kết thúc dự kiến",
   "patrolRoundOverdue": "Quá giờ",
+  "patrolRoundOverdueNoteTooltip": "Báo trễ khách quan",
+  "patrolRoundOverdueNoteTitle": "Báo trễ khách quan",
+  "patrolRoundOverdueNoteMessage": "Ghi lý do không hoàn thành đúng giờ cho điểm này. Điểm sẽ được đánh dấu đã quét.",
+  "patrolRoundOverdueNoteHint": "Ví dụ: thang máy hỏng, khu vực bị phong tỏa…",
+  "patrolRoundOverdueNoteSubmit": "Gửi",
+  "patrolRoundOverdueNotePrefix": "[Trễ khách quan] ",
+  "patrolRoundOverdueNoteEmpty": "Vui lòng nhập lý do.",
+  "patrolRoundOverdueNoteSuccess": "Đã ghi nhận điểm với lý do trễ.",
+  "patrolRoundOverdueNoteFailed": "Không lưu được nhật ký tuần tra.",
+  "patrolRoundOverdueNoteNoGps": "Không đọc được GPS và điểm chưa có tọa độ.",
+  "patrolRoundScanQr": "Quét mã QR điểm",
+  "patrolRoundQrNotFound": "Không có điểm nào trên tuyến khớp mã QR này.",
+  "patrolRoundQrAlreadyScanned": "Điểm này đã được quét.",
+  "patrolRoundQrCameraDenied": "Cần quyền camera để quét mã QR.",
+  "patrolRoundAutoScan": "Tự động quét GPS",
+  "patrolRoundAutoScanBluetooth": "Quét BT",
+  "patrolRoundAutoScanBluetoothNone": "Không còn điểm nào có Bluetooth cần quét trên tuyến.",
+  "patrolRoundBluetoothWaiting": "Đang tìm beacon Bluetooth…",
+  "patrolRoundBluetoothScanFailed": "Không đọc được beacon Bluetooth gần đây.",
+  "patrolRoundAutoScanNone": "Không còn điểm nào cần quét trên tuyến.",
+  "patrolRoundAutoScanComplete": "Đã quét hết các điểm trên tuyến.",
+  "patrolRoundResumeBackgroundScan": "Bật quét nền",
+  "patrolRoundPauseBackgroundScan": "Tắt quét nền",
+  "patrolRoundBackgroundScanResumed": "Đã bật lại quét nền.",
+  "patrolRoundBackgroundScanPaused": "Đã tắt quét nền.",
+  "patrolRoundNfcNotFound": "Không có điểm nào trên tuyến khớp thẻ NFC này.",
+  "patrolRoundNfcAlreadyScanned": "Điểm này đã được quét rồi.",
   "patrolRoundAssigned": "Phân công",
   "patrolRoundSiteId": "Site",
   "patrolRoundScheduleTotalCheckPoints": "Điểm theo lịch",
@@ -101,15 +167,24 @@
   "patrolRoundChipNoGps": "Chưa GPS",
   "patrolRoundChipQr": "QR",
   "patrolRoundChipNfc": "NFC",
+  "patrolRoundChipBluetooth": "BT",
   "patrolRoundChipScanned": "Đã quét",
   "patrolRoundChipNotScanned": "Chưa quét",
   "patrolRoundQrPhotoTitle": "Chụp ảnh?",
-  "patrolRoundQrPhotoMessage": "Bạn có thể đính kèm ảnh khi quét điểm này.",
+  "patrolRoundQrPhotoMessage": "Bạn có thể chụp và đính kèm nhiều ảnh khi quét điểm này.",
   "patrolRoundQrPhotoTake": "Chụp ảnh",
+  "patrolRoundQrPhotoAddMore": "Chụp thêm ảnh",
+  "patrolRoundQrPhotoDone": "Tiếp tục ({count})",
+  "@patrolRoundQrPhotoDone": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "patrolRoundQrPhotoRemove": "Xóa ảnh",
   "patrolRoundQrPhotoSkip": "Tiếp tục không chụp",
   "patrolRoundCancel": "Hủy",
-  "patrolRoundQrOutOfRange": "Bạn đang cách điểm khoảng {distance} m (cho phép {radius} m). Hãy di chuyển đến gần vị trí điểm đã lưu.",
-  "patrolRoundQrAltitudeOutOfRange": "Độ cao không khớp với điểm đã lưu (lệch {distance} m, cho phép {radius} m).",
+  "patrolRoundQrOutOfRange": "Cần đi thêm khoảng {distance} m để vào vùng (bán kính {radius} m).",
+  "patrolRoundQrAltitudeOutOfRange": "Độ cao cần chỉnh thêm {distance} m (bán kính {radius} m).",
   "patrolRoundQrNoCheckpointGps": "Điểm này chưa có tọa độ trên hệ thống. Hãy gán GPS ở màn Lấy vị trí điểm trước.",
   "patrolRoundQrGpsUnavailable": "Không đọc được GPS. Bật dịch vụ vị trí và cấp quyền cho ứng dụng.",
   "patrolRoundQrScanning": "Đang lưu quét…",
@@ -117,7 +192,7 @@
   "patrolRoundQrScanFailed": "Không lưu được nhật ký tuần tra.",
   "patrolRoundQrWaitingPosition": "Hãy đến gần điểm tuần tra. Đang theo dõi GPS…",
   "patrolRoundQrDistanceStatus": "Cách điểm khoảng {distance} m (cho phép {radius} m)",
-  "patrolRoundQrPositionOkSaving": "Đã đủ vị trí — đang lưu quét…",
+  "patrolRoundQrPositionOkSaving": "Khớp vị trí — đang lưu quét…",
   "patrolRoundQrWaitingBaro": "Đang đọc độ cao barometer…",
   "patrolRoundQrCheckpointCoords": "Mốc: {lat}, {lng}",
   "patrolRoundQrCheckpointCoordsWithAlt": "Mốc: {lat}, {lng} · cao {alt} m ({altKind})",
@@ -129,10 +204,10 @@
   "patrolRoundQrAltNone": "—",
   "patrolRoundQrDeltaNorth": "Bắc–nam: {delta} m · đi {direction}",
   "patrolRoundQrDeltaEast": "Đông–tây: {delta} m · đi {direction}",
-  "patrolRoundQrDeltaHorizontal": "Cách vị trí mốc: {delta} m (tối đa {radius} m)",
+  "patrolRoundQrDeltaHorizontal": "Cần đi thêm: {delta} m (bán kính {radius} m)",
   "patrolRoundQrGpsAccuracy": "Sai số GPS ngang ±{accuracy} m",
   "patrolRoundQrGpsAltitudeAccuracy": "Sai số độ cao GPS ±{accuracy} m",
-  "patrolRoundQrDeltaAltitude": "Lệch độ cao: {delta} m (tối đa {radius} m)",
+  "patrolRoundQrDeltaAltitude": "Độ cao cần chỉnh thêm: {delta} m (bán kính {radius} m)",
   "patrolRoundQrMoveNorth": "bắc",
   "patrolRoundQrMoveSouth": "nam",
   "patrolRoundQrMoveEast": "đông",
@@ -140,6 +215,11 @@
   "patrolRoundQrMoveUp": "lên",
   "patrolRoundQrMoveDown": "xuống",
   "patrolRoundQrMoveOnTarget": "đúng mốc",
+  "patrolProximityTtsHint": "Cách mốc {distance} mét. {moves}",
+  "patrolProximityTtsNearCheckpoint": "Bạn đã ở gần mốc, cách {distance} mét",
+  "patrolProximityTtsMove": "đi {direction} {distance} mét",
+  "patrolProximityTtsMoveVertical": "đi {direction} {distance} mét",
+  "patrolProximityTtsMoveSeparator": ", ",
   "patrolRoundSubtitleActive": "{scheduleName} · {statusLabel}",
   "patrolPointTitle": "Lấy vị trí point",
   "patrolPointSubtitle": "Định vị hiện trường",
@@ -157,20 +237,321 @@
   "patrolPointGpsServiceOff": "GPS đang tắt.",
   "patrolPointGpsDenied": "Chưa có quyền vị trí.",
   "patrolPointGpsError": "Không đọc được vị trí.",
+  "patrolPointGpsMocked": "Phát hiện GPS giả. Tắt ứng dụng giả lập vị trí để gán tọa độ.",
   "patrolPointCountSummary": "Tổng {count} điểm",
   "patrolPointMissingCoordsSummary": "{count} điểm chưa có tọa độ trên hệ thống",
   "patrolPointServerNoCoords": "Chưa gán tọa độ",
   "patrolPointServerCoords": "Vị trí hiện tại: {lat}, {lng}",
   "patrolPointServerCoordsWithAlt": "Vị trí hiện tại: {lat}, {lng} · độ cao {alt} m",
+  "patrolPointCheckpointCoordsLabel": "Tọa độ",
   "patrolPointInactive": "Ngưng dùng",
   "patrolPointUpdateCoordsTooltip": "Gửi tọa độ GPS hiện tại lên điểm này",
   "patrolPointUpdateNeedGps": "Chưa lấy được vị trí GPS — bật dịch vụ vị trí và cấp quyền cho ứng dụng.",
   "patrolPointUpdateSuccess": "Đã cập nhật tọa độ.",
   "patrolPointUpdateFailed": "Không cập nhật được tọa độ.",
   "patrolPointSiteAddressLabel": "Địa chỉ",
+  "patrolPointSiteIdLabel": "Mã site",
+  "patrolPointBeaconUuidLabel": "Beacon UUID",
+  "patrolPointBeaconProtocolLabel": "Giao thức cấu hình beacon",
+  "patrolPointBeaconProtocolHm10": "HM-10 / FFE0 (lệnh AT)",
+  "patrolPointBeaconProtocolHm10Hint": "Clone TQ, UART service FFE0 · char FFE1",
+  "patrolPointBeaconProtocolNordic": "Nordic nRF52 OEM",
+  "patrolPointBeaconProtocolNordicHint": "Ghi 21 byte vào advertisement content (7650/7651)",
+  "patrolPointBeaconProtocolJoyway": "Joyway",
+  "patrolPointBeaconProtocolJoywayHint": "Joyway JW1404 — quét BLE, chọn beacon, ghi qua UART (giữ nút config nếu không kết nối được)",
+  "patrolPointBeaconProtocolFeasycom": "Feasycom (FeasyBeacon)",
+  "patrolPointBeaconProtocolMinew": "Minew (mBeacon)",
+  "patrolPointBeaconProtocolEddystone": "Eddystone-GATT (FEAA)",
+  "patrolPointBeaconProtocolComingSoon": "Cần SDK hãng — chưa hỗ trợ trong app",
+  "patrolPointBeaconProtocolUnsupported": "Giao thức này chưa hỗ trợ. Chọn HM-10, Nordic nRF52 hoặc Joyway.",
+  "patrolPointBeaconProtocolUseCheckpoint": "Tiếp tục với giao thức điểm tuần tra ({protocol})",
+  "@patrolPointBeaconProtocolUseCheckpoint": {
+    "placeholders": {
+      "protocol": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointCompanyBeaconUuidMissing": "Chưa cấu hình Beacon UUID của công ty.",
+  "patrolPointIBeaconConfigModeRequired": "Không tìm thấy beacon ở chế độ cấu hình. Nhấn nút trên beacon để vào chế độ cấu hình rồi thử lại.",
+  "patrolPointIBeaconConfigureFailed": "Không lập trình được iBeacon. Hãy thử lại khi ở gần thiết bị.",
+  "patrolPointBeaconConfiguring": "Đang lập trình beacon…",
+  "patrolPointBeaconConfiguringHint": "Giữ điện thoại gần thiết bị. Đừng thoát app.",
+  "patrolPointBeaconLoginVerifying": "Đang kết nối beacon…",
+  "patrolPointBeaconLoginVerifyingHint": "Đang kiểm tra mật khẩu. Giữ điện thoại gần thiết bị.",
+  "patrolPointIBeaconWrongPassword": "Mật khẩu/PIN beacon không đúng. Kiểm tra mật khẩu và thử lại.",
+  "patrolPointBeaconLoginDialogTitle": "Đăng nhập beacon",
+  "patrolPointBeaconPasswordDialogTitle": "Mật khẩu beacon (tùy chọn)",
+  "patrolPointBeaconPasswordLabel": "Mật khẩu / PIN hiện tại",
+  "patrolPointBeaconPasswordOptionalHint": "Để trống nếu không cần",
+  "patrolPointBeaconLoginHm10Hint": "HM-10 / FFE0: nhập PIN 6 số hiện tại để mở khóa cấu hình. Để trống nếu mặc định (000000) hoặc không khóa.",
+  "patrolPointBeaconLoginJoywayHint": "Joyway: nhập mật khẩu hiện tại để mở khóa beacon (tối đa 12 ký tự). Để trống nếu mặc định nhà máy. Nhấn nút cấu hình trên beacon, đặt sát máy.",
+  "patrolPointBeaconPasswordHm10Hint": "HM-10 / FFE0: nhập PIN 6 số nếu module yêu cầu. Để trống nếu mặc định (000000) hoặc không khóa.",
+  "patrolPointBeaconPasswordJoywayHint": "Joyway: tối đa 12 ký tự. Mật khẩu này sẽ được lưu lên beacon (để trống = mặc định nhà máy). Beacon mới: để trống lần đầu; beacon đã có mật khẩu: nhập đúng mật khẩu hiện tại. Nhấn nút cấu hình trên beacon, đặt sát máy.",
+  "patrolPointBeaconPasswordNordicHint": "Nordic nRF52: app không dùng mật khẩu khi ghi GATT — để trống.",
+  "patrolPointBeaconPasswordRemember": "Ghi nhớ mật khẩu trên thiết bị này",
+  "patrolPointBeaconPasswordContinue": "Tiếp tục",
+  "patrolPointBeaconConfigurePickerTitle": "Chọn beacon để cấu hình",
+  "patrolPointBeaconConfigurePickerHint": "Chỉ hiện thiết bị quảng bá iBeacon (UUID/Major/Minor trên sóng). Chọn thiết bị rồi bấm Kết nối — giữ điện thoại gần beacon (~1 m).",
+  "patrolPointBeaconConfigurePickerManualMacLabel": "MAC từ BLE Scanner",
+  "patrolPointBeaconConfigurePickerManualMacUse": "Dùng MAC",
+  "patrolPointBeaconConfigurePickerScanning": "Đang quét Bluetooth (BLE)…",
+  "patrolPointBeaconConfigurePickerScanningCount": "Đang quét… đã thấy {count} thiết bị",
+  "@patrolPointBeaconConfigurePickerScanningCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerJoywayFailed": "Không khởi động được quét Joyway. Bật Bluetooth, cấp quyền Vị trí + Bluetooth cho app, build lại app, rồi thử Quét lại.",
+  "patrolPointBeaconConfigurePickerEmpty": "Không thấy iBeacon. Bấm Quét lại và giữ điện thoại gần beacon (~1 m).",
+  "patrolPointBeaconConfigurePickerIBeaconSection": "iBeacon (có UUID trên sóng)",
+  "patrolPointBeaconConfigurePickerLikelyJoywaySection": "Có thể là Joyway (nhấn nút beacon nếu chưa thấy iBeacon)",
+  "patrolPointBeaconConfigurePickerLikelyJoywayBadge": "Joyway?",
+  "patrolPointBeaconConfigurePickerOtherDevicesSection": "Thiết bị Bluetooth khác",
+  "patrolPointBeaconConfigurePickerConfigModeSection": "Chế độ cấu hình (chưa có UUID trên sóng — nhấn nút beacon; có UUID sau khi ghi hoặc khi beacon phát bình thường)",
+  "patrolPointBeaconConfigurePickerConfigModeBadge": "Cấu hình",
+  "patrolPointBeaconConfigurePickerRescan": "Quét lại",
+  "patrolPointBeaconConfigurePickerCompanyUuid": "Trùng UUID beacon công ty",
+  "patrolPointBeaconConfigurePickerOtherIBeacon": "iBeacon UUID khác",
+  "patrolPointBeaconConfigurePickerRecommended": "Nên chọn",
+  "patrolPointBeaconConfigurePickerOther": "Thiết bị khác gần đó",
+  "patrolPointBeaconConfigurePickerRssi": "RSSI: {rssi} dBm",
+  "@patrolPointBeaconConfigurePickerRssi": {
+    "placeholders": {
+      "rssi": { "type": "int" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerMacLabel": "MAC: {mac}",
+  "@patrolPointBeaconConfigurePickerMacLabel": {
+    "placeholders": {
+      "mac": { "type": "String" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerUuidLabel": "UUID: {uuid}",
+  "@patrolPointBeaconConfigurePickerUuidLabel": {
+    "placeholders": {
+      "uuid": { "type": "String" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerMajorMinorLabel": "Major/Minor: {major}/{minor}",
+  "@patrolPointBeaconConfigurePickerMajorMinorLabel": {
+    "placeholders": {
+      "major": { "type": "String" },
+      "minor": { "type": "String" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerMacRssiLabel": "MAC: {mac} · {rssi} dBm",
+  "patrolPointBeaconConfigurePickerBroadcastNameLabel": "Tên sóng: {name}",
+  "@patrolPointBeaconConfigurePickerBroadcastNameLabel": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "@patrolPointBeaconConfigurePickerMacRssiLabel": {
+    "placeholders": {
+      "mac": { "type": "String" },
+      "rssi": { "type": "int" }
+    }
+  },
+  "patrolPointBeaconConfigurePickerConnectable": "Kết nối được",
+  "patrolPointBeaconConfigurePickerProtocolLabel": "Giao thức: {protocols}",
+  "@patrolPointBeaconConfigurePickerProtocolLabel": {
+    "placeholders": {
+      "protocols": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointBeaconConfigurePickerProtocolUnknown": "Giao thức: chưa nhận diện từ sóng (chọn sau khi kết nối)",
+  "patrolPointBeaconConfigurePickerServicesLabel": "BLE service: {services}",
+  "@patrolPointBeaconConfigurePickerServicesLabel": {
+    "placeholders": {
+      "services": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointBeaconConfigurePickerCheckpointProtocol": "Giao thức điểm tuần tra: {protocol}",
+  "@patrolPointBeaconConfigurePickerCheckpointProtocol": {
+    "placeholders": {
+      "protocol": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolPointBeaconConfigurePickerConnect": "Kết nối",
+  "patrolPointBeaconSettingsTitle": "Cấu hình beacon",
+  "patrolPointBeaconSettingsHint": "Chỉnh giá trị sẽ ghi lên beacon, rồi nhấn Cập nhật để lập trình thiết bị và lưu điểm tuần tra.",
+  "patrolPointBeaconSettingsDeviceSection": "Thiết bị đã chọn",
+  "patrolPointBeaconSettingsDeviceName": "Tên điểm tuần tra",
+  "patrolPointBeaconSettingsNameHint": "Tên phát Bluetooth (mặc định = tên điểm này)",
+  "patrolPointBeaconSettingsNameHintJoyway": "Tối đa 12 byte UTF-8 (tiếng Việt có dấu được, vd. \"Điểm 1\")",
+  "patrolPointBeaconSettingsNameTooLong": "Tên quá dài so với giới hạn beacon (tối đa 12 byte UTF-8).",
+  "patrolPointBeaconSettingsNewPasswordLabel": "Mật khẩu mới trên beacon",
+  "patrolPointBeaconSettingsNewPasswordHint": "Để trống nếu giữ mật khẩu hiện tại",
+  "patrolPointBeaconSettingsNewPasswordJoywayHint": "Joyway: ghi lên beacon khi nhấn Cập nhật (tối đa 12 ký tự). Để trống nếu không đổi mật khẩu trên thiết bị.",
+  "patrolPointBeaconSettingsShowPassword": "Hiện mật khẩu",
+  "patrolPointBeaconSettingsRssiAt1mLabel": "RSSI tại 1 m (dBm)",
+  "patrolPointBeaconSettingsRssiAt1mHint": "−100 đến 0",
+  "patrolPointBeaconSettingsTxPowerDbmLabel": "Công suất phát TX (dBm)",
+  "patrolPointBeaconSettingsAdv1Section": "Quảng bá 1",
+  "patrolPointBeaconSettingsAdv1IntervalLabel": "Chu kỳ Adv 1 (ms)",
+  "patrolPointBeaconSettingsAdv1TimeLenLabel": "Thời lượng Adv 1 (ms)",
+  "patrolPointBeaconSettingsAdv1NeverStop": "Adv 1 không dừng",
+  "patrolPointBeaconSettingsAdv2Section": "Quảng bá 2",
+  "patrolPointBeaconSettingsAdv2IntervalLabel": "Chu kỳ Adv 2 (ms)",
+  "patrolPointBeaconSettingsAdv2TimeLenLabel": "Thời lượng Adv 2 (ms)",
+  "patrolPointBeaconSettingsAdv2NeverStop": "Adv 2 không dừng",
+  "patrolPointBeaconSettingsButtonSection": "Nút bấm",
+  "patrolPointBeaconSettingsButtonDelayLabel": "Độ trễ bật khi nhấn nút (ms)",
+  "patrolPointBeaconSettingsAdvertiseButtonEvent": "Quảng bá sự kiện nút bấm",
+  "patrolPointBeaconSettingsInvalidRssiAt1m": "RSSI tại 1 m phải từ −100 đến 0 dBm.",
+  "patrolPointBeaconSettingsInvalidAdvInterval": "Chu kỳ phải từ 100–10000 ms.",
+  "patrolPointBeaconSettingsInvalidAdvTimeLen": "Nhập thời lượng hợp lệ (ms).",
+  "patrolPointBeaconSettingsInvalidButtonDelay": "Độ trễ nút phải từ 0–25500 ms.",
+  "patrolPointBeaconSettingsCurrentSection": "Hiện trên sóng",
+  "patrolPointBeaconSettingsTargetSection": "Giá trị sẽ ghi",
+  "patrolPointBeaconSettingsMajorLabel": "Major",
+  "patrolPointBeaconSettingsMinorLabel": "Minor",
+  "patrolPointBeaconSettingsTxPowerLabel": "Công suất phát tại 1 m",
+  "patrolPointBeaconSettingsTxPowerHint": "-59 (mặc định Apple)",
+  "patrolPointBeaconSettingsInvalidTxPower": "Công suất phát phải từ −128 đến 127 dBm.",
+  "patrolPointBeaconSettingsInvalidUuid": "Nhập UUID beacon hợp lệ.",
+  "patrolPointBeaconSettingsInvalidMajor": "Major phải từ 0–65535.",
+  "patrolPointBeaconSettingsInvalidMinor": "Minor phải từ 0–65535.",
+  "patrolPointBeaconSettingsUpdate": "Cập nhật",
+  "patrolPointCopyUuidTooltip": "Sao chép UUID",
+  "patrolPointUpdateNfcTooltip": "Gán mã NFC cho điểm này",
+  "patrolPointUpdateBluetoothTooltip": "Gán mã Bluetooth cho điểm này",
+  "patrolPointChangeBluetoothTooltip": "Cấu hình lại beacon Bluetooth cho điểm này",
+  "patrolPointDialogSave": "Lưu",
+  "patrolPointNfcDialogTitle": "Mã NFC",
+  "patrolPointNfcDialogHint": "Quét thẻ hoặc nhập mã NFC",
+  "patrolPointNfcScanButton": "Quét thẻ NFC",
+  "patrolPointNfcScanning": "Đưa thẻ vào gần thiết bị…",
+  "patrolPointNfcUnavailable": "Thiết bị không hỗ trợ NFC.",
+  "patrolPointNfcDisabled": "Hãy bật NFC trong cài đặt thiết bị.",
+  "patrolPointNfcScanFailed": "Không đọc được thẻ NFC.",
+  "patrolPointNfcScanTimeout": "Không phát hiện thẻ. Thử lại.",
+  "patrolPointBluetoothDialogTitle": "Mã Bluetooth",
+  "patrolPointBluetoothDialogHint": "Quét beacon hoặc nhập MAC / UUID",
+  "patrolPointBluetoothScanButton": "Quét beacon gần đây",
+  "patrolPointBluetoothScanning": "Đang tìm beacon Bluetooth…",
+  "patrolPointBluetoothUnavailable": "Thiết bị không hỗ trợ Bluetooth.",
+  "patrolPointBluetoothDisabled": "Hãy bật Bluetooth trong cài đặt thiết bị.",
+  "patrolPointBluetoothPermissionDenied": "Chưa cấp quyền Bluetooth cho ứng dụng.",
+  "patrolPointBluetoothScanFailed": "Không quét được beacon.",
+  "patrolPointBluetoothScanTimeout": "Không phát hiện beacon. Thử lại.",
+  "patrolPointBluetoothScanSummary": "Tín hiệu: {rssi} dBm · Khoảng cách: ~{distance} m",
+  "@patrolPointBluetoothScanSummary": {
+    "placeholders": {
+      "rssi": { "type": "int" },
+      "distance": { "type": "String" }
+    }
+  },
+  "patrolPointBluetoothScanMeta": "MAC: {address} · Major: {major} · Minor: {minor}",
+  "@patrolPointBluetoothScanMeta": {
+    "placeholders": {
+      "address": { "type": "String" },
+      "major": { "type": "String" },
+      "minor": { "type": "String" }
+    }
+  },
+  "patrolPointBluetoothScanName": "Tên: {name}",
+  "@patrolPointBluetoothScanName": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "patrolPointIdentifierEmpty": "Mã không được để trống.",
+  "patrolPointNfcValue": "NFC: {value}",
+  "@patrolPointNfcValue": {
+    "placeholders": {
+      "value": { "type": "String" }
+    }
+  },
+  "patrolPointBluetoothValue": "Bluetooth: {value}",
+  "@patrolPointBluetoothValue": {
+    "placeholders": {
+      "value": { "type": "String" }
+    }
+  },
+  "patrolPointFieldUpdateSuccess": "Đã cập nhật.",
+  "patrolPointFieldUpdateFailed": "Không cập nhật được.",
+  "patrolPointCheckpointMetaChange": "Thay đổi",
   "featureComingSoon": "Chức năng đang được triển khai",
   "apiBaseMissing": "Chưa cấu hình API: đặt API_BASE_URL (--dart-define) hoặc AppConfig.devFallbackBaseUrl",
   "loginFailed": "Đăng nhập thất bại. Kiểm tra tài khoản hoặc máy chủ.",
   "networkError": "Lỗi mạng. Kiểm tra URL API và kết nối.",
-  "forgotRequestSent": "Đã gửi yêu cầu. Kiểm tra email."
+  "forgotRequestSent": "Đã gửi yêu cầu. Kiểm tra email.",
+  "patrolTrackMockGpsTitle": "CẢNH BÁO GPS GIẢ",
+  "patrolTrackMockGpsBody": "Phát hiện ứng dụng giả lập vị trí. Tắt Fake GPS và tiếp tục tuần tra hợp lệ.",
+  "patrolBackgroundNotificationTitle": "SPS Thông báo",
+  "patrolBackgroundNotificationInitialContent": "Đang tuần tra — định vị realtime",
+  "patrolBackgroundNotificationContent": "Đang gửi vị trí tuần tra realtime",
+  "patrolBackgroundCheckpointScanned": "Đã quét: {name}",
+  "@patrolBackgroundCheckpointScanned": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "patrolBackgroundLocationTitle": "Cần quyền vị trí nền",
+  "patrolBackgroundLocationBody": "Chọn \"Luôn luôn\" để tuần tra, gửi vị trí realtime và tự quét điểm vẫn chạy khi tắt màn hình hoặc ứng dụng ở nền.",
+  "patrolBackgroundLocationGrantAlways": "Cho phép luôn luôn",
+  "patrolBackgroundNextRoundTitle": "Vòng tuần tra tiếp theo",
+  "patrolBackgroundNextRoundBody": "Đã đến vòng tuần tra tiếp theo. Chọn Xác nhận để tự động quét điểm, hoặc Hủy.",
+  "patrolBackgroundNextRoundActionOk": "Xác nhận",
+  "patrolBackgroundNextRoundActionCancel": "Hủy",
+  "patrolBackgroundNextRoundConfirmed": "Đã xác nhận — bắt đầu quét điểm tự động.",
+  "patrolBackgroundRoundCompleted": "Đã kết thúc vòng tuần tra của bạn.",
+  "issuesTitle": "Sự cố",
+  "issuesListTitle": "Sự cố tôi đã báo cáo",
+  "issuesListSubtitle": "Danh sách các sự cố do tài khoản của bạn tạo ra",
+  "issuesEmpty": "Chưa có sự cố nào được báo cáo.",
+  "issuesReportAction": "Báo cáo sự cố",
+  "issuesReportTitle": "Báo cáo sự cố",
+  "issuesDetailAction": "Chi tiết",
+  "issuesEditAction": "Cập nhật",
+  "issuesEditTitle": "Cập nhật sự cố",
+  "issuesCancel": "Hủy",
+  "issuesSubmit": "Gửi báo cáo",
+  "issuesUpdateSubmit": "Lưu thay đổi",
+  "issuesFieldTitle": "Tiêu đề sự cố",
+  "issuesFieldTitleHint": "Mô tả ngắn về sự cố",
+  "issuesFieldDescription": "Mô tả chi tiết",
+  "issuesFieldDescriptionHint": "Mô tả đầy đủ về sự cố đã xảy ra",
+  "issuesFieldAssignee": "Người phụ trách",
+  "issuesFieldAssigneeHint": "Tên người phụ trách",
+  "issuesFieldNote": "Ghi chú ban đầu",
+  "issuesFieldNoteHint": "Lý do hoặc hướng dẫn cho người nhận",
+  "issuesFieldSite": "Khu vực (tuỳ chọn)",
+  "issuesFieldSiteHint": "— Chọn khu vực —",
+  "issuesFieldPhotos": "Ảnh đính kèm",
+  "issuesFieldPhotosHint": "Chọn ảnh (tối đa 5 file)",
+  "issuesColAssignee": "Người phụ trách",
+  "issuesColSite": "Khu vực",
+  "issuesColReportedAt": "Thời gian báo",
+  "issuesStatusOpen": "Mới",
+  "issuesStatusResolved": "Đã giải quyết",
+  "issuesTitleRequired": "Vui lòng nhập tiêu đề sự cố.",
+  "issuesAssigneeRequired": "Vui lòng nhập tài khoản được giao.",
+  "issuesShowingRange": "HIỂN THỊ {from}-{to} / {total} BẢN GHI",
+  "@issuesShowingRange": {
+    "placeholders": {
+      "from": { "type": "int" },
+      "to": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "issuesColReporter": "Người báo",
+  "issuesAssignmentHistoryTitle": "Lịch sử phân công",
+  "issuesAssignmentFrom": "Từ",
+  "issuesAssignmentTo": "Đến",
+  "issuesAssignmentReceivedAt": "Thời gian nhận",
+  "issuesAssignmentStatusPending": "Chờ xử lý",
+  "issuesAssignmentStatusAccepted": "Đã chấp nhận",
+  "issuesAssignmentStatusRejected": "Đã từ chối",
+  "issuesAssignmentStatusCompleted": "Hoàn thành"
 }

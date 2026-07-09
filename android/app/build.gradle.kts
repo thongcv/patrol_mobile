@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -12,6 +14,7 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
@@ -42,4 +45,21 @@ android {
 
 flutter {
     source = "../.."
+}
+
+val flutterEngineVersion: String = run {
+    val properties = Properties()
+    rootProject.file("local.properties").inputStream().use { properties.load(it) }
+    val sdk = checkNotNull(properties.getProperty("flutter.sdk")) {
+        "flutter.sdk not set in local.properties"
+    }
+    val stamp = rootProject.file("$sdk/bin/cache/engine.stamp").readText().trim()
+    "1.0.0-$stamp"
+}
+
+dependencies {
+    // Kotlin/IDE classpath: Flutter Gradle plugin adds embedding at runtime; this
+    // makes io.flutter.* resolvable for the language server during Gradle import.
+    compileOnly("io.flutter:flutter_embedding_debug:$flutterEngineVersion")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

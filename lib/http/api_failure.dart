@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 
 import 'api_response.dart';
 
-/// Phân loại lỗi chung cho mọi gọi API trong app.
+/// Shared error classification for all API calls in the app.
 enum ApiFailureKind {
   configMissing,
   network,
@@ -11,13 +11,13 @@ enum ApiFailureKind {
   server,
 }
 
-/// Lỗi API thống nhất: [kind] + thông điệp từ BE (`data.errors[].message`) khi có.
+/// Unified API error: [kind] + backend message (`data.errors[].message`) when present.
 class ApiFailure {
   const ApiFailure(this.kind, {this.serverMessage});
 
   final ApiFailureKind kind;
 
-  /// Ghép các `message` trong `data.errors` (BE trả về).
+  /// Joined `message` values from `data.errors` (backend response).
   final String? serverMessage;
 
   static const ApiFailure configMissing =
@@ -36,13 +36,13 @@ class ApiFailure {
         serverMessage: parseBackendErrorMessages(body),
       );
 
-  /// Lỗi HTTP không thành công (không gồm 401/403 — dùng [unauthorized]).
+  /// Unsuccessful HTTP error (excludes 401/403 — use [unauthorized]).
   static ApiFailure fromHttpError(dynamic body) => ApiFailure(
         ApiFailureKind.server,
         serverMessage: parseBackendErrorMessages(body),
       );
 
-  /// Ưu tiên thông điệp BE; không có thì dùng chuỗi fallback theo [kind].
+  /// Prefers backend message; otherwise fallback string by [kind].
   String userMessage({
     required String configMissing,
     required String network,
@@ -62,7 +62,7 @@ class ApiFailure {
   }
 }
 
-/// Bóc `data.errors[].message` — [body] là chuỗi JSON hoặc map đã parse.
+/// Extracts `data.errors[].message` — [body] is JSON string or parsed map.
 String? parseBackendErrorMessages(dynamic body) {
   try {
     final data = responseEnvelopeData(body);
@@ -83,7 +83,7 @@ String? parseBackendErrorMessages(dynamic body) {
   }
 }
 
-/// Phân loại lỗi từ HTTP status + body (đã bóc message BE khi có).
+/// Classifies error from HTTP status + body (backend message extracted when present).
 ApiFailure apiFailureFromDioException(DioException e) {
   final response = e.response;
   switch (e.type) {
