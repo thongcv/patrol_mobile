@@ -73,6 +73,7 @@ class _PatrolHistoryScreenState extends State<PatrolHistoryScreen> {
     final r = await PatrolRoundService.instance.searchPatrolRounds(
       page: page,
       size: size,
+      expectedEndTime: DateTime.now(),
       orders: [
         {
           'sort': 'expectedStartTime',

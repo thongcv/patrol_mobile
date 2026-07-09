@@ -537,7 +537,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     final gps = await readDeviceGpsOnce(
       timeout: Duration(seconds: cfg.scanGpsFastSec),
       enableBarometer: needsBaro,
-      targetAccuracyM: cfg.checkpointAccM,
+      targetAccuracyM: cfg.gpsAccM,
     );
     if (!mounted) return null;
 
@@ -1050,7 +1050,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     final gps = await readDeviceGpsOnce(
       timeout: Duration(seconds: cfg.scanGpsFastSec),
       enableBarometer: needsBaro,
-      targetAccuracyM: cfg.checkpointAccM,
+      targetAccuracyM: cfg.gpsAccM,
     );
 
     if (!mounted) return;
@@ -1369,7 +1369,7 @@ class _PatrolRoundScreenState extends State<PatrolRoundScreen> {
     final gps = await readDeviceGpsOnce(
       timeout: Duration(seconds: cfg.scanGpsSec),
       enableBarometer: needsBaro,
-      targetAccuracyM: cfg.checkpointAccM,
+      targetAccuracyM: cfg.gpsAccM,
     );
 
     if (!mounted) return;

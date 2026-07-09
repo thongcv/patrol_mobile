@@ -484,10 +484,10 @@ class _PatrolPointScreenState extends State<PatrolPointScreen> {
 
     final tracker = _locationTracker;
     final wantBaro = tracker != null && tracker.barometerSupported;
-    final checkpointAccM = await PatrolTrackingConfigStore.checkpointAccM();
+    final gpsAccM = await PatrolTrackingConfigStore.gpsAccM();
     final gps = await readDeviceGpsOnce(
       enableBarometer: wantBaro,
-      targetAccuracyM: checkpointAccM,
+      targetAccuracyM: gpsAccM,
     );
     final freshBaro = gps.barometricAltitude;
 

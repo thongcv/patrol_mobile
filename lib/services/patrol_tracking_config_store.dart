@@ -79,8 +79,7 @@ abstract final class PatrolTrackingConfigStore {
   static Future<double> bluetoothRssiTolerance() async =>
       (await load()).bluetoothRssiTolerance;
 
-  static Future<double> checkpointAccM() async =>
-      (await load()).checkpointAccM;
+  static Future<double> gpsAccM() async => (await load()).gpsAccM;
 
   static Future<SuperGpsStreamOptions> superGpsStreamOptions({
     required bool enableBarometer,

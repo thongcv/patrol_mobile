@@ -15,7 +15,6 @@ class PatrolTrackingConfig {
     this.gpsFixSec = defaultGpsFixSec,
     this.gpsProbeSec = defaultGpsProbeSec,
     this.gpsAccM = defaultGpsAccM,
-    this.checkpointAccM = defaultCheckpointAccM,
     this.gpsPermSec = defaultGpsPermSec,
     this.scanGpsFastSec = defaultScanGpsFastSec,
     this.scanGpsSec = defaultScanGpsSec,
@@ -44,7 +43,6 @@ class PatrolTrackingConfig {
   static const int defaultGpsFixSec = 4;
   static const int defaultGpsProbeSec = 4;
   static const double defaultGpsAccM = 4.0;
-  static const double defaultCheckpointAccM = 5.0;
   static const int defaultGpsPermSec = 2;
   static const int defaultScanGpsFastSec = 1;
   static const int defaultScanGpsSec = 2;
@@ -88,11 +86,8 @@ class PatrolTrackingConfig {
   /// OEM [Geolocator.isLocationServiceEnabled] probe timeout (s).
   final int gpsProbeSec;
 
-  /// Default horizontal accuracy target (m) for one-shot GPS reads.
+  /// Horizontal accuracy target (m) for one-shot GPS reads and checkpoint saves.
   final double gpsAccM;
-
-  /// Checkpoint save horizontal accuracy target (m).
-  final double checkpointAccM;
 
   /// [Geolocator.checkPermission] quick probe timeout (s).
   final int gpsPermSec;
@@ -191,8 +186,6 @@ class PatrolTrackingConfig {
       gpsProbeSec:
           _positiveSecFromJson(source['gpsProbeSec']) ?? defaults.gpsProbeSec,
       gpsAccM: _positiveMFromJson(source['gpsAccM']) ?? defaults.gpsAccM,
-      checkpointAccM: _positiveMFromJson(source['checkpointAccM']) ??
-          defaults.checkpointAccM,
       gpsPermSec:
           _positiveSecFromJson(source['gpsPermSec']) ?? defaults.gpsPermSec,
       scanGpsFastSec: _positiveSecFromJson(source['scanGpsFastSec']) ??
@@ -258,7 +251,6 @@ class PatrolTrackingConfig {
         'gpsFixSec': gpsFixSec,
         'gpsProbeSec': gpsProbeSec,
         'gpsAccM': gpsAccM,
-        'checkpointAccM': checkpointAccM,
         'gpsPermSec': gpsPermSec,
         'scanGpsFastSec': scanGpsFastSec,
         'scanGpsSec': scanGpsSec,
@@ -331,10 +323,6 @@ class PatrolTrackingConfig {
       gpsAccM: source.containsKey('gpsAccM')
           ? (_positiveMFromJson(source['gpsAccM']) ?? current.gpsAccM)
           : current.gpsAccM,
-      checkpointAccM: source.containsKey('checkpointAccM')
-          ? (_positiveMFromJson(source['checkpointAccM']) ??
-              current.checkpointAccM)
-          : current.checkpointAccM,
       gpsPermSec: source.containsKey('gpsPermSec')
           ? (_positiveSecFromJson(source['gpsPermSec']) ?? current.gpsPermSec)
           : current.gpsPermSec,
@@ -432,7 +420,6 @@ class PatrolTrackingConfig {
     'gpsFixSec',
     'gpsProbeSec',
     'gpsAccM',
-    'checkpointAccM',
     'gpsPermSec',
     'scanGpsFastSec',
     'scanGpsSec',
@@ -586,7 +573,6 @@ class PatrolTrackingConfig {
         gpsFixSec == other.gpsFixSec &&
         gpsProbeSec == other.gpsProbeSec &&
         gpsAccM == other.gpsAccM &&
-        checkpointAccM == other.checkpointAccM &&
         gpsPermSec == other.gpsPermSec &&
         scanGpsFastSec == other.scanGpsFastSec &&
         scanGpsSec == other.scanGpsSec &&
@@ -625,7 +611,6 @@ class PatrolTrackingConfig {
         gpsFixSec,
         gpsProbeSec,
         gpsAccM,
-        checkpointAccM,
         gpsPermSec,
         scanGpsFastSec,
         scanGpsSec,

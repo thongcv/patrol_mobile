@@ -389,7 +389,7 @@ Future<void> beaconBleConnect(
   Duration timeout = const Duration(seconds: 12),
 }) =>
     device.connect(
-      license: License.free,
+      license: License.nonprofit,
       timeout: timeout,
       autoConnect: false,
       mtu: null,
