@@ -4,6 +4,7 @@ import '../config/app_config.dart';
 import '../http/api_failure.dart';
 import '../http/api_result.dart';
 import '../http/patrol_dio.dart';
+import '../http/presigned_upload.dart';
 
 class PatrolLogSubmit {
   PatrolLogSubmit({
@@ -71,26 +72,21 @@ class PatrolLogService {
       fields['verified'] = body.verified;
     }
 
-    final files = <MultipartFile>[];
-    for (var i = 0; i < body.photoPaths.length; i++) {
-      final path = body.photoPaths[i];
-      files.add(
-        await MultipartFile.fromFile(
-          path,
-          filename: '${body.roundId}_scan_$i.jpg',
-        ),
-      );
-    }
-
-    final form = FormData.fromMap({
-      ...fields,
-      if (files.isNotEmpty) 'files': files,
-    });
-
     try {
+      final objectKeys = body.photoPaths.isEmpty
+          ? const <String>[]
+          : toObjectKeys(
+              await uploadPatrolLogPhotosViaPresignedUrl(body.photoPaths),
+            );
+
+      final payload = {
+        ...fields,
+        if (objectKeys.isNotEmpty) 'objectKeys': objectKeys,
+      };
+
       final res = await PatrolDio.instance.postUri<dynamic>(
         uri,
-        data: form,
+        data: payload,
       );
       final status = res.statusCode ?? 0;
 

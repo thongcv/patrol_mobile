@@ -6,6 +6,7 @@ import '../http/api_response.dart';
 import '../http/api_result.dart';
 import '../http/patrol_api_endpoints.dart';
 import '../http/patrol_dio.dart';
+import '../http/presigned_upload.dart';
 import '../models/account_me.dart';
 import 'account_session_store.dart';
 
@@ -122,7 +123,7 @@ class AccountService {
     }
   }
 
-  /// Avatar upload multipart field `file` — returns new `imageUrl`.
+  /// Avatar via presigned PUT + `objectKey` on `/accounts/avatar` — returns new `imageUrl`.
   Future<ApiResult<String>> uploadAvatar(String filePath) async {
     final base = AppConfig.effectiveBaseUrl;
     if (base.isEmpty) {
@@ -133,17 +134,13 @@ class AccountService {
       return ApiResult.failure(ApiFailure.badResponse(null));
     }
 
-    final filename = path.split(RegExp(r'[/\\]')).last;
-    final form = FormData.fromMap({
-      'file': await MultipartFile.fromFile(
-        path,
-        filename: filename.isNotEmpty ? filename : 'avatar.jpg',
-      ),
-    });
-
     try {
+      final uploaded = await uploadAvatarViaPresignedUrl(path);
       final uri = AppConfig.resolveApiUri(PatrolApiEndpoints.accountsAvatarPath);
-      final res = await PatrolDio.instance.putUri<dynamic>(uri, data: form);
+      final res = await PatrolDio.instance.putUri<dynamic>(
+        uri,
+        data: {'objectKey': uploaded.objectKey},
+      );
       final status = res.statusCode ?? 0;
       if (status == 401 || status == 403) {
         return ApiResult.failure(ApiFailure.unauthorized(res));

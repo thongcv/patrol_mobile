@@ -6,6 +6,7 @@ import '../http/api_response.dart';
 import '../http/api_result.dart';
 import '../http/patrol_api_endpoints.dart';
 import '../http/patrol_dio.dart';
+import '../http/presigned_upload.dart';
 import '../models/issue.dart';
 
 class IssueService {
@@ -60,7 +61,7 @@ class IssueService {
   }
 
   Future<ApiResult<Issue>> createIssue(IssueCreateRequest body) async {
-    return _submitMultipart(
+    return _submitIssue(
       method: 'POST',
       fields: {
         'title': body.title.trim(),
@@ -75,7 +76,7 @@ class IssueService {
   }
 
   Future<ApiResult<Issue>> updateIssue(IssueUpdateRequest body) async {
-    return _submitMultipart(
+    return _submitIssue(
       method: 'PUT',
       fields: {
         'id': body.id,
@@ -90,7 +91,7 @@ class IssueService {
     );
   }
 
-  Future<ApiResult<Issue>> _submitMultipart({
+  Future<ApiResult<Issue>> _submitIssue({
     required String method,
     required Map<String, dynamic> fields,
     required List<String> filePaths,
@@ -100,28 +101,22 @@ class IssueService {
       return ApiResult.failure(ApiFailure.configMissing);
     }
 
-    final files = <MultipartFile>[];
-    for (var i = 0; i < filePaths.length; i++) {
-      final path = filePaths[i];
-      final filename = path.split(RegExp(r'[/\\]')).last;
-      files.add(
-        await MultipartFile.fromFile(
-          path,
-          filename: filename.isNotEmpty ? filename : 'issue_$i.jpg',
-        ),
-      );
-    }
-
-    final form = FormData.fromMap({
-      ...fields,
-      if (files.isNotEmpty) 'files': files,
-    });
-
     try {
+      final objectKeys = filePaths.isEmpty
+          ? const <String>[]
+          : toObjectKeys(
+              await uploadIssuePhotosViaPresignedUrl(filePaths),
+            );
+
+      final payload = {
+        ...fields,
+        if (objectKeys.isNotEmpty) 'objectKeys': objectKeys,
+      };
+
       final uri = AppConfig.resolveApiUri(PatrolApiEndpoints.issuesPath);
       final res = method == 'PUT'
-          ? await PatrolDio.instance.putUri<dynamic>(uri, data: form)
-          : await PatrolDio.instance.postUri<dynamic>(uri, data: form);
+          ? await PatrolDio.instance.putUri<dynamic>(uri, data: payload)
+          : await PatrolDio.instance.postUri<dynamic>(uri, data: payload);
       final status = res.statusCode ?? 0;
       if (status == 401 || status == 403) {
         return ApiResult.failure(ApiFailure.unauthorized(res));
